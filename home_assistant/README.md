@@ -11,6 +11,19 @@
 4. Pas `entity_id: light.wled_voortuin` in `wled_trigger.yaml` aan naar de
    werkelijke entity-id van je WLED-controller (te vinden onder
    Settings > Devices & Services > WLED).
-5. Voeg op het dashboard MQTT-sensoren toe voor node-status
-   (last-will-topic `log/<node>` of een aparte `status/<node>`-topic, naar
-   smaak) zodat je in één oogopslag ziet welke nodes online zijn.
+5. Voeg op het dashboard MQTT-sensoren toe voor node-status. Elke node
+   publiceert `online` (retained) op `status/<node>` zodra hij verbindt, en
+   heeft `offline` als MQTT last-will op datzelfde topic staan. Node-namen:
+   `status/mirror` en `status/scare-<zone>` (bijv. `status/scare-zone-a`).
+
+   ```yaml
+   mqtt:
+     binary_sensor:
+       - name: "Halloween mirror-node"
+         state_topic: "status/mirror"
+         payload_on: "online"
+         payload_off: "offline"
+         device_class: connectivity
+   ```
+
+   Herhaal dat blok per scare-node met het bijbehorende `status/scare-<zone>`.

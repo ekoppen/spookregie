@@ -2,10 +2,13 @@
 # lichtentiteit zoals light.wled_voortuin (pas aan naar je eigen entity_id).
 
 automation:
-  - alias: "Halloween - WLED flikker bij mirror-trigger"
+  - alias: "Halloween - WLED flikker bij mirror- of scare-trigger"
     trigger:
       - platform: mqtt
         topic: mirror/triggered
+      # + elke scare-zone die zelf triggert (spec: mirror OF scare).
+      - platform: mqtt
+        topic: scare/+/triggered
     action:
       - service: light.turn_on
         target:
