@@ -1,0 +1,24 @@
+# Stuurt system/sleep "off" bij start van de avond en "on" aan het einde,
+# zodat nodes buiten dit venster geen camera/PIR-verwerking doen.
+# Topic-naam moet overeenkomen met shared/mqtt_contract.py: TOPIC_SYSTEM_SLEEP.
+
+automation:
+  - alias: "Halloween - nodes wakker"
+    trigger:
+      - platform: time
+        at: "18:00:00"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: system/sleep
+          payload: "off"
+
+  - alias: "Halloween - nodes slapen"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: system/sleep
+          payload: "on"

@@ -1,0 +1,22 @@
+# Vereist dat de WLED-integratie al is toegevoegd in HA, met een
+# lichtentiteit zoals light.wled_voortuin (pas aan naar je eigen entity_id).
+
+automation:
+  - alias: "Halloween - WLED flikker bij mirror-trigger"
+    trigger:
+      - platform: mqtt
+        topic: mirror/triggered
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.wled_voortuin
+        data:
+          effect: "Strobe"
+          rgb_color: [255, 0, 0]
+      - delay: "00:00:06"
+      - service: light.turn_on
+        target:
+          entity_id: light.wled_voortuin
+        data:
+          effect: "Solid"
+          rgb_color: [255, 140, 0]
