@@ -1,0 +1,16 @@
+[Unit]
+Description=Halloween scare-node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -m scare_node.main
+WorkingDirectory=/opt/halloween
+Environment=MQTT_HOST=homeassistant.local
+Environment=SCARE_ZONE=zone-a
+Environment=SCARE_PIR_PIN=4
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
