@@ -7,8 +7,13 @@ Wants=network-online.target
 ExecStart=/usr/bin/python3 -m scare_node.main
 WorkingDirectory=/opt/halloween
 Environment=MQTT_HOST=homeassistant.local
+# CHANGE per fysieke node: zone-a, zone-b, ... Twee nodes met dezelfde zone
+# krijgen hetzelfde MQTT client-id en gooien elkaar er continu uit.
 Environment=SCARE_ZONE=zone-a
 Environment=SCARE_PIR_PIN=4
+# LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
+Environment=LOG_DIR=/var/log/halloween
+LogsDirectory=halloween
 Restart=always
 RestartSec=3
 

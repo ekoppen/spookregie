@@ -1,14 +1,26 @@
 [Unit]
 Description=Halloween mirror-node
-After=network-online.target
+# graphical.target: de node heeft een draaiende X-sessie nodig (cv2.imshow
+# op de beamer). Zonder display crasht de node direct en herstart systemd
+# hem elke 3 seconden opnieuw.
+After=network-online.target graphical.target
 Wants=network-online.target
 
 [Service]
+# CHANGE per machine: de gebruiker die de desktop-/X-sessie draait.
+User=halloween
 ExecStart=/usr/bin/python3 -m mirror_node.main
 WorkingDirectory=/opt/halloween
 Environment=MQTT_HOST=homeassistant.local
+# cv2.imshow heeft een X-display + autorisatie nodig; pas het pad aan als je
+# User hierboven wijzigt.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/halloween/.Xauthority
+# LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
+Environment=LOG_DIR=/var/log/halloween
+LogsDirectory=halloween
 Restart=always
 RestartSec=3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
