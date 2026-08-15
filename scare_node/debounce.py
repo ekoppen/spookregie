@@ -1,3 +1,4 @@
+import threading
 import time
 
 
@@ -10,10 +11,12 @@ class Cooldown:
         self.seconds = seconds
         self._clock = clock
         self._last = None
+        self._lock = threading.Lock()
 
     def ready(self):
-        now = self._clock()
-        if self._last is None or now - self._last >= self.seconds:
-            self._last = now
-            return True
-        return False
+        with self._lock:
+            now = self._clock()
+            if self._last is None or now - self._last >= self.seconds:
+                self._last = now
+                return True
+            return False

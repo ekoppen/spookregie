@@ -64,14 +64,17 @@ def main():
     client = mqtt.Client(client_id=f"scare-node-{ZONE}")
     client.on_connect = on_connect
     client.reconnect_delay_set(min_delay=1, max_delay=30)
-    # connect_async + loop_start: node blijft draaien en probeert op de
-    # achtergrond te (her)verbinden, i.p.v. te crashen als HA nu niet
-    # bereikbaar is (fail-safe eis uit de spec).
-    client.connect_async(MQTT_HOST, MQTT_PORT)
-    client.loop_start()
 
     logger = setup_logging(f"scare-{ZONE}", LOG_DIR, mqtt_client=client)
     client.on_message = make_on_message(logger)
+
+    # connect_async + loop_start: node blijft draaien en probeert op de
+    # achtergrond te (her)verbinden, i.p.v. te crashen als HA nu niet
+    # bereikbaar is (fail-safe eis uit de spec). on_message staat hierboven
+    # al vast, zodat het achtergrondthread geen berichten kan missen terwijl
+    # de main thread nog met setup_logging() bezig is.
+    client.connect_async(MQTT_HOST, MQTT_PORT)
+    client.loop_start()
 
     pir = MotionSensor(PIR_PIN)
 
