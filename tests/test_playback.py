@@ -6,6 +6,7 @@ def test_picks_one_of_the_audio_files(tmp_path):
     (tmp_path / "scream1.wav").write_bytes(b"fake")
     (tmp_path / "scream2.wav").write_bytes(b"fake")
     (tmp_path / "notes.txt").write_bytes(b"ignore me")
+    (tmp_path / "scream3.mp3").write_bytes(b"aplay kan dit niet afspelen")
 
     picked = pick_audio_file(str(tmp_path))
 

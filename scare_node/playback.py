@@ -1,7 +1,8 @@
 import os
 import random
 
-_AUDIO_EXTENSIONS = (".wav", ".mp3")
+# Alleen .wav: main.py speelt af met `aplay`, dat geen mp3 kan decoderen.
+_AUDIO_EXTENSIONS = (".wav",)
 
 
 def pick_audio_file(media_dir, rng=random):
