@@ -49,3 +49,19 @@ def test_mqtt_log_handler_emit_publishes_json():
     data = json.loads(payload)
     assert data["level"] == "WARNING"
     assert data["msg"] == "careful"
+
+
+def test_setup_logging_does_not_duplicate_handlers_on_repeated_calls(tmp_path):
+    """Verify that calling setup_logging() twice with the same node_name
+    doesn't accumulate duplicate handlers (relies on handlers.clear())."""
+    logger = setup_logging("test-node-dedup", str(tmp_path))
+    handlers_after_first = len(logger.handlers)
+
+    # Call setup_logging again with same node_name
+    logger = setup_logging("test-node-dedup", str(tmp_path))
+    handlers_after_second = len(logger.handlers)
+
+    assert handlers_after_second == handlers_after_first, (
+        f"Expected {handlers_after_first} handlers after second call, "
+        f"but got {handlers_after_second} (handlers were duplicated)"
+    )
