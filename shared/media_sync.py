@@ -14,15 +14,17 @@ _FETCH_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
 def _read_with_size_cap(resp, max_size=_FETCH_MAX_SIZE):
     """Read from response object, raising if data exceeds max_size."""
     chunk_size = 8192
-    data = b''
+    chunks = []
+    total = 0
     while True:
         chunk = resp.read(chunk_size)
         if not chunk:
             break
-        data += chunk
-        if len(data) > max_size:
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > max_size:
             raise ValueError(f"Response exceeds {max_size} bytes")
-    return data
+    return b"".join(chunks)
 
 
 def content_hash(data):

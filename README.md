@@ -50,6 +50,7 @@ Beide nodes:
 | `MQTT_USER` | *(leeg)* | Optioneel; alleen ingesteld als niet leeg |
 | `MQTT_PASS` | *(leeg)* | Wachtwoord bij `MQTT_USER` |
 | `LOG_DIR` | `./logs` | Map voor lokale logbestanden; systemd zet dit op `/var/log/halloween` |
+| `BACKEND_URL` | `http://localhost:8000` | Beheerpagina-backend waar media-bestanden (`GET /api/media/<hash>`) vandaan komen |
 
 Alleen mirror-node:
 
@@ -57,6 +58,8 @@ Alleen mirror-node:
 |---|---|---|
 | `MIRROR_CAMERA_INDEX` | `0` | OpenCV camera-index |
 | `MIRROR_ACTIVE_SECONDS` | `6` | Hoe lang het effect na een trigger aanblijft |
+| `MIRROR_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor opgehaalde overlays; systemd zet dit op `/var/lib/halloween/media_cache` |
+| `MIRROR_STREAM_PORT` | `8091` | Poort van de MJPEG-live-preview (`/stream`) |
 
 Alleen scare-node:
 
@@ -66,11 +69,17 @@ Alleen scare-node:
 | `SCARE_MEDIA_DIR` | `/opt/halloween/media` | Map met `.wav`-bestanden (alleen wav: `aplay` kan geen mp3) |
 | `SCARE_PIR_PIN` | `4` | GPIO-pin van de PIR-sensor |
 | `SCARE_COOLDOWN_SECONDS` | `12` | Minimale tijd tussen twee scares |
+| `SCARE_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor van de backend opgehaalde audio; systemd zet dit op `/var/lib/halloween/media_cache` |
+
+De mirror-node luistert op `MIRROR_STREAM_PORT` (standaard 8091) voor de
+live-preview. Die poort moet bereikbaar zijn vanaf de machine/browser waarop je
+de beheerpagina bekijkt — open hem dus in een eventuele firewall.
 
 ## Deployment
 
-De systemd-units gaan uit van de code in `/opt/halloween` en logs in
-`/var/log/halloween` (aangemaakt via `LogsDirectory=`).
+De systemd-units gaan uit van de code in `/opt/halloween`, logs in
+`/var/log/halloween` (aangemaakt via `LogsDirectory=`) en een mediacache in
+`/var/lib/halloween/media_cache` (aangemaakt via `StateDirectory=`).
 
 ```bash
 sudo mkdir -p /opt/halloween

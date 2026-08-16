@@ -14,6 +14,12 @@ Environment=SCARE_PIR_PIN=4
 # LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
 Environment=LOG_DIR=/var/log/halloween
 LogsDirectory=halloween
+# StateDirectory maakt /var/lib/halloween aan met de juiste eigenaar; daar komt
+# de mediacache (van de backend opgehaalde audio) te staan.
+Environment=SCARE_MEDIA_CACHE_DIR=/var/lib/halloween/media_cache
+StateDirectory=halloween
+# CHANGE: point at your Plan 2 backend once it exists
+Environment=BACKEND_URL=http://<backend-host>:8000
 Restart=always
 RestartSec=3
 

@@ -19,6 +19,15 @@ Environment=XAUTHORITY=/home/halloween/.Xauthority
 # LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
 Environment=LOG_DIR=/var/log/halloween
 LogsDirectory=halloween
+# StateDirectory maakt /var/lib/halloween aan met de juiste eigenaar; daar komt
+# de mediacache (overlays) te staan.
+Environment=MIRROR_MEDIA_CACHE_DIR=/var/lib/halloween/media_cache
+StateDirectory=halloween
+# Poort van de MJPEG-live-preview; moet bereikbaar zijn vanaf de browser die
+# de beheerpagina draait.
+Environment=MIRROR_STREAM_PORT=8091
+# CHANGE: point at your Plan 2 backend once it exists
+Environment=BACKEND_URL=http://<backend-host>:8000
 Restart=always
 RestartSec=3
 
