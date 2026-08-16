@@ -42,7 +42,11 @@ MEDIA_CACHE_DIR = os.environ.get("SCARE_MEDIA_CACHE_DIR", "./media_cache")
 
 sleeping = threading.Event()
 cooldown = Cooldown(COOLDOWN_SECONDS)
-enabled_files = None  # None = alles toegestaan (backward compatible, Task 6)
+# None = nog nooit een configbericht gehad -> val terug op de statische
+# MEDIA_DIR (werkwijze van vóór de beheerpagina). Zodra er wél config binnen is
+# gekomen, is dit de dict {hash: lokaal pad} die sync_media teruggaf en is de
+# backend eigenaar van de audioselectie — ook als die dict leeg is.
+synced_audio = None
 
 
 def _normalize_string_list(value):
@@ -56,8 +60,17 @@ def _normalize_string_list(value):
     return [v for v in value if isinstance(v, str)]
 
 
+def _sync_and_apply(hashes):
+    """Haalt de ingeschakelde fragmenten op en zet ze daarna pas als actieve
+    selectie. Draait op een achtergrondthread (sync_media blokkeert tot ~10s
+    per hash en mag de MQTT-callbackthread niet ophouden). Simpele toewijzing
+    aan een module-variabele is onder de GIL veilig genoeg — geen lock nodig,
+    net als bij `sleeping`."""
+    global synced_audio
+    synced_audio = sync_media(BACKEND_URL, MEDIA_CACHE_DIR, hashes)
+
+
 def _apply_scare_config(payload, logger):
-    global enabled_files
     try:
         config = json.loads(payload)
     except json.JSONDecodeError:
@@ -67,18 +80,31 @@ def _apply_scare_config(payload, logger):
         logger.error("Scare-config is geen JSON-object, genegeerd")
         return
     hashes = _normalize_string_list(config.get("enabled_hashes", []))
-    sync_media(BACKEND_URL, MEDIA_CACHE_DIR, hashes)
-    enabled_files = set(_normalize_string_list(config.get("enabled_filenames", [])))
+    threading.Thread(target=_sync_and_apply, args=(hashes,), daemon=True).start()
+
+
+def _pick_synced_audio(logger):
+    """Kiest het af te spelen bestand. Zodra er ooit config binnen is gekomen
+    bepaalt de backend de selectie (ook een lege selectie = niets afspelen);
+    daarvóór draait de node op de statische mediamap."""
+    if synced_audio is None:
+        return pick_audio_file(MEDIA_DIR)
+    if not synced_audio:
+        logger.info("Geen ingeschakelde audio voor zone %s", ZONE)
+        return None
+    return random.choice(list(synced_audio.values()))
 
 
 def play_scare(logger):
-    """Speelt één willekeurig fragment af uit de ingeschakelde set (of alle
-    bestanden als er nog geen config binnen is). Doet zelf geen
+    """Speelt één willekeurig fragment af uit de ingeschakelde set (of uit de
+    statische mediamap als er nog geen config binnen is). Doet zelf geen
     cooldown-check."""
     try:
-        audio_file = pick_audio_file(MEDIA_DIR, enabled=enabled_files)
+        audio_file = _pick_synced_audio(logger)
     except FileNotFoundError as exc:
         logger.error(str(exc))
+        return
+    if audio_file is None:
         return
     logger.info("speelt %s af", audio_file)
     result = subprocess.run(["aplay", audio_file], check=False)
@@ -98,21 +124,26 @@ def trigger_scare(client, logger):
 
 def make_on_message(logger):
     def on_message(client, userdata, msg):
-        if msg.topic == TOPIC_SYSTEM_SLEEP:
-            if msg.payload.decode() == SLEEP_PAYLOAD_ON:
-                sleeping.set()
-            else:
-                sleeping.clear()
-            return
-        if msg.topic == config_scare_topic(ZONE):
-            _apply_scare_config(msg.payload.decode(), logger)
-            return
-        if msg.topic == control_scare_test_topic(ZONE):
-            trigger_scare(client, logger)
-            return
-        if msg.topic == TOPIC_MIRROR_TRIGGERED and not sleeping.is_set():
-            delay = random.uniform(0, 2)
-            threading.Timer(delay, trigger_scare, args=(client, logger)).start()
+        # Vangnet: een exception hier zou paho's netwerkthread killen — de node
+        # reageert dan nergens meer op, ook niet op system/sleep (de noodstop).
+        try:
+            if msg.topic == TOPIC_SYSTEM_SLEEP:
+                if msg.payload.decode() == SLEEP_PAYLOAD_ON:
+                    sleeping.set()
+                else:
+                    sleeping.clear()
+                return
+            if msg.topic == config_scare_topic(ZONE):
+                _apply_scare_config(msg.payload.decode(), logger)
+                return
+            if msg.topic == control_scare_test_topic(ZONE):
+                trigger_scare(client, logger)
+                return
+            if msg.topic == TOPIC_MIRROR_TRIGGERED and not sleeping.is_set():
+                delay = random.uniform(0, 2)
+                threading.Timer(delay, trigger_scare, args=(client, logger)).start()
+        except Exception as exc:
+            logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
 
 
