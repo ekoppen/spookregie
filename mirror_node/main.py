@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -11,12 +12,18 @@ from shared.mqtt_contract import (
     SLEEP_PAYLOAD_ON,
     TOPIC_MIRROR_TRIGGERED,
     TOPIC_SYSTEM_SLEEP,
+    TOPIC_CONFIG_MIRROR,
+    TOPIC_CONTROL_MIRROR_PREVIEW,
     status_topic,
     trigger_payload,
 )
 from shared.logging_setup import setup_logging
+from shared.media_sync import sync_media
 from mirror_node.trigger import FrameDiffTrigger
-from mirror_node.effect import ghost_effect
+from mirror_node.effects import get_effect
+from mirror_node.overlay import composite_overlay
+from mirror_node.active_config import ActiveMirrorConfig
+from mirror_node.stream import MJPEGStreamer
 
 NODE_NAME = "mirror"
 
@@ -30,21 +37,73 @@ ACTIVE_SECONDS = float(os.environ.get("MIRROR_ACTIVE_SECONDS", "6"))
 # Default schrijfbaar voor een gewone gebruiker die het script direct start;
 # systemd zet LOG_DIR expliciet op /var/log/halloween.
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+MEDIA_CACHE_DIR = os.environ.get("MIRROR_MEDIA_CACHE_DIR", "./media_cache")
+STREAM_PORT = int(os.environ.get("MIRROR_STREAM_PORT", "8091"))
 
 sleeping = threading.Event()
+active_config = ActiveMirrorConfig()
 
 
-def on_message(client, userdata, msg):
-    if msg.topic == TOPIC_SYSTEM_SLEEP:
-        if msg.payload.decode() == SLEEP_PAYLOAD_ON:
-            sleeping.set()
-        else:
-            sleeping.clear()
+def _apply_config_message(payload, is_preview, logger):
+    try:
+        config = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige config-JSON ontvangen, genegeerd")
+        return
+    if is_preview:
+        active_config.set_preview(config)
+        return
+    active_config.set_persistent(config)
+    overlay_hash = config.get("overlay_hash")
+    if overlay_hash:
+        sync_media(BACKEND_URL, MEDIA_CACHE_DIR, [overlay_hash])
+
+
+def make_on_message(logger):
+    def on_message(client, userdata, msg):
+        if msg.topic == TOPIC_SYSTEM_SLEEP:
+            if msg.payload.decode() == SLEEP_PAYLOAD_ON:
+                sleeping.set()
+            else:
+                sleeping.clear()
+            return
+        if msg.topic == TOPIC_CONFIG_MIRROR:
+            _apply_config_message(msg.payload.decode(), is_preview=False, logger=logger)
+            return
+        if msg.topic == TOPIC_CONTROL_MIRROR_PREVIEW:
+            _apply_config_message(msg.payload.decode(), is_preview=True, logger=logger)
+    return on_message
+
+
+def _render(frame, logger):
+    config = active_config.get()
+    try:
+        effect_fn = get_effect(config["effect"])
+    except ValueError:
+        logger.error("Onbekend effect in actieve config: %s", config.get("effect"))
+        return frame
+
+    result = effect_fn(frame, config.get("params", {}))
+
+    overlay_hash = config.get("overlay_hash")
+    if overlay_hash:
+        overlay_path = os.path.join(MEDIA_CACHE_DIR, overlay_hash)
+        if os.path.exists(overlay_path):
+            overlay_img = cv2.imread(overlay_path, cv2.IMREAD_UNCHANGED)
+            if overlay_img is not None and overlay_img.shape[2] == 4:
+                result = composite_overlay(
+                    result,
+                    overlay_img,
+                    scale=config.get("scale", 1.0),
+                    position=tuple(config.get("position", [0.5, 0.5])),
+                )
+    return result
 
 
 def selfcheck():
-    """Pakt één frame, draait het door ghost_effect en laat/bewaart het
-    resultaat. Heeft geen MQTT nodig."""
+    """Pakt één frame, draait het door het standaard xray-effect en
+    laat/bewaart het resultaat. Heeft geen MQTT nodig."""
     cap = cv2.VideoCapture(CAMERA_INDEX)
     ok, frame = cap.read()
     cap.release()
@@ -52,10 +111,10 @@ def selfcheck():
         print(f"selfcheck MISLUKT: geen frame van camera index {CAMERA_INDEX}")
         sys.exit(1)
 
-    ghost = ghost_effect(frame)
+    ghost = get_effect("xray")(frame, {})
     path = os.path.join(tempfile.gettempdir(), "mirror-selfcheck.png")
     cv2.imwrite(path, ghost)
-    print(f"selfcheck OK: ghost-frame opgeslagen als {path}")
+    print(f"selfcheck OK: xray-frame opgeslagen als {path}")
 
     try:
         cv2.imshow("mirror-selfcheck", ghost)
@@ -71,6 +130,7 @@ def main():
         return
 
     os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
 
     client = mqtt.Client(client_id="mirror-node")
     if MQTT_USER:
@@ -88,13 +148,15 @@ def main():
             return
         client.publish(status_topic(NODE_NAME), "online", retain=True)
         client.subscribe(TOPIC_SYSTEM_SLEEP)
+        client.subscribe(TOPIC_CONFIG_MIRROR)
+        client.subscribe(TOPIC_CONTROL_MIRROR_PREVIEW)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.on_message = on_message
+    client.on_message = make_on_message(logger)
     client.reconnect_delay_set(min_delay=1, max_delay=30)
     # Last-will: broker publiceert "offline" als deze node wegvalt.
     client.will_set(status_topic(NODE_NAME), payload="offline", retain=True)
@@ -103,6 +165,10 @@ def main():
     # bereikbaar is (fail-safe eis uit de spec).
     client.connect_async(MQTT_HOST, MQTT_PORT)
     client.loop_start()
+
+    streamer = MJPEGStreamer(STREAM_PORT)
+    streamer.start()
+    logger.info("MJPEG-stream op poort %s (/stream)", STREAM_PORT)
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
@@ -138,11 +204,14 @@ def main():
                 client.publish(TOPIC_MIRROR_TRIGGERED, trigger_payload())
                 logger.info("mirror triggered")
 
-            cv2.imshow("mirror", ghost_effect(frame) if now < active_until else frame * 0)
+            rendered = _render(frame, logger) if now < active_until else frame * 0
+            streamer.publish_frame(rendered)
+            cv2.imshow("mirror", rendered)
             cv2.waitKey(1)
     finally:
         cap.release()
         cv2.destroyAllWindows()
+        streamer.stop()
         client.loop_stop()
 
 
