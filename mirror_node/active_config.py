@@ -25,7 +25,6 @@ class ActiveMirrorConfig:
     def set_persistent(self, config):
         self._persistent = config
         self._preview = None
-        self._clock()
 
     def set_preview(self, config):
         self._preview = config
