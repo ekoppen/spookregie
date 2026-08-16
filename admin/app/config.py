@@ -17,8 +17,13 @@ class Settings:
 
 
 def get_settings():
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password:
+        raise RuntimeError(
+            "ADMIN_PASSWORD moet ingesteld zijn (geen standaardwaarde om veiligheidsredenen)"
+        )
     return Settings(
-        admin_password=os.environ.get("ADMIN_PASSWORD", "halloween"),
+        admin_password=admin_password,
         mqtt_host=os.environ.get("MQTT_HOST", "homeassistant.local"),
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
         mqtt_user=os.environ.get("MQTT_USER", ""),

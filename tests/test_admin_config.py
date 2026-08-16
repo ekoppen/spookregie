@@ -1,4 +1,5 @@
 import os
+import pytest
 from admin.app.config import get_settings
 
 
@@ -15,6 +16,7 @@ def test_get_settings_reads_env_vars(monkeypatch):
 
 
 def test_get_settings_has_sane_defaults(monkeypatch):
+    monkeypatch.setenv("ADMIN_PASSWORD", "iets")
     monkeypatch.delenv("MQTT_HOST", raising=False)
     monkeypatch.delenv("MQTT_PORT", raising=False)
 
@@ -23,3 +25,10 @@ def test_get_settings_has_sane_defaults(monkeypatch):
     assert settings.mqtt_host == "homeassistant.local"
     assert settings.mqtt_port == 1883
     assert settings.port == 8000
+
+
+def test_get_settings_raises_without_admin_password(monkeypatch):
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+
+    with pytest.raises(RuntimeError):
+        get_settings()
