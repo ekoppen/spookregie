@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -44,6 +45,12 @@ STREAM_PORT = int(os.environ.get("MIRROR_STREAM_PORT", "8091"))
 sleeping = threading.Event()
 active_config = ActiveMirrorConfig()
 
+# ponytail: same hash format sync_media/content_hash produce; duplicated
+# locally (not imported from shared.media_sync) since it's a one-liner and
+# that module's _HASH_RE is private.
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+_overlay_cache = {"hash": None, "image": None}
+
 
 def _apply_config_message(payload, is_preview, logger):
     try:
@@ -76,10 +83,27 @@ def make_on_message(logger):
     return on_message
 
 
+def _load_overlay(overlay_hash, logger):
+    """Geeft het gedecodeerde overlay-beeld voor `overlay_hash` terug, uit
+    cache als de hash ongewijzigd is (voorkomt herlezen/decoden vanaf schijf
+    op elk frame). Valideert het hash-formaat zelf — dit is config uit MQTT,
+    dus niet vertrouwd genoeg om direct als padonderdeel te gebruiken."""
+    if not _HASH_RE.match(overlay_hash):
+        logger.error("Ongeldige overlay-hash genegeerd: %s", overlay_hash)
+        return None
+    if _overlay_cache["hash"] != overlay_hash:
+        overlay_path = os.path.join(MEDIA_CACHE_DIR, overlay_hash)
+        if not os.path.exists(overlay_path):
+            return None
+        _overlay_cache["hash"] = overlay_hash
+        _overlay_cache["image"] = cv2.imread(overlay_path, cv2.IMREAD_UNCHANGED)
+    return _overlay_cache["image"]
+
+
 def _render(frame, logger):
     config = active_config.get()
     try:
-        effect_fn = get_effect(config["effect"])
+        effect_fn = get_effect(config.get("effect", "xray"))
     except ValueError:
         logger.error("Onbekend effect in actieve config: %s", config.get("effect"))
         return frame
@@ -88,16 +112,18 @@ def _render(frame, logger):
 
     overlay_hash = config.get("overlay_hash")
     if overlay_hash:
-        overlay_path = os.path.join(MEDIA_CACHE_DIR, overlay_hash)
-        if os.path.exists(overlay_path):
-            overlay_img = cv2.imread(overlay_path, cv2.IMREAD_UNCHANGED)
-            if overlay_img is not None and overlay_img.shape[2] == 4:
-                result = composite_overlay(
-                    result,
-                    overlay_img,
-                    scale=config.get("scale", 1.0),
-                    position=tuple(config.get("position", [0.5, 0.5])),
-                )
+        overlay_img = _load_overlay(overlay_hash, logger)
+        if overlay_img is not None and overlay_img.ndim == 3 and overlay_img.shape[2] == 4:
+            position = config.get("position", [0.5, 0.5])
+            if len(position) != 2:
+                logger.warning("Ongeldige position in config, val terug op (0.5, 0.5): %r", position)
+                position = (0.5, 0.5)
+            result = composite_overlay(
+                result,
+                overlay_img,
+                scale=config.get("scale", 1.0),
+                position=tuple(position),
+            )
     return result
 
 
