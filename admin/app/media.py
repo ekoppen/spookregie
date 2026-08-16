@@ -1,7 +1,12 @@
 import os
+import re
 import time
 
 from shared.media_sync import content_hash
+
+
+# ponytail: path-traversal defense, validates hash format before use in paths
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def save_media(conn, media_dir, data, filename, category):
@@ -18,6 +23,8 @@ def save_media(conn, media_dir, data, filename, category):
 
 
 def get_media_path(media_dir, hash_):
+    if not _HASH_RE.match(hash_):
+        return None
     path = os.path.join(media_dir, hash_)
     return path if os.path.exists(path) else None
 
@@ -39,9 +46,20 @@ def list_media(conn, category=None):
 
 
 def delete_media(conn, media_dir, hash_):
-    path = get_media_path(media_dir, hash_)
+    if not _HASH_RE.match(hash_):
+        return False
     cursor = conn.execute("DELETE FROM media WHERE hash = ?", (hash_,))
     conn.commit()
-    if path is not None:
-        os.remove(path)
+
+    # Only attempt file removal if DB row actually existed.
+    # DB is source of truth: orphan files (file exists but no DB row) are left alone.
+    if cursor.rowcount > 0:
+        path = get_media_path(media_dir, hash_)
+        if path is not None:
+            try:
+                os.remove(path)
+            except OSError:
+                # File already gone or inaccessible; DB row is deleted regardless.
+                pass
+
     return cursor.rowcount > 0
