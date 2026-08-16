@@ -1,4 +1,5 @@
 import threading
+import time
 
 import cv2
 from http.server import BaseHTTPRequestHandler
@@ -57,12 +58,14 @@ class MJPEGStreamer:
                     while True:
                         jpeg = streamer._get_latest_jpeg()
                         if jpeg is None:
+                            time.sleep(1/15)
                             continue
                         self.wfile.write(f"--{_BOUNDARY}\r\n".encode())
                         self.wfile.write(b"Content-Type: image/jpeg\r\n")
                         self.wfile.write(f"Content-Length: {len(jpeg)}\r\n\r\n".encode())
                         self.wfile.write(jpeg)
                         self.wfile.write(b"\r\n")
+                        time.sleep(1/15)
                 except (BrokenPipeError, ConnectionResetError):
                     pass
 
@@ -73,3 +76,4 @@ class MJPEGStreamer:
     def stop(self):
         if self._server is not None:
             self._server.shutdown()
+            self._server.server_close()
