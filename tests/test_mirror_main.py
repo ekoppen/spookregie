@@ -1,4 +1,11 @@
-import mirror_node.main as mirror_main
+import pytest
+
+# Zonder paho/cv2 (optionele node-dependencies) alleen dit bestand overslaan,
+# i.p.v. de hele testsuite te laten afbreken tijdens collection.
+pytest.importorskip("paho.mqtt.client")
+pytest.importorskip("cv2")
+
+import mirror_node.main as mirror_main  # noqa: E402
 
 
 class _FakeLogger:
@@ -57,3 +64,46 @@ def test_load_overlay_redecodes_when_hash_changes(monkeypatch):
     mirror_main._load_overlay("b" * 64, logger)
 
     assert len(calls) == 2
+
+
+class _FakeMsg:
+    def __init__(self, topic, payload=b"{}"):
+        self.topic = topic
+        self.payload = payload
+
+
+def test_apply_config_message_ignores_non_dict_json():
+    logger = _FakeLogger()
+    mirror_main._apply_config_message("[1, 2, 3]", is_preview=False, logger=logger)
+    assert logger.errors
+
+
+def test_on_message_survives_malformed_payload(monkeypatch):
+    # Niet-UTF8 bytes: mag paho's netwerkthread niet killen.
+    logger = _FakeLogger()
+    on_message = mirror_main.make_on_message(logger)
+    on_message(None, None, _FakeMsg(mirror_main.TOPIC_CONFIG_MIRROR, b"\xff\xfe"))
+    assert logger.errors
+
+
+def test_on_message_sets_test_trigger_event():
+    mirror_main.test_trigger_requested.clear()
+    on_message = mirror_main.make_on_message(_FakeLogger())
+
+    on_message(None, None, _FakeMsg(mirror_main.TOPIC_CONTROL_MIRROR_TEST, b""))
+
+    assert mirror_main.test_trigger_requested.is_set()
+    mirror_main.test_trigger_requested.clear()
+
+
+def test_preview_config_also_syncs_overlay(monkeypatch):
+    started = []
+    monkeypatch.setattr(
+        mirror_main.threading,
+        "Thread",
+        lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
+    )
+    mirror_main._apply_config_message(
+        '{"overlay_hash": "' + "a" * 64 + '"}', is_preview=True, logger=_FakeLogger()
+    )
+    assert started and started[0]["args"][2] == ["a" * 64]

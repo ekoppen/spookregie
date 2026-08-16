@@ -15,6 +15,7 @@ from shared.mqtt_contract import (
     TOPIC_SYSTEM_SLEEP,
     TOPIC_CONFIG_MIRROR,
     TOPIC_CONTROL_MIRROR_PREVIEW,
+    TOPIC_CONTROL_MIRROR_TEST,
     status_topic,
     trigger_payload,
 )
@@ -43,6 +44,9 @@ MEDIA_CACHE_DIR = os.environ.get("MIRROR_MEDIA_CACHE_DIR", "./media_cache")
 STREAM_PORT = int(os.environ.get("MIRROR_STREAM_PORT", "8091"))
 
 sleeping = threading.Event()
+# Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
+# hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
+test_trigger_requested = threading.Event()
 active_config = ActiveMirrorConfig()
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
@@ -52,34 +56,60 @@ _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _overlay_cache = {"hash": None, "image": None}
 
 
+def _sync_overlay_in_background(config):
+    """Haalt het overlay-bestand bij `config["overlay_hash"]` op de achtergrond
+    op. sync_media kan ~10s blokkeren; dat mag de MQTT-callbackthread niet
+    ophouden (system/sleep moet altijd meteen doorkomen). De render-loop kijkt
+    zelf of het bestand al bestaat en slaat de overlay tot die tijd over."""
+    overlay_hash = config.get("overlay_hash")
+    if not isinstance(overlay_hash, str) or not overlay_hash:
+        return
+    threading.Thread(
+        target=sync_media,
+        args=(BACKEND_URL, MEDIA_CACHE_DIR, [overlay_hash]),
+        daemon=True,
+    ).start()
+
+
 def _apply_config_message(payload, is_preview, logger):
     try:
         config = json.loads(payload)
     except json.JSONDecodeError:
         logger.error("Ongeldige config-JSON ontvangen, genegeerd")
         return
+    if not isinstance(config, dict):
+        logger.error("Config-JSON is geen object, genegeerd: %r", config)
+        return
     if is_preview:
         active_config.set_preview(config)
+        _sync_overlay_in_background(config)
         return
     active_config.set_persistent(config)
-    overlay_hash = config.get("overlay_hash")
-    if overlay_hash:
-        sync_media(BACKEND_URL, MEDIA_CACHE_DIR, [overlay_hash])
+    _sync_overlay_in_background(config)
 
 
 def make_on_message(logger):
     def on_message(client, userdata, msg):
-        if msg.topic == TOPIC_SYSTEM_SLEEP:
-            if msg.payload.decode() == SLEEP_PAYLOAD_ON:
-                sleeping.set()
-            else:
-                sleeping.clear()
-            return
-        if msg.topic == TOPIC_CONFIG_MIRROR:
-            _apply_config_message(msg.payload.decode(), is_preview=False, logger=logger)
-            return
-        if msg.topic == TOPIC_CONTROL_MIRROR_PREVIEW:
-            _apply_config_message(msg.payload.decode(), is_preview=True, logger=logger)
+        # Vangnet: een exception hier zou paho's netwerkthread killen — de node
+        # blijft dan renderen maar reageert nergens meer op, ook niet op
+        # system/sleep (de noodstop). Alles loggen en doorgaan dus.
+        try:
+            if msg.topic == TOPIC_SYSTEM_SLEEP:
+                if msg.payload.decode() == SLEEP_PAYLOAD_ON:
+                    sleeping.set()
+                else:
+                    sleeping.clear()
+                return
+            if msg.topic == TOPIC_CONFIG_MIRROR:
+                _apply_config_message(msg.payload.decode(), is_preview=False, logger=logger)
+                return
+            if msg.topic == TOPIC_CONTROL_MIRROR_PREVIEW:
+                _apply_config_message(msg.payload.decode(), is_preview=True, logger=logger)
+                return
+            if msg.topic == TOPIC_CONTROL_MIRROR_TEST:
+                test_trigger_requested.set()
+        except Exception as exc:
+            logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
 
 
@@ -176,6 +206,7 @@ def main():
         client.subscribe(TOPIC_SYSTEM_SLEEP)
         client.subscribe(TOPIC_CONFIG_MIRROR)
         client.subscribe(TOPIC_CONTROL_MIRROR_PREVIEW)
+        client.subscribe(TOPIC_CONTROL_MIRROR_TEST)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
@@ -230,7 +261,24 @@ def main():
                 client.publish(TOPIC_MIRROR_TRIGGERED, trigger_payload())
                 logger.info("mirror triggered")
 
-            rendered = _render(frame, logger) if now < active_until else frame * 0
+            # Handmatige test vanaf de beheerpagina: wel het effect tonen, maar
+            # bewust géén mirror/triggered publiceren — dat topic betekent
+            # "echte beweging gezien" en laat de scare-nodes meedoen.
+            if test_trigger_requested.is_set():
+                test_trigger_requested.clear()
+                active_until = now + ACTIVE_SECONDS
+                logger.info("mirror test-trigger")
+
+            if now < active_until:
+                try:
+                    rendered = _render(frame, logger)
+                except Exception as exc:
+                    # Val terug op het rauwe beeld: een kapotte config mag de
+                    # camera-loop nooit onderuit halen (fail-safe eis).
+                    logger.error("Fout bij renderen: %s", exc)
+                    rendered = frame
+            else:
+                rendered = frame * 0
             streamer.publish_frame(rendered)
             cv2.imshow("mirror", rendered)
             cv2.waitKey(1)
