@@ -1,4 +1,4 @@
-from shared.media_sync import content_hash, sync_media
+from shared.media_sync import content_hash, sync_media, _read_with_size_cap, _FETCH_MAX_SIZE
 
 
 def test_content_hash_is_deterministic_and_hex():
@@ -32,18 +32,19 @@ def test_sync_media_uses_cache_when_file_exists(tmp_path):
 
 def test_sync_media_fetches_missing_file(tmp_path):
     cache_dir = tmp_path / "cache"
-    valid_hash = "b" * 64  # Valid 64-char lowercase hex hash
+    expected_content = b"downloaded content"
+    valid_hash = content_hash(expected_content)  # Hash must match the content
     calls = []
 
     def fake_fetch(url):
         calls.append(url)
-        return b"downloaded content"
+        return expected_content
 
     result = sync_media("http://backend", str(cache_dir), [valid_hash], fetch=fake_fetch)
 
     assert calls == [f"http://backend/api/media/{valid_hash}"]
     assert result == {valid_hash: str(cache_dir / valid_hash)}
-    assert (cache_dir / valid_hash).read_bytes() == b"downloaded content"
+    assert (cache_dir / valid_hash).read_bytes() == expected_content
 
 
 def test_sync_media_skips_failed_fetch_without_crashing(tmp_path):
@@ -94,13 +95,14 @@ def test_sync_media_accepts_only_valid_sha256_hashes(tmp_path):
     """Only 64-char lowercase hex strings should be accepted."""
     cache_dir = tmp_path / "cache"
     calls = []
+    expected_content = b"test data"
 
     def fake_fetch(url):
         calls.append(url)
-        return b"valid content"
+        return expected_content
 
     # Create a valid hash by using content_hash
-    valid_hash = content_hash(b"test data")  # Should be 64-char lowercase hex
+    valid_hash = content_hash(expected_content)  # Should be 64-char lowercase hex
     assert len(valid_hash) == 64
     assert all(c in "0123456789abcdef" for c in valid_hash)
 
@@ -115,4 +117,100 @@ def test_sync_media_accepts_only_valid_sha256_hashes(tmp_path):
     # Only the valid hash should be attempted
     assert calls == [f"http://backend/api/media/{valid_hash}"]
     assert result == {valid_hash: str(cache_dir / valid_hash)}
-    assert (cache_dir / valid_hash).read_bytes() == b"valid content"
+    assert (cache_dir / valid_hash).read_bytes() == expected_content
+
+
+def test_sync_media_rejects_content_mismatch(tmp_path):
+    """Fetched content that doesn't hash to the requested hash should be skipped, not cached."""
+    cache_dir = tmp_path / "cache"
+    valid_hash = "d" * 64  # Valid 64-char lowercase hex hash
+
+    def fake_fetch(url):
+        # Return data that does NOT match the requested hash
+        return b"wrong content"
+
+    result = sync_media("http://backend", str(cache_dir), [valid_hash], fetch=fake_fetch)
+
+    # Hash should be excluded from result (content verification failed)
+    assert result == {}
+
+    # No file should be written to disk
+    assert list(cache_dir.glob("*")) == []
+
+
+def test_sync_media_verifies_content_with_real_hash(tmp_path):
+    """Fetched content matching the correct hash should be cached."""
+    cache_dir = tmp_path / "cache"
+    expected_content = b"correct overlay data"
+    valid_hash = content_hash(expected_content)  # Create hash of actual content
+
+    def fake_fetch(url):
+        return expected_content
+
+    result = sync_media("http://backend", str(cache_dir), [valid_hash], fetch=fake_fetch)
+
+    # Hash should be in result (content verification passed)
+    assert result == {valid_hash: str(cache_dir / valid_hash)}
+
+    # File should be written with correct content
+    assert (cache_dir / valid_hash).read_bytes() == expected_content
+
+
+def test_read_with_size_cap_accepts_small_data():
+    """Data under size cap should be read successfully."""
+    class FakeResp:
+        def __init__(self, data):
+            self.data = data
+            self.pos = 0
+
+        def read(self, size):
+            chunk = self.data[self.pos:self.pos+size]
+            self.pos += size
+            return chunk
+
+    small_data = b"x" * 1000
+    resp = FakeResp(small_data)
+    result = _read_with_size_cap(resp, max_size=10000)
+
+    assert result == small_data
+
+
+def test_read_with_size_cap_rejects_oversized_data():
+    """Data exceeding size cap should raise ValueError."""
+    class FakeResp:
+        def __init__(self, data):
+            self.data = data
+            self.pos = 0
+
+        def read(self, size):
+            chunk = self.data[self.pos:self.pos+size]
+            self.pos += size
+            return chunk
+
+    # Create data that exceeds 1000 byte cap
+    oversized_data = b"x" * 2000
+    resp = FakeResp(oversized_data)
+
+    try:
+        _read_with_size_cap(resp, max_size=1000)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "exceeds" in str(e)
+
+
+def test_sync_media_handles_oversized_fetch_error(tmp_path):
+    """When fetch raises due to size cap, hash should be excluded from result."""
+    cache_dir = tmp_path / "cache"
+    valid_hash = "e" * 64
+
+    def oversized_fetch(url):
+        # Simulate size cap error
+        raise ValueError("Response exceeds 50 MB bytes")
+
+    result = sync_media("http://backend", str(cache_dir), [valid_hash], fetch=oversized_fetch)
+
+    # Hash should be excluded (fetch failed with size cap error)
+    assert result == {}
+
+    # No file should be written
+    assert list(cache_dir.glob("*")) == []
