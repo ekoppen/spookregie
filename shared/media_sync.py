@@ -1,6 +1,11 @@
 import hashlib
 import os
+import re
 import urllib.request
+
+
+# ponytail: path-traversal defense, validates hash format before use in paths/URLs
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def content_hash(data):
@@ -22,6 +27,8 @@ def sync_media(base_url, cache_dir, wanted_hashes, fetch=None):
     os.makedirs(cache_dir, exist_ok=True)
     result = {}
     for h in wanted_hashes:
+        if not _HASH_RE.match(h):
+            continue
         local_path = os.path.join(cache_dir, h)
         if os.path.exists(local_path):
             result[h] = local_path
