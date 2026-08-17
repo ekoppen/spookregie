@@ -1,0 +1,337 @@
+.dash-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  max-width: 960px;
+  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 60% 35% at 50% 0%, rgba(255, 106, 31, 0.06), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--bone);
+}
+
+.dash-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.dash-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.dash-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ash);
+}
+
+.dash-eyebrow__led--on {
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+  animation: dash-pulse 1.6s ease-in-out infinite;
+}
+
+.dash-eyebrow__led--off {
+  background: var(--alarm);
+  box-shadow: 0 0 6px 1px rgba(255, 92, 92, 0.6);
+}
+
+@keyframes dash-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.dash-heading {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.dash-tally {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ash);
+}
+
+.dash-tally__count {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--signal);
+}
+
+.dash-tally__total {
+  font-size: 0.85rem;
+}
+
+.dash-panel {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.dash-panel__eyebrow {
+  margin: 0 0 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.dash-empty {
+  margin: 0;
+  padding: 1.5rem 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--ash);
+}
+
+.node-grid {
+  counter-reset: breaker;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.6rem;
+}
+
+.dash-controls {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.estop-button {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ff8a4f, var(--alarm) 60%, #a83030 100%);
+  box-shadow:
+    0 0 0 4px var(--void),
+    0 0 0 6px var(--panel-edge),
+    0 6px 16px rgba(255, 92, 92, 0.35);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.estop-button:hover {
+  box-shadow:
+    0 0 0 4px var(--void),
+    0 0 0 6px var(--alarm),
+    0 6px 20px rgba(255, 92, 92, 0.5);
+}
+
+.estop-button:active {
+  transform: scale(0.96);
+}
+
+.estop-button:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 4px;
+}
+
+.estop-button__ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.35), inset 0 -6px 10px rgba(0, 0, 0, 0.3);
+}
+
+.estop-button__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  color: var(--void);
+  text-align: center;
+}
+
+.wake-button {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.wake-button:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.wake-button:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.schedule-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.schedule-field {
+  display: block;
+}
+
+.schedule-field__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--ash);
+}
+
+.schedule-field__input {
+  padding: 0.6rem 0.7rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  font-size: 0.9rem;
+  color-scheme: dark;
+}
+
+.schedule-field__input:focus {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-color: var(--ember-dim);
+}
+
+.schedule-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-bottom: 0.5rem;
+  cursor: pointer;
+}
+
+.schedule-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.schedule-toggle__rocker {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+  transition: background-color 0.15s ease;
+}
+
+.schedule-toggle__rocker::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ash);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.schedule-toggle input:checked + .schedule-toggle__rocker {
+  background: rgba(255, 106, 31, 0.15);
+}
+
+.schedule-toggle input:checked + .schedule-toggle__rocker::after {
+  transform: translateX(16px);
+  background: var(--ember);
+}
+
+.schedule-toggle input:focus-visible + .schedule-toggle__rocker {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.schedule-toggle__label {
+  font-size: 0.85rem;
+  color: var(--bone);
+}
+
+.schedule-save {
+  padding: 0.7rem 1.4rem;
+  background: var(--ember);
+  border: none;
+  border-radius: 6px;
+  color: var(--void);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.schedule-save:hover {
+  background: var(--ember-dim);
+}
+
+.schedule-save:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-eyebrow__led--on {
+    animation: none;
+  }
+}

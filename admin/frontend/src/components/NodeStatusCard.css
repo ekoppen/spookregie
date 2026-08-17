@@ -1,0 +1,125 @@
+.node-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-left: 3px solid var(--panel-edge);
+  border-radius: 8px;
+  transition:
+    border-left-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.node-card[data-status="online"] {
+  border-left-color: var(--ember);
+  background: linear-gradient(135deg, rgba(255, 106, 31, 0.07), var(--panel) 55%);
+}
+
+.node-card__number {
+  counter-increment: breaker;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  color: var(--ash);
+  opacity: 0.6;
+}
+
+.node-card__number::before {
+  content: counter(breaker, decimal-leading-zero);
+}
+
+.node-card__led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.node-card__led--on {
+  background: var(--signal);
+  box-shadow: 0 0 7px 2px rgba(255, 184, 77, 0.75);
+  animation: node-led-breathe 2.4s ease-in-out infinite;
+}
+
+.node-card__led--off {
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+}
+
+@keyframes node-led-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.node-card__name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--bone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-card[data-status="offline"] .node-card__name {
+  color: var(--ash);
+}
+
+.node-card__status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+  justify-self: end;
+}
+
+.node-card[data-status="online"] .node-card__status {
+  color: var(--signal);
+}
+
+.node-card__rocker {
+  position: relative;
+  width: 12px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+  justify-self: end;
+}
+
+.node-card__rocker::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--ash);
+  transition:
+    top 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.node-card__rocker--on::after {
+  top: 1px;
+  background: var(--ember);
+}
+
+.node-card__rocker--off::after {
+  top: 11px;
+  background: var(--panel-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-card__led--on {
+    animation: none;
+  }
+}

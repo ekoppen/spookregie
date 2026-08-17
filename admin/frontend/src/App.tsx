@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import LoginPage from "./pages/LoginPage";
+import DashboardPage from "./pages/DashboardPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, checking } = useAuth();
@@ -18,7 +19,7 @@ export default function App() {
           path="/*"
           element={
             <ProtectedRoute>
-              <div>Beheerpagina — wordt verder opgebouwd in latere taken.</div>
+              <DashboardPage />
             </ProtectedRoute>
           }
         />
