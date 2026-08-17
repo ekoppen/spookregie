@@ -12,6 +12,8 @@ from admin.app.scheduler import Scheduler
 from admin.app.websocket_hub import WebSocketHub
 from admin.app.routers import auth as auth_router
 from admin.app.routers import media as media_router
+from admin.app.routers import mirror as mirror_router
+from admin.app.routers import scare as scare_router
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json"}
 # ponytail: same hash-format check as media.py's _HASH_RE, kept local to avoid
@@ -68,6 +70,8 @@ def create_app(settings=None):
 
     app.include_router(auth_router.router)
     app.include_router(media_router.router)
+    app.include_router(mirror_router.router)
+    app.include_router(scare_router.router)
 
     @app.on_event("startup")
     def _startup():
