@@ -52,6 +52,26 @@ def test_get_and_put_schedule(tmp_path):
     assert get_response.json() == {"on_time": "19:00", "off_time": "23:00", "enabled": True}
 
 
+def test_put_schedule_rejects_malformed_time(tmp_path):
+    client, app, _ = _client(tmp_path)
+    client.put("/api/schedule", json={"on_time": "19:00", "off_time": "23:00", "enabled": True})
+
+    response = client.put("/api/schedule", json={"on_time": "6pm", "off_time": "23:00", "enabled": True})
+
+    assert response.status_code == 400
+    # de oude, geldige waarde staat er nog: niets is weggeschreven
+    assert client.get("/api/schedule").json() == {"on_time": "19:00", "off_time": "23:00", "enabled": True}
+
+
+def test_put_schedule_rejects_out_of_range_time(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    assert client.put("/api/schedule", json={"on_time": "25:00", "off_time": "23:00"}).status_code == 400
+    assert client.put("/api/schedule", json={"on_time": "18:00", "off_time": "22:70"}).status_code == 400
+    # niets opgeslagen: GET geeft nog de defaults
+    assert client.get("/api/schedule").json() == {"on_time": "18:00", "off_time": "22:00", "enabled": True}
+
+
 def test_emergency_stop_publishes_sleep_on(tmp_path):
     client, app, bridge = _client(tmp_path)
 

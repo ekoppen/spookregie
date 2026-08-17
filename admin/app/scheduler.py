@@ -1,5 +1,4 @@
 import threading
-import time
 from datetime import datetime
 
 
@@ -23,22 +22,38 @@ def should_be_sleeping(now, on_time, off_time):
 
 class Scheduler:
     """Controleert elke minuut het ingestelde tijdvenster en publiceert
-    system/sleep bij iedere check (retained, dus idempotent/robuust tegen
-    herstarts) — vervangt de oude HA-tijdvenster-automation volledig."""
+    system/sleep alleen bij een overgang (retain=True zorgt dat een node die
+    later (her)start het laatste bericht alsnog krijgt, dus herpublicatie bij
+    elke tick is niet nodig — en zou de noodstop overschrijven)."""
 
-    def __init__(self, bridge, get_schedule, check_interval=60):
+    def __init__(self, bridge, get_schedule, check_interval=60, logger=None):
         self._bridge = bridge
         self._get_schedule = get_schedule
         self._check_interval = check_interval
+        self._logger = logger
+        self._last_published = None
         self._stop_event = threading.Event()
         self._thread = None
 
+    def _tick(self):
+        """Eén controle. Vangt alles af: een kapotte tijd in de DB mag de
+        achtergrond-thread niet stilletjes doodmaken."""
+        try:
+            on_time, off_time, enabled = self._get_schedule()
+            if not enabled:
+                return
+            now = datetime.now().strftime("%H:%M")
+            want = should_be_sleeping(now, on_time, off_time)
+            if want != self._last_published:
+                self._bridge.publish_sleep(want)
+                self._last_published = want
+        except Exception as exc:
+            if self._logger is not None:
+                self._logger.error("tijdvenster-check mislukt: %s", exc)
+
     def _loop(self):
         while not self._stop_event.is_set():
-            on_time, off_time, enabled = self._get_schedule()
-            if enabled:
-                now = datetime.now().strftime("%H:%M")
-                self._bridge.publish_sleep(should_be_sleeping(now, on_time, off_time))
+            self._tick()
             self._stop_event.wait(self._check_interval)
 
     def start(self):

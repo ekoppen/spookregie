@@ -1,9 +1,11 @@
 import asyncio
-import re
+import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from shared.logging_setup import setup_logging
+from shared.media_sync import is_content_hash
 from admin.app.config import get_settings
 from admin.app.auth import SessionStore
 from admin.app.db import init_db
@@ -19,11 +21,9 @@ from admin.app.routers import nodes as nodes_router
 from admin.app.routers import schedule as schedule_router
 from admin.app.routers import ha as ha_router
 from admin.app.routers import ws as ws_router
+from admin.app.routers.schedule import read_schedule
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json"}
-# ponytail: same hash-format check as media.py's _HASH_RE, kept local to avoid
-# importing a private helper across modules.
-_MEDIA_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _is_public_media_download(path, method):
@@ -36,17 +36,13 @@ def _is_public_media_download(path, method):
     if not path.startswith(prefix):
         return False
     remainder = path[len(prefix):]
-    return "/" not in remainder and bool(_MEDIA_HASH_RE.match(remainder))
+    return "/" not in remainder and is_content_hash(remainder)
 
 
 def _get_schedule_from_db(conn):
     def get_schedule():
-        row = conn.execute(
-            "SELECT on_time, off_time, enabled FROM schedule WHERE id = 1"
-        ).fetchone()
-        if row is None:
-            return ("18:00", "22:00", True)
-        return (row[0], row[1], bool(row[2]))
+        s = read_schedule(conn)
+        return (s["on_time"], s["off_time"], s["enabled"])
     return get_schedule
 
 
@@ -54,12 +50,18 @@ def create_app(settings=None):
     settings = settings or get_settings()
     app = FastAPI()
     app.state.settings = settings
+    os.makedirs(settings.log_dir, exist_ok=True)
+    app.state.logger = setup_logging("beheerpagina", settings.log_dir)
     app.state.sessions = SessionStore()
     app.state.db = init_db(settings.db_path)
     app.state.tracker = NodeStatusTracker()
     app.state.ws_hub = WebSocketHub()
-    app.state.bridge = MqttBridge(settings, app.state.tracker, ws_hub=app.state.ws_hub)
-    app.state.scheduler = Scheduler(app.state.bridge, _get_schedule_from_db(app.state.db))
+    app.state.bridge = MqttBridge(
+        settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger
+    )
+    app.state.scheduler = Scheduler(
+        app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger
+    )
 
     @app.middleware("http")
     async def require_session(request: Request, call_next):
