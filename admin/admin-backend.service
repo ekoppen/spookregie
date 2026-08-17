@@ -1,0 +1,34 @@
+[Unit]
+Description=Halloween beheerpagina-backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# CHANGE per machine: de gebruiker die de backend draait.
+User=halloween
+ExecStart=/usr/bin/python3 -m admin.run
+WorkingDirectory=/opt/halloween
+# CHANGE: zet een eigen wachtwoord. Er is geen standaardwaarde — zonder deze
+# regel weigert de backend te starten (RuntimeError).
+Environment=ADMIN_PASSWORD=verander-mij
+Environment=MQTT_HOST=homeassistant.local
+# LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
+Environment=LOG_DIR=/var/log/halloween
+LogsDirectory=halloween
+# StateDirectory maakt /var/lib/halloween aan met de juiste eigenaar; daar komen
+# de SQLite-database en de geüploade mediabestanden te staan.
+Environment=ADMIN_DB_PATH=/var/lib/halloween/admin.db
+Environment=ADMIN_MEDIA_DIR=/var/lib/halloween/media_store
+StateDirectory=halloween
+# Poort van de beheerpagina; de nodes halen hier ook hun media op
+# (BACKEND_URL in hun eigen unit moet hiernaar wijzen).
+Environment=ADMIN_PORT=8000
+# Home Assistant-koppeling (WLED-status/bediening). CHANGE: HA_TOKEN is een
+# long-lived access token uit je HA-profiel; leeg laten schakelt de proxy uit.
+Environment=HA_URL=http://homeassistant.local:8123
+Environment=HA_TOKEN=
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
