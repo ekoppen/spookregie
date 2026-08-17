@@ -11,6 +11,7 @@ from admin.app.mqtt_bridge import MqttBridge
 from admin.app.scheduler import Scheduler
 from admin.app.websocket_hub import WebSocketHub
 from admin.app.routers import auth as auth_router
+from admin.app.routers import media as media_router
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json"}
 # ponytail: same hash-format check as media.py's _HASH_RE, kept local to avoid
@@ -66,6 +67,7 @@ def create_app(settings=None):
         return await call_next(request)
 
     app.include_router(auth_router.router)
+    app.include_router(media_router.router)
 
     @app.on_event("startup")
     def _startup():
