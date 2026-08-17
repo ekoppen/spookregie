@@ -3,7 +3,9 @@ import threading
 
 
 def check_password(password, expected):
-    return secrets.compare_digest(password, expected)
+    # .encode(): compare_digest weigert str met non-ASCII tekens (TypeError),
+    # dus een wachtwoord met bijv. een ë zou elke login laten crashen.
+    return secrets.compare_digest(password.encode(), expected.encode())
 
 
 class SessionStore:
