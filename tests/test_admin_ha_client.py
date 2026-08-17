@@ -41,6 +41,8 @@ def test_call_service_posts_correct_body():
     url, method, headers, body = calls[0]
     assert url == "http://ha.local:8123/api/services/light/turn_on"
     assert method == "POST"
+    assert headers["Authorization"] == "Bearer mytoken"
+    assert headers["Content-Type"] == "application/json"
     assert json.loads(body) == {"entity_id": "light.wled_voortuin"}
 
 
@@ -50,3 +52,15 @@ def test_call_service_swallows_failure():
 
     call_service("http://ha.local:8123", "mytoken", "light", "turn_on", {}, fetch=failing_fetch)
     # geen exception naar buiten -> test slaagt als er niets gecrasht is
+
+
+def test_call_service_rejects_invalid_domain():
+    calls = []
+
+    def fake_fetch(url, method="GET", headers=None, body=None):
+        calls.append(url)
+        return b"{}"
+
+    call_service("http://ha.local:8123", "mytoken", "../config", "turn_on", {}, fetch=fake_fetch)
+
+    assert calls == []
