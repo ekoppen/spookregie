@@ -31,6 +31,13 @@ def content_hash(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def is_content_hash(h):
+    """True als `h` exact een 64-teken hex-hash is. Publieke variant van de
+    interne format-check, zodat de backend niet z'n eigen copy van dit
+    patroon hoeft bij te houden."""
+    return bool(_HASH_RE.match(h))
+
+
 def sync_media(base_url, cache_dir, wanted_hashes, fetch=None):
     """Zorgt dat elk hash uit `wanted_hashes` lokaal in `cache_dir` staat
     (bestandsnaam = de hash). Haalt ontbrekende bestanden op via
@@ -46,7 +53,7 @@ def sync_media(base_url, cache_dir, wanted_hashes, fetch=None):
     os.makedirs(cache_dir, exist_ok=True)
     result = {}
     for h in wanted_hashes:
-        if not _HASH_RE.match(h):
+        if not is_content_hash(h):
             continue
         local_path = os.path.join(cache_dir, h)
         if os.path.exists(local_path):

@@ -1,4 +1,21 @@
-from shared.media_sync import content_hash, sync_media, _read_with_size_cap, _FETCH_MAX_SIZE
+from shared.media_sync import (
+    content_hash,
+    is_content_hash,
+    sync_media,
+    _read_with_size_cap,
+    _FETCH_MAX_SIZE,
+)
+
+
+def test_is_content_hash_accepts_a_real_hash():
+    assert is_content_hash(content_hash(b"hello")) is True
+
+
+def test_is_content_hash_rejects_path_traversal_and_wrong_length():
+    assert is_content_hash("../../etc/passwd") is False
+    assert is_content_hash("a" * 63) is False
+    assert is_content_hash("a" * 65) is False
+    assert is_content_hash("A" * 64) is False  # alleen lowercase hex
 
 
 def test_content_hash_is_deterministic_and_hex():

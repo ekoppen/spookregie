@@ -24,7 +24,11 @@ def get_mirror_config(request: Request):
 
 @router.put("/api/mirror/config")
 async def put_mirror_config(request: Request):
-    config = await request.json()
+    body = await request.json()
+    # Defaults één keer toepassen, daarna dezelfde dict voor de DB-write én de
+    # publish — zo kunnen opgeslagen en gepubliceerde config niet uit elkaar
+    # lopen bij een gedeeltelijke payload.
+    config = {k: body.get(k, v) for k, v in _DEFAULT_MIRROR_CONFIG.items()}
     db = request.app.state.db
     db.execute(
         """INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position)
@@ -32,11 +36,11 @@ async def put_mirror_config(request: Request):
            ON CONFLICT(id) DO UPDATE SET effect=excluded.effect, params=excluded.params,
              overlay_hash=excluded.overlay_hash, scale=excluded.scale, position=excluded.position""",
         (
-            config.get("effect", "xray"),
-            json.dumps(config.get("params", {})),
-            config.get("overlay_hash"),
-            config.get("scale", 1.0),
-            json.dumps(config.get("position", [0.5, 0.5])),
+            config["effect"],
+            json.dumps(config["params"]),
+            config["overlay_hash"],
+            config["scale"],
+            json.dumps(config["position"]),
         ),
     )
     db.commit()
