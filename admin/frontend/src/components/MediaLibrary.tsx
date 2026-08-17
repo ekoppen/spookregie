@@ -43,10 +43,16 @@ function CategoryIcon({ category }: { category: Props["category"] }) {
 export default function MediaLibrary({ category, selected, onSelectionChange, selectionMode }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const copy = CATEGORY_COPY[category];
 
   function refresh() {
-    listMedia(category).then(setItems);
+    listMedia(category)
+      .then((result) => {
+        setItems(result);
+        setError(null);
+      })
+      .catch(() => setError("Bibliotheek kon niet worden geladen."));
   }
 
   useEffect(refresh, [category]);
@@ -57,7 +63,10 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
     setUploading(true);
     try {
       await uploadMedia(file, category);
+      setError(null);
       refresh();
+    } catch {
+      setError("Bestand kon niet worden geüpload.");
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -65,9 +74,14 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
   }
 
   async function handleDelete(hash: string) {
-    await deleteMedia(hash);
-    onSelectionChange(selected.filter((h) => h !== hash));
-    refresh();
+    try {
+      await deleteMedia(hash);
+      setError(null);
+      onSelectionChange(selected.filter((h) => h !== hash));
+      refresh();
+    } catch {
+      setError("Bestand kon niet worden verwijderd.");
+    }
   }
 
   function toggleSelect(hash: string) {
@@ -96,6 +110,12 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
           {uploading ? "Bezig met uploaden…" : copy.upload}
         </label>
       </div>
+
+      {error && (
+        <p className="media-library__error" role="alert">
+          {error}
+        </p>
+      )}
 
       {items.length === 0 ? (
         <p className="media-library__empty">{copy.empty}</p>
