@@ -4,10 +4,12 @@
    Mosquitto broker) als die nog niet draait.
 2. Zorg dat de MQTT-integratie in HA naar die broker wijst (meestal
    automatisch gedetecteerd na installatie van de add-on).
-3. Kopieer de inhoud van `automations/time_window.yaml` en
-   `automations/wled_trigger.yaml` naar je HA-automations (via de
-   Automations-UI "Edit in YAML", of in `automations.yaml` als je die
-   beheert via bestanden).
+3. Kopieer de inhoud van `automations/wled_trigger.yaml` naar je
+   HA-automations (via de Automations-UI "Edit in YAML", of in
+   `automations.yaml` als je die beheert via bestanden). Het tijdvenster
+   hoort hier *niet* meer: dat publiceert de beheerpagina-backend zelf op
+   `system/sleep` (zie de root-README). Draai het niet ook in HA, anders
+   overschrijven de twee elkaar.
 4. Pas `entity_id: light.wled_voortuin` in `wled_trigger.yaml` aan naar de
    werkelijke entity-id van je WLED-controller (te vinden onder
    Settings > Devices & Services > WLED).

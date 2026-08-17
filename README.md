@@ -5,8 +5,9 @@ Motion-getriggerde audio/video-ervaring voor de voortuin. Een **mirror-node**
 door een spook-effect en rear-projecteert dat op de ruit. Eén of meer
 **scare-nodes** (Raspberry Pi + PIR + speaker) spelen willekeurige geluiden af,
 zowel op hun eigen PIR als (met 0-2s random delay) op een mirror-trigger.
-Home Assistant is de losse coördinatielaag: MQTT-broker, tijdvenster,
-dashboard en de WLED-koppeling. Elke node blijft zelfstandig werken als
+Home Assistant is de losse coördinatielaag: MQTT-broker, dashboard en de
+WLED-koppeling; het tijdvenster zit in de beheerpagina-backend (`admin/`),
+die als enige `system/sleep` publiceert. Elke node blijft zelfstandig werken als
 MQTT/HA wegvalt. Volledig ontwerp: `docs/superpowers/specs/`.
 
 ## Layout
@@ -16,7 +17,8 @@ MQTT/HA wegvalt. Volledig ontwerp: `docs/superpowers/specs/`.
 | `shared/` | MQTT-topiccontract (`mqtt_contract.py`) en logging-opzet, gedeeld door beide nodes |
 | `mirror_node/` | Camera + trigger + ghost-effect + beamer-output, plus systemd-unit |
 | `scare_node/` | PIR + audio-afspelen + cooldown, plus systemd-unit |
-| `home_assistant/` | Automations (tijdvenster, WLED) — zie `home_assistant/README.md` |
+| `admin/` | Beheerpagina-backend (FastAPI): media, config, tijdvenster, noodstop, plus systemd-unit |
+| `home_assistant/` | Automations (WLED) — zie `home_assistant/README.md` |
 | `tests/` | Pytest-suite over de pure logica (geen hardware nodig) |
 
 ## Tests draaien
@@ -71,6 +73,19 @@ Alleen scare-node:
 | `SCARE_COOLDOWN_SECONDS` | `12` | Minimale tijd tussen twee scares |
 | `SCARE_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor van de backend opgehaalde audio; systemd zet dit op `/var/lib/halloween/media_cache` |
 
+Alleen de beheerpagina-backend (`admin/`):
+
+| Variabele | Default | Betekenis |
+|---|---|---|
+| `ADMIN_PASSWORD` | **geen** — verplicht | Wachtwoord voor de beheerpagina. Zonder deze variabele start de backend niet (bewust geen standaardwaarde) |
+| `MQTT_HOST` / `MQTT_PORT` / `MQTT_USER` / `MQTT_PASS` | zie tabel hierboven | Dezelfde broker als de nodes |
+| `LOG_DIR` | `./logs` | Map voor logbestanden (`beheerpagina.log`); systemd zet dit op `/var/log/halloween` |
+| `ADMIN_DB_PATH` | `./admin.db` | SQLite-bestand met config/media-index; systemd zet dit op `/var/lib/halloween/admin.db` |
+| `ADMIN_MEDIA_DIR` | `./media_store` | Map met geüploade media (bestandsnaam = content-hash); systemd zet dit op `/var/lib/halloween/media_store` |
+| `ADMIN_PORT` | `8000` | Poort van de beheerpagina; de nodes halen hier hun media op (`BACKEND_URL`) |
+| `HA_URL` | `http://homeassistant.local:8123` | Home Assistant voor WLED-status/bediening |
+| `HA_TOKEN` | *(leeg)* | Long-lived access token uit je HA-profiel; leeg laat de HA-proxy zonder resultaat |
+
 De mirror-node luistert op `MIRROR_STREAM_PORT` (standaard 8091) voor de
 live-preview. Die poort moet bereikbaar zijn vanaf de machine/browser waarop je
 de beheerpagina bekijkt — open hem dus in een eventuele firewall.
@@ -101,6 +116,23 @@ Aanpassen vóór installatie:
 - Draait de broker met authenticatie, voeg dan
   `Environment=MQTT_USER=...` en `Environment=MQTT_PASS=...` toe.
 
+### Beheerpagina-backend
+
+De backend draait op één machine (mag dezelfde zijn als een node) en is de
+enige die `system/sleep` publiceert — installeer de oude HA-tijdvenster-
+automation dus niet meer.
+
+```bash
+sudo python3 -m pip install -r admin/requirements.txt
+sudo cp admin/admin-backend.service /etc/systemd/system/
+sudoedit /etc/systemd/system/admin-backend.service   # ADMIN_PASSWORD zetten!
+sudo systemctl daemon-reload && sudo systemctl enable --now admin-backend
+```
+
+`ADMIN_PASSWORD` is verplicht: zonder die variabele stopt de service direct
+met een `RuntimeError`. Zet `BACKEND_URL` in de node-units op
+`http://<backend-host>:8000` zodat de nodes hun media kunnen ophalen.
+
 ## MQTT-topics
 
 Alle namen komen uit `shared/mqtt_contract.py`:
@@ -109,7 +141,7 @@ Alle namen komen uit `shared/mqtt_contract.py`:
 |---|---|---|
 | `mirror/triggered` | mirror-node → | `{"ts": ...}` |
 | `scare/<zone>/triggered` | scare-node → | `{"ts": ...}` |
-| `system/sleep` | HA → nodes | `on` / `off` (retained) |
+| `system/sleep` | backend → nodes | `on` / `off` (retained) |
 | `log/<node>` | nodes → | JSON-logregels |
 | `status/<node>` | nodes → | `online` / `offline` (retained, last-will) |
 
