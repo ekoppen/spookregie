@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from fastapi import FastAPI, Request, Response
@@ -17,6 +18,7 @@ from admin.app.routers import scare as scare_router
 from admin.app.routers import nodes as nodes_router
 from admin.app.routers import schedule as schedule_router
 from admin.app.routers import ha as ha_router
+from admin.app.routers import ws as ws_router
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json"}
 # ponytail: same hash-format check as media.py's _HASH_RE, kept local to avoid
@@ -55,8 +57,8 @@ def create_app(settings=None):
     app.state.sessions = SessionStore()
     app.state.db = init_db(settings.db_path)
     app.state.tracker = NodeStatusTracker()
-    app.state.bridge = MqttBridge(settings, app.state.tracker)
     app.state.ws_hub = WebSocketHub()
+    app.state.bridge = MqttBridge(settings, app.state.tracker, ws_hub=app.state.ws_hub)
     app.state.scheduler = Scheduler(app.state.bridge, _get_schedule_from_db(app.state.db))
 
     @app.middleware("http")
@@ -78,9 +80,14 @@ def create_app(settings=None):
     app.include_router(nodes_router.router)
     app.include_router(schedule_router.router)
     app.include_router(ha_router.router)
+    app.include_router(ws_router.router)
 
     @app.on_event("startup")
     def _startup():
+        # De event loop bestaat pas als uvicorn al gestart is, dus de bridge
+        # krijgt hem hier pas (niet in create_app) — bekende FastAPI-volgorde,
+        # geen ontwerpfout.
+        app.state.bridge._loop = asyncio.get_event_loop()
         app.state.bridge.start()
         app.state.scheduler.start()
 
