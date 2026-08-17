@@ -100,6 +100,35 @@ def test_get_scare_config_defaults_to_empty(tmp_path):
     assert response.json() == {"enabled_hashes": []}
 
 
+def test_scare_routes_reject_zone_with_mqtt_wildcards(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    # %23 = '#': als losse letter zou de client hem als URL-fragment zien
+    for zone in ("zone%23a", "zone+a", "Zone_A"):
+        assert client.get(f"/api/scare/{zone}/config").status_code == 400
+        assert client.put(f"/api/scare/{zone}/config", json={"enabled_hashes": []}).status_code == 400
+        assert client.post(f"/api/scare/{zone}/test").status_code == 400
+
+    # de bridge is nooit aangeroepen met een ongeldige zone
+    assert bridge.calls == []
+
+
+def test_put_mirror_config_normalizes_partial_payload(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.put("/api/mirror/config", json={"effect": "thermal"})
+
+    assert response.status_code == 200
+    published = [c for c in bridge.calls if c[0] == "mirror_config"][-1][1]
+    stored = client.get("/api/mirror/config").json()
+    # gepubliceerde en opgeslagen config zijn identiek en volledig
+    assert published == stored
+    assert published == {
+        "effect": "thermal", "params": {}, "overlay_hash": None,
+        "scale": 1.0, "position": [0.5, 0.5],
+    }
+
+
 def test_post_scare_test_publishes(tmp_path):
     client, bridge = _client(tmp_path)
 
