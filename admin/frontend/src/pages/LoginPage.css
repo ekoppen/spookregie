@@ -1,0 +1,177 @@
+.login-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgba(255, 106, 31, 0.08), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.login-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  padding: 2.5rem 2.25rem 2.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.login-card__rivets {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.login-card__rivets span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--panel-edge);
+}
+
+.login-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.login-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+}
+
+.login-eyebrow__led--busy {
+  background: var(--ember);
+  box-shadow: 0 0 6px 1px rgba(255, 106, 31, 0.8);
+  animation: login-pulse 1s ease-in-out infinite;
+}
+
+.login-eyebrow__led--denied {
+  background: var(--alarm);
+  box-shadow: 0 0 6px 1px rgba(255, 92, 92, 0.8);
+  animation: none;
+}
+
+@keyframes login-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-eyebrow__led--busy {
+    animation: none;
+  }
+}
+
+.login-heading {
+  margin: 0 0 1.75rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.login-field {
+  display: block;
+  margin-bottom: 1.25rem;
+}
+
+.login-field__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--ash);
+}
+
+.login-field__input {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.login-field__input::placeholder {
+  color: var(--ash);
+}
+
+.login-field__input:focus {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-color: var(--ember-dim);
+}
+
+.login-error {
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+.login-submit {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--ember);
+  border: none;
+  border-radius: 6px;
+  color: var(--void);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--ember-dim);
+}
+
+.login-submit:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+.login-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
