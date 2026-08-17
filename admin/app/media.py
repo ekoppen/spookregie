@@ -1,12 +1,25 @@
 import os
-import re
 import time
 
-from shared.media_sync import content_hash
+from shared.media_sync import content_hash, is_content_hash
+
+# Zelfde plafond als shared/media_sync.py's fetch-cap: een grotere upload zou
+# door de nodes nooit opgehaald kunnen worden.
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
-# ponytail: path-traversal defense, validates hash format before use in paths
-_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+def validate_upload(data, category):
+    """Geeft een foutmelding terug, of None als de upload in orde is.
+    Alleen de magic bytes worden gecheckt — genoeg om een verkeerd bestand
+    bij upload te weigeren in plaats van een node er later op te laten
+    stuklopen (zie spec)."""
+    if len(data) > MAX_UPLOAD_SIZE:
+        return f"bestand is groter dan {MAX_UPLOAD_SIZE // (1024 * 1024)} MB"
+    if category == "mirror_overlay" and not data.startswith(b"\x89PNG"):
+        return "overlay moet een PNG-bestand zijn"
+    if category == "scare_audio" and not (data[:4] == b"RIFF" and data[8:12] == b"WAVE"):
+        return "scare-audio moet een WAV-bestand zijn"
+    return None
 
 
 def save_media(conn, media_dir, data, filename, category):
@@ -23,7 +36,7 @@ def save_media(conn, media_dir, data, filename, category):
 
 
 def get_media_path(media_dir, hash_):
-    if not _HASH_RE.match(hash_):
+    if not is_content_hash(hash_):
         return None
     path = os.path.join(media_dir, hash_)
     return path if os.path.exists(path) else None
@@ -46,7 +59,7 @@ def list_media(conn, category=None):
 
 
 def delete_media(conn, media_dir, hash_):
-    if not _HASH_RE.match(hash_):
+    if not is_content_hash(hash_):
         return False
     cursor = conn.execute("DELETE FROM media WHERE hash = ?", (hash_,))
     conn.commit()

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, UploadFile, Form, Response
+from fastapi import APIRouter, HTTPException, Request, UploadFile, Form, Response
 
-from admin.app.media import save_media, get_media_path, list_media, delete_media
+from admin.app.media import save_media, get_media_path, list_media, delete_media, validate_upload
 
 router = APIRouter()
 
@@ -8,6 +8,9 @@ router = APIRouter()
 @router.post("/api/media")
 async def upload_media(request: Request, file: UploadFile, category: str = Form(...)):
     data = await file.read()
+    error = validate_upload(data, category)
+    if error is not None:
+        raise HTTPException(status_code=400, detail=error)
     h = save_media(request.app.state.db, request.app.state.settings.media_dir, data, file.filename, category)
     return {"hash": h, "filename": file.filename, "category": category}
 

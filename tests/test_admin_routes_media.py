@@ -19,9 +19,13 @@ def _client(tmp_path):
     return client
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"nep-overlay"
+WAV = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"nep-audio"
+
+
 def test_upload_list_download_delete_roundtrip(tmp_path):
     client = _client(tmp_path)
-    data = b"fake-overlay-png-bytes"
+    data = PNG
 
     upload_resp = client.post(
         "/api/media",
@@ -62,12 +66,12 @@ def test_list_can_filter_by_category(tmp_path):
     client = _client(tmp_path)
     client.post(
         "/api/media",
-        files={"file": ("spook.png", io.BytesIO(b"overlay"), "image/png")},
+        files={"file": ("spook.png", io.BytesIO(PNG), "image/png")},
         data={"category": "mirror_overlay"},
     )
     client.post(
         "/api/media",
-        files={"file": ("gil.wav", io.BytesIO(b"audio"), "audio/wav")},
+        files={"file": ("gil.wav", io.BytesIO(WAV), "audio/wav")},
         data={"category": "scare_audio"},
     )
 
@@ -75,3 +79,37 @@ def test_list_can_filter_by_category(tmp_path):
 
     assert len(response.json()) == 1
     assert response.json()[0]["filename"] == "gil.wav"
+
+
+def _upload(client, name, data, category):
+    return client.post(
+        "/api/media",
+        files={"file": (name, io.BytesIO(data), "application/octet-stream")},
+        data={"category": category},
+    )
+
+
+def test_upload_rejects_overlay_without_png_header(tmp_path):
+    client = _client(tmp_path)
+
+    response = _upload(client, "spook.png", b"GIF89a-niet-echt-png", "mirror_overlay")
+
+    assert response.status_code == 400
+    assert client.get("/api/media").json() == []
+
+
+def test_upload_rejects_audio_without_wav_header(tmp_path):
+    client = _client(tmp_path)
+
+    response = _upload(client, "gil.wav", b"ID3-dit-is-een-mp3", "scare_audio")
+
+    assert response.status_code == 400
+    assert client.get("/api/media").json() == []
+
+
+def test_upload_accepts_valid_png_and_wav(tmp_path):
+    client = _client(tmp_path)
+
+    assert _upload(client, "spook.png", PNG, "mirror_overlay").status_code == 200
+    assert _upload(client, "gil.wav", WAV, "scare_audio").status_code == 200
+    assert len(client.get("/api/media").json()) == 2

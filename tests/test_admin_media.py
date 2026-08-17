@@ -1,6 +1,35 @@
 from admin.app.db import init_db
-from admin.app.media import save_media, get_media_path, list_media, delete_media
+from admin.app.media import (
+    MAX_UPLOAD_SIZE,
+    save_media,
+    get_media_path,
+    list_media,
+    delete_media,
+    validate_upload,
+)
 from shared.media_sync import content_hash
+
+
+def test_validate_upload_rejects_oversized_data():
+    data = b"\x89PNG" + b"x" * MAX_UPLOAD_SIZE
+
+    assert validate_upload(data, "mirror_overlay") is not None
+
+
+def test_validate_upload_accepts_valid_headers():
+    assert validate_upload(b"\x89PNG\r\n\x1a\nrest", "mirror_overlay") is None
+    assert validate_upload(b"RIFF\x24\x00\x00\x00WAVEfmt ", "scare_audio") is None
+
+
+def test_validate_upload_rejects_wrong_headers():
+    assert validate_upload(b"GIF89a", "mirror_overlay") is not None
+    assert validate_upload(b"ID3iets", "scare_audio") is not None
+    # RIFF zonder WAVE (bijv. een AVI) hoort ook geweigerd te worden
+    assert validate_upload(b"RIFF\x24\x00\x00\x00AVI ", "scare_audio") is not None
+
+
+def test_validate_upload_ignores_unknown_category():
+    assert validate_upload(b"wat-dan-ook", "iets_anders") is None
 
 
 def test_save_media_stores_file_and_returns_hash(tmp_path):
