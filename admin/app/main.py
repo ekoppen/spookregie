@@ -3,6 +3,7 @@ import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from shared.logging_setup import setup_logging
 from shared.media_sync import is_content_hash
@@ -83,6 +84,10 @@ def create_app(settings=None):
     app.include_router(schedule_router.router)
     app.include_router(ha_router.router)
     app.include_router(ws_router.router)
+
+    frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    if os.path.isdir(frontend_dist):
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
     @app.on_event("startup")
     def _startup():

@@ -124,6 +124,7 @@ automation dus niet meer.
 
 ```bash
 sudo python3 -m pip install -r admin/requirements.txt
+cd admin/frontend && npm install && npm run build && cd ../..
 sudo cp admin/admin-backend.service /etc/systemd/system/
 sudoedit /etc/systemd/system/admin-backend.service   # ADMIN_PASSWORD zetten!
 sudo systemctl daemon-reload && sudo systemctl enable --now admin-backend
@@ -132,6 +133,11 @@ sudo systemctl daemon-reload && sudo systemctl enable --now admin-backend
 `ADMIN_PASSWORD` is verplicht: zonder die variabele stopt de service direct
 met een `RuntimeError`. Zet `BACKEND_URL` in de node-units op
 `http://<backend-host>:8000` zodat de nodes hun media kunnen ophalen.
+
+De `npm run build`-stap zet `admin/frontend/dist/` neer; de backend serveert
+die map zelf mee (geen aparte webserver nodig), dus na het starten van de
+service is de beheerpagina bereikbaar op `http://<backend-host>:<ADMIN_PORT>/`
+(standaard poort 8000).
 
 ## MQTT-topics
 
