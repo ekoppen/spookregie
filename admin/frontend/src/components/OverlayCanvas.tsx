@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pixelToFraction, clampFraction } from "../lib/overlayMath";
 import "./OverlayCanvas.css";
 
@@ -22,13 +22,30 @@ export default function OverlayCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
-  function handleMouseMove(e: React.MouseEvent) {
-    if (!dragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clampFraction(pixelToFraction(e.clientX - rect.left, rect.width));
-    const y = clampFraction(pixelToFraction(e.clientY - rect.top, rect.height));
-    onPositionChange([x, y]);
-  }
+  // Track drag on window, not just the container: a fast drag easily carries
+  // the cursor past the viewfinder's edges (exactly where users drag toward),
+  // and container-scoped onMouseMove/onMouseLeave would silently end the drag.
+  useEffect(() => {
+    if (!dragging) return;
+
+    function handleWindowMouseMove(e: MouseEvent) {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clampFraction(pixelToFraction(e.clientX - rect.left, rect.width));
+      const y = clampFraction(pixelToFraction(e.clientY - rect.top, rect.height));
+      onPositionChange([x, y]);
+    }
+    function handleWindowMouseUp() {
+      setDragging(false);
+    }
+
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [dragging, onPositionChange]);
 
   return (
     <div className="overlay-canvas">
@@ -36,9 +53,6 @@ export default function OverlayCanvas({
         ref={containerRef}
         className="overlay-canvas__viewfinder"
         data-dragging={dragging}
-        onMouseMove={handleMouseMove}
-        onMouseUp={() => setDragging(false)}
-        onMouseLeave={() => setDragging(false)}
       >
         <span className="overlay-canvas__bracket overlay-canvas__bracket--tl" aria-hidden="true" />
         <span className="overlay-canvas__bracket overlay-canvas__bracket--tr" aria-hidden="true" />
@@ -60,6 +74,7 @@ export default function OverlayCanvas({
               className="overlay-canvas__overlay"
               src={overlayUrl}
               alt="Overlay"
+              draggable={false}
               onMouseDown={() => setDragging(true)}
               style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
             />
