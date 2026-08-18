@@ -1,0 +1,221 @@
+.overlay-canvas {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.overlay-canvas__viewfinder {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.5);
+  line-height: 0;
+}
+
+.overlay-canvas__stream {
+  width: 100%;
+  display: block;
+}
+
+/* Camera-viewfinder corner brackets: the signature "in-focus" affordance. */
+.overlay-canvas__bracket {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--ember-dim);
+  opacity: 0.75;
+  transition: border-color 0.2s ease, opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.overlay-canvas__bracket--tl {
+  top: 10px;
+  left: 10px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 4px;
+}
+
+.overlay-canvas__bracket--tr {
+  top: 10px;
+  right: 10px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 4px;
+}
+
+.overlay-canvas__bracket--bl {
+  bottom: 10px;
+  left: 10px;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 4px;
+}
+
+.overlay-canvas__bracket--br {
+  bottom: 10px;
+  right: 10px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 4px;
+}
+
+.overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__bracket {
+  border-color: var(--signal);
+  opacity: 1;
+}
+
+/* Faint scanline sweep to sell "live feed" without a real video element. */
+.overlay-canvas__scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(255, 184, 77, 0.05),
+    transparent
+  );
+  animation: overlay-canvas-scan 6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes overlay-canvas-scan {
+  0% {
+    top: -40%;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+.overlay-canvas__reticle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.overlay-canvas__overlay {
+  display: block;
+  cursor: grab;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.6));
+}
+
+.overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__overlay {
+  cursor: grabbing;
+}
+
+.overlay-canvas__crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.overlay-canvas__crosshair-ring {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--ember);
+  border-radius: 50%;
+  box-shadow: 0 0 8px 1px rgba(255, 106, 31, 0.6);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.overlay-canvas__crosshair-line {
+  position: absolute;
+  background: var(--ember);
+  transition: background-color 0.15s ease;
+}
+
+.overlay-canvas__crosshair-line--h {
+  top: 50%;
+  left: -6px;
+  right: -6px;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.overlay-canvas__crosshair-line--v {
+  left: 50%;
+  top: -6px;
+  bottom: -6px;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__crosshair-ring {
+  border-color: var(--signal);
+  box-shadow: 0 0 14px 3px rgba(255, 184, 77, 0.85);
+  transform: scale(1.15);
+}
+
+.overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__crosshair-line {
+  background: var(--signal);
+}
+
+/* Vertical zoom lever, echoing the estop/rocker analog-control language. */
+.overlay-canvas__lever {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+}
+
+.overlay-canvas__lever-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.overlay-canvas__lever-input {
+  width: 120px;
+  height: 22px;
+  transform: rotate(-90deg);
+  accent-color: var(--ember);
+  background: transparent;
+  cursor: pointer;
+}
+
+.overlay-canvas__lever-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--signal);
+}
+
+@media (max-width: 640px) {
+  .overlay-canvas {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .overlay-canvas__lever {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .overlay-canvas__lever-input {
+    transform: none;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-canvas__scanline {
+    animation: none;
+  }
+}
