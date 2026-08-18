@@ -1,0 +1,228 @@
+.scare-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  max-width: 960px;
+  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 60% 35% at 50% 0%, rgba(255, 106, 31, 0.06), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--bone);
+}
+
+.scare-header {
+  margin-bottom: 1.75rem;
+}
+
+.scare-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.scare-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+  animation: scare-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes scare-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.scare-heading {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.scare-error {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid var(--alarm);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+.scare-panel {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.scare-panel__eyebrow {
+  margin: 0 0 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+/* Zone selector: breaker-panel channel chips, not a plain dropdown --
+   this page is literally about switching audio channels per zone. */
+.scare-zone-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.scare-zone-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--ash);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.scare-zone-chip:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.scare-zone-chip__led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scare-zone-chip[aria-pressed="true"] {
+  background: linear-gradient(135deg, rgba(255, 106, 31, 0.09), var(--void) 60%);
+  border-color: var(--ember);
+  color: var(--bone);
+}
+
+.scare-zone-chip[aria-pressed="true"] .scare-zone-chip__led {
+  background: var(--ember);
+  box-shadow: 0 0 6px 1px rgba(255, 106, 31, 0.7);
+}
+
+.scare-zone-chip:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.scare-zone-custom {
+  padding: 0.55rem 0.7rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  min-width: 9rem;
+}
+
+.scare-zone-custom::placeholder {
+  color: var(--ash);
+}
+
+.scare-zone-custom:focus {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-color: var(--ember-dim);
+}
+
+.scare-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.scare-save,
+.scare-test {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.scare-save {
+  background: var(--ember);
+  border: none;
+  color: var(--void);
+}
+
+.scare-save:hover:not(:disabled) {
+  background: var(--ember-dim);
+}
+
+.scare-test {
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  color: var(--bone);
+}
+
+.scare-test:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.scare-save:focus-visible,
+.scare-test:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+.scare-save:disabled,
+.scare-test:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scare-eyebrow__led {
+    animation: none;
+  }
+}
