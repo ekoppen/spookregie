@@ -1,0 +1,226 @@
+.logs-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse 60% 35% at 50% 0%, rgba(255, 106, 31, 0.06), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--bone);
+}
+
+.logs-header {
+  margin-bottom: 1.25rem;
+}
+
+.logs-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.logs-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+  animation: logs-pulse 1.6s ease-in-out infinite;
+}
+
+.logs-eyebrow__led[data-connected="false"] {
+  background: var(--alarm);
+  box-shadow: 0 0 6px 1px rgba(255, 92, 92, 0.7);
+}
+
+@keyframes logs-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.logs-heading {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.logs-error {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid var(--alarm);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+/* Console: this is a diagnostic tool an admin stares at -- legibility over
+   decoration. Monospace, aligned columns, high-contrast level coloring,
+   no ambient motion inside the log stream itself. */
+.logs-console {
+  flex: 1;
+  min-height: 60vh;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.logs-empty {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  color: var(--ash);
+  font-size: 0.9rem;
+}
+
+.logs-row {
+  display: grid;
+  grid-template-columns: 5.5rem 8rem 4.5rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.3rem 1.25rem;
+  border-left: 3px solid transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.logs-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.logs-row__ts {
+  color: var(--ash);
+}
+
+.logs-row__node {
+  color: var(--signal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logs-row__level {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.logs-row__msg {
+  color: var(--bone);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.logs-row--info {
+  border-left-color: var(--panel-edge);
+}
+
+.logs-row--info .logs-row__level {
+  color: var(--ash);
+}
+
+.logs-row--warning {
+  border-left-color: var(--signal);
+  background: rgba(255, 184, 77, 0.04);
+}
+
+.logs-row--warning .logs-row__level {
+  color: var(--signal);
+}
+
+.logs-row--error {
+  border-left-color: var(--alarm);
+  background: rgba(255, 92, 92, 0.06);
+}
+
+.logs-row--error .logs-row__level,
+.logs-row--error .logs-row__msg {
+  color: var(--alarm);
+}
+
+.logs-resume {
+  align-self: center;
+  margin-top: 1rem;
+  padding: 0.55rem 1.1rem;
+  background: var(--ember);
+  border: none;
+  border-radius: 999px;
+  color: var(--void);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(255, 106, 31, 0.35);
+}
+
+.logs-resume:hover {
+  background: var(--ember-dim);
+}
+
+.logs-resume:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .logs-row {
+    grid-template-columns: 4.2rem 1fr;
+    grid-template-areas:
+      "ts level"
+      "node node"
+      "msg msg";
+  }
+  .logs-row__ts {
+    grid-area: ts;
+  }
+  .logs-row__level {
+    grid-area: level;
+    justify-self: end;
+  }
+  .logs-row__node {
+    grid-area: node;
+  }
+  .logs-row__msg {
+    grid-area: msg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logs-eyebrow__led {
+    animation: none;
+  }
+}

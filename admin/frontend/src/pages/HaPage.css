@@ -1,0 +1,222 @@
+.ha-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  max-width: 960px;
+  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 60% 35% at 50% 0%, rgba(255, 106, 31, 0.06), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--bone);
+}
+
+.ha-header {
+  margin-bottom: 1.75rem;
+}
+
+.ha-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.ha-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+  animation: ha-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ha-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.ha-heading {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.ha-error {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid var(--alarm);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+.ha-panel {
+  padding: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.ha-panel__eyebrow {
+  margin: 0 0 1.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.ha-empty {
+  margin: 0;
+  padding: 0.75rem 0;
+  color: var(--ash);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Breaker row: each light entity reads as a physical circuit breaker,
+   not a generic list item -- this page IS the breaker panel. */
+.ha-breaker-row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.ha-breaker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  width: 8.5rem;
+}
+
+.ha-breaker__switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 46px;
+  height: 76px;
+  padding: 8px 0;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.ha-breaker__switch:hover:not(:disabled) {
+  border-color: var(--signal);
+}
+
+.ha-breaker__switch:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.ha-breaker__switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ha-breaker__led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ha-breaker__led[data-on="true"] {
+  background: var(--ember);
+  box-shadow: 0 0 6px 1px rgba(255, 106, 31, 0.7);
+}
+
+.ha-breaker__toggle {
+  position: relative;
+  width: 22px;
+  height: 36px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #2a2733, #1c1a22);
+  border: 1px solid var(--panel-edge);
+  transition: border-color 0.18s ease;
+}
+
+.ha-breaker__toggle[data-on="true"] {
+  border-color: var(--ember-dim);
+}
+
+.ha-breaker__toggle::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: calc(100% - 16px);
+  height: 14px;
+  border-radius: 3px;
+  background: var(--ash);
+  transition: top 0.18s ease, background-color 0.18s ease;
+}
+
+.ha-breaker__toggle[data-on="true"]::after {
+  top: 2px;
+  background: var(--ember);
+}
+
+.ha-breaker__label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--bone);
+  text-align: center;
+  word-break: break-all;
+}
+
+.ha-breaker__state {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ha-eyebrow__led {
+    animation: none;
+  }
+  .ha-breaker__toggle,
+  .ha-breaker__toggle::after {
+    transition: none;
+  }
+}
