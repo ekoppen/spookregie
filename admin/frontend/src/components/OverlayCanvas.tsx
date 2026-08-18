@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { pixelToFraction, clampFraction } from "../lib/overlayMath";
 import "./OverlayCanvas.css";
 
@@ -20,32 +20,60 @@ export default function OverlayCanvas({
   onScaleChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const streamImgRef = useRef<HTMLImageElement>(null);
   const [dragging, setDragging] = useState(false);
+  // WYSIWYG-correctie: de node schaalt de overlay t.o.v. de camera-frame-
+  // pixels, maar hier wordt de stream op CSS-breedte getoond (die zelden
+  // gelijk is aan de camera's eigen resolutie). Zonder deze factor klopt de
+  // op-schermschaal alleen toevallig met wat de node daadwerkelijk componeert.
+  const [displayScaleFactor, setDisplayScaleFactor] = useState(1);
+  // Offset (in fractie-ruimte) tussen het gegrepen punt en het middelpunt van
+  // de overlay op pointerdown -- zonder dit "springt" de overlay naar de
+  // cursor zodra je 'm niet precies in het midden grijpt.
+  const grabOffsetRef = useRef<[number, number]>([0, 0]);
 
-  // Track drag on window, not just the container: a fast drag easily carries
-  // the cursor past the viewfinder's edges (exactly where users drag toward),
-  // and container-scoped onMouseMove/onMouseLeave would silently end the drag.
+  function updateDisplayScaleFactor() {
+    const img = streamImgRef.current;
+    if (!img || !img.naturalWidth) return;
+    setDisplayScaleFactor(img.clientWidth / img.naturalWidth);
+  }
+
   useEffect(() => {
-    if (!dragging) return;
+    updateDisplayScaleFactor();
+    window.addEventListener("resize", updateDisplayScaleFactor);
+    return () => window.removeEventListener("resize", updateDisplayScaleFactor);
+  }, []);
 
-    function handleWindowMouseMove(e: MouseEvent) {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clampFraction(pixelToFraction(e.clientX - rect.left, rect.width));
-      const y = clampFraction(pixelToFraction(e.clientY - rect.top, rect.height));
-      onPositionChange([x, y]);
-    }
-    function handleWindowMouseUp() {
-      setDragging(false);
-    }
+  // Pointer Events i.p.v. mouse events: één code path voor muis, touch én
+  // pen (dit is realistisch een telefoon naast de fysieke spiegel), en
+  // setPointerCapture routeert move/up naar dit element ongeacht waar de
+  // cursor heen gaat -- lost het "cursor verlaat de viewfinder" probleem
+  // zonder window-listeners op.
+  function handlePointerDown(e: ReactPointerEvent<HTMLImageElement>) {
+    if (!containerRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = containerRef.current.getBoundingClientRect();
+    const pointerX = clampFraction(pixelToFraction(e.clientX - rect.left, rect.width));
+    const pointerY = clampFraction(pixelToFraction(e.clientY - rect.top, rect.height));
+    grabOffsetRef.current = [position[0] - pointerX, position[1] - pointerY];
+    setDragging(true);
+  }
 
-    window.addEventListener("mousemove", handleWindowMouseMove);
-    window.addEventListener("mouseup", handleWindowMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleWindowMouseMove);
-      window.removeEventListener("mouseup", handleWindowMouseUp);
-    };
-  }, [dragging, onPositionChange]);
+  function handlePointerMove(e: ReactPointerEvent<HTMLImageElement>) {
+    if (!dragging || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const pointerX = clampFraction(pixelToFraction(e.clientX - rect.left, rect.width));
+    const pointerY = clampFraction(pixelToFraction(e.clientY - rect.top, rect.height));
+    const [offsetX, offsetY] = grabOffsetRef.current;
+    onPositionChange([clampFraction(pointerX + offsetX), clampFraction(pointerY + offsetY)]);
+  }
+
+  function handlePointerUp(e: ReactPointerEvent<HTMLImageElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setDragging(false);
+  }
 
   return (
     <div className="overlay-canvas">
@@ -60,7 +88,13 @@ export default function OverlayCanvas({
         <span className="overlay-canvas__bracket overlay-canvas__bracket--br" aria-hidden="true" />
         <span className="overlay-canvas__scanline" aria-hidden="true" />
 
-        <img className="overlay-canvas__stream" src={streamUrl} alt="Live spiegel-feed" />
+        <img
+          ref={streamImgRef}
+          className="overlay-canvas__stream"
+          src={streamUrl}
+          alt="Live spiegel-feed"
+          onLoad={updateDisplayScaleFactor}
+        />
 
         {overlayUrl && (
           <div
@@ -73,10 +107,13 @@ export default function OverlayCanvas({
             <img
               className="overlay-canvas__overlay"
               src={overlayUrl}
-              alt="Overlay"
+              alt="Sleepgreep voor overlay-positie (indicatief, geen eindresultaat -- de node componeert de echte overlay)"
               draggable={false}
-              onMouseDown={() => setDragging(true)}
-              style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              style={{ transform: `translate(-50%, -50%) scale(${scale * displayScaleFactor})` }}
             />
             <span className="overlay-canvas__crosshair" aria-hidden="true">
               <span className="overlay-canvas__crosshair-ring" />

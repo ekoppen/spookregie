@@ -118,3 +118,16 @@ def test_ha_service_proxies_to_ha_client(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert calls == [("light", "turn_on", {"entity_id": "light.wled_voortuin"})]
+
+
+def test_ha_service_returns_502_when_call_service_fails(tmp_path, monkeypatch):
+    client, app, _ = _client(tmp_path)
+
+    def failing_call_service(ha_url, ha_token, domain, service, data, fetch=None):
+        raise OSError("HA onbereikbaar")
+
+    monkeypatch.setattr("admin.app.routers.ha.call_service", failing_call_service)
+
+    response = client.post("/api/ha/service", json={"domain": "light", "service": "turn_on", "data": {}})
+
+    assert response.status_code == 502

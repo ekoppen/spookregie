@@ -269,7 +269,11 @@ def main():
                 active_until = now + ACTIVE_SECONDS
                 logger.info("mirror test-trigger")
 
-            if now < active_until:
+            # Ook renderen buiten de PIR-actieve window als er recent een
+            # preview-config is gezet (beheerder is live aan het tweaken op
+            # de mirror-pagina) — anders toont de live preview alleen een
+            # zwart beeld zolang niemand voor de camera staat.
+            if now < active_until or active_config.preview_recently_set():
                 try:
                     rendered = _render(frame, logger)
                 except Exception as exc:

@@ -36,3 +36,12 @@ class ActiveMirrorConfig:
                 return self._preview
             self._preview = None
         return self._persistent
+
+    def preview_recently_set(self):
+        """True als er binnen `preview_timeout` een preview-config is gezet
+        (ongeacht of `.get()` die net heeft laten vervallen). Los van de
+        PIR-actieve window, zodat de render-loop kan blijven renderen zolang
+        een beheerder actief aan het tweaken is op de mirror-pagina."""
+        if self._preview_set_at is None:
+            return False
+        return self._clock() - self._preview_set_at <= self._preview_timeout

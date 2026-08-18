@@ -82,6 +82,38 @@
   color: var(--alarm);
 }
 
+.logs-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.logs-filter__label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.logs-filter__select {
+  padding: 0.45rem 0.65rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color-scheme: dark;
+}
+
+.logs-filter__select:focus {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-color: var(--ember-dim);
+}
+
 /* Console: this is a diagnostic tool an admin stares at -- legibility over
    decoration. Monospace, aligned columns, high-contrast level coloring,
    no ambient motion inside the log stream itself. */

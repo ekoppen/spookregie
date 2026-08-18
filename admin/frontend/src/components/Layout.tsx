@@ -13,8 +13,13 @@ export default function Layout() {
   const navigate = useNavigate();
 
   async function handleLogout() {
-    await logout();
-    navigate("/login");
+    try {
+      await logout();
+    } finally {
+      // Gebruiker wil sowieso weg uit het beheerde gebied, ook als de
+      // logout-call zelf mislukte (bv. sessie al verlopen).
+      navigate("/login");
+    }
   }
 
   return (

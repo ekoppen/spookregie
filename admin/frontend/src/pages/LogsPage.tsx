@@ -5,17 +5,26 @@ import { parseLogPayload } from "../lib/wsMessage";
 import type { LogEntry, WsMessage } from "../types";
 import "./LogsPage.css";
 
+// ponytail: guard hier, root-fix voor beide aanroeppunten (class + label) --
+// een misvormde MQTT-log-publish kan level ontbreken/non-string laten zijn.
+function normalizedLevel(level: string): string {
+  return (level ?? "info").toString().toLowerCase();
+}
+
 function levelClass(level: string): string {
-  const normalized = level.toLowerCase();
+  const normalized = normalizedLevel(level);
   if (normalized === "error" || normalized === "critical") return "logs-row--error";
   if (normalized === "warning" || normalized === "warn") return "logs-row--warning";
   return "logs-row--info";
 }
 
+const ALL_NODES = "__alle__";
+
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [nodeFilter, setNodeFilter] = useState(ALL_NODES);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,10 +49,16 @@ export default function LogsPage() {
 
   const { connected } = useWebSocket(handleWsMessage);
 
+  // WS-tail blijft alle nodes' logs in state opslaan, ongeacht filter -- er
+  // wordt alleen bij het renderen gefilterd, dus wisselen van filter verliest
+  // geen historie.
+  const nodeNames = [...new Set(logs.map((l) => l.node))].sort();
+  const visibleLogs = nodeFilter === ALL_NODES ? logs : logs.filter((l) => l.node === nodeFilter);
+
   useEffect(() => {
     if (!autoScroll || !scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [logs, autoScroll]);
+  }, [visibleLogs, autoScroll]);
 
   function handleScroll() {
     const el = scrollRef.current;
@@ -78,17 +93,36 @@ export default function LogsPage() {
         </p>
       )}
 
+      <div className="logs-filter">
+        <label className="logs-filter__label" htmlFor="logs-node-filter">
+          Node
+        </label>
+        <select
+          id="logs-node-filter"
+          className="logs-filter__select"
+          value={nodeFilter}
+          onChange={(e) => setNodeFilter(e.target.value)}
+        >
+          <option value={ALL_NODES}>alle nodes</option>
+          {nodeNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="logs-console" ref={scrollRef} onScroll={handleScroll}>
-        {logs.length === 0 ? (
+        {visibleLogs.length === 0 ? (
           <p className="logs-empty">Nog geen logregels ontvangen.</p>
         ) : (
-          logs.map((log, i) => (
+          visibleLogs.map((log, i) => (
             <div className={`logs-row ${levelClass(log.level)}`} key={i}>
               <span className="logs-row__ts">
                 {new Date(log.ts * 1000).toLocaleTimeString("nl-NL", { hour12: false })}
               </span>
               <span className="logs-row__node">{log.node}</span>
-              <span className="logs-row__level">{log.level.toUpperCase()}</span>
+              <span className="logs-row__level">{normalizedLevel(log.level).toUpperCase()}</span>
               <span className="logs-row__msg">{log.msg}</span>
             </div>
           ))

@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from shared.logging_setup import setup_logging
@@ -87,7 +87,18 @@ def create_app(settings=None):
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if os.path.isdir(frontend_dist):
-        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+        assets_dir = os.path.join(frontend_dist, "assets")
+        if os.path.isdir(assets_dir):
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
+
+        # Catch-all i.p.v. StaticFiles(html=True): die laatste serveert
+        # index.html alleen op "/" en mapp-paden, waardoor client-side routes
+        # zoals /login of /mirror 404'en (breekt refresh, bookmarks en de
+        # 401-redirect naar /login). Moet ná alle include_router-calls staan
+        # zodat /api/... eerst matcht.
+        @app.get("/{full_path:path}")
+        def serve_spa(full_path: str):
+            return FileResponse(os.path.join(frontend_dist, "index.html"))
 
     @app.on_event("startup")
     def _startup():

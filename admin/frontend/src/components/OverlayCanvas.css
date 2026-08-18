@@ -100,10 +100,19 @@
   transform: translate(-50%, -50%);
 }
 
+/* Positioneer-greep, geen tweede volledige render: de node componeert de
+   echte overlay al server-side in de MJPEG-stream. Laag-opaciteit +
+   stippelrand maakt duidelijk dat dit een indicator is ("je positioneert
+   dit"), niet een concurrerende live-weergave die tijdens het slepen uit de
+   pas gaat lopen met wat de node toont. */
 .overlay-canvas__overlay {
   display: block;
   cursor: grab;
+  opacity: 0.35;
+  outline: 2px dashed var(--signal);
+  outline-offset: 2px;
   filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.6));
+  touch-action: none;
 }
 
 .overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__overlay {

@@ -73,6 +73,9 @@ export default function ScarePage() {
 
       <section className="scare-panel">
         <p className="scare-panel__eyebrow">Zone</p>
+        <p className="scare-active-zone">
+          Actieve zone: <strong>{zone}</strong>
+        </p>
         <div className="scare-zone-row">
           {KNOWN_ZONES.map((z) => (
             <button

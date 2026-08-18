@@ -124,6 +124,10 @@ automation dus niet meer.
 
 ```bash
 sudo python3 -m pip install -r admin/requirements.txt
+cp admin/frontend/.env.example admin/frontend/.env
+# admin/frontend/.env: VITE_MIRROR_STREAM_URL naar het echte mirror-node-
+# LAN-adres zetten vóór de build — Vite-env-variabelen worden bij het bouwen
+# vastgebakken, niet bij het draaien.
 cd admin/frontend && npm install && npm run build && cd ../..
 sudo cp admin/admin-backend.service /etc/systemd/system/
 sudoedit /etc/systemd/system/admin-backend.service   # ADMIN_PASSWORD zetten!

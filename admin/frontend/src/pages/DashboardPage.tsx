@@ -9,10 +9,19 @@ import "./DashboardPage.css";
 export default function DashboardPage() {
   const [nodes, setNodes] = useState<NodeStatusMap>({});
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [waking, setWaking] = useState(false);
 
   useEffect(() => {
-    getNodes().then(setNodes);
-    getSchedule().then(setSchedule);
+    getNodes()
+      .then(setNodes)
+      .catch(() => setError("Nodes konden niet worden geladen."));
+    getSchedule()
+      .then(setSchedule)
+      .catch(() => setError("Tijdvenster kon niet worden geladen."));
   }, []);
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
@@ -25,9 +34,50 @@ export default function DashboardPage() {
 
   const { connected } = useWebSocket(handleWsMessage);
 
+  // Korte, tijdelijke succesmelding (vooral voor noodstop/wakker maken: de
+  // meest kritieke knoppen in de app mogen nooit stil blijven bij succes).
+  function showNotice(message: string) {
+    setNotice(message);
+    window.setTimeout(() => setNotice(null), 3000);
+  }
+
   async function handleScheduleSave() {
     if (!schedule) return;
-    await putSchedule(schedule);
+    setSavingSchedule(true);
+    try {
+      await putSchedule(schedule);
+      setError(null);
+    } catch {
+      setError("Opslaan van tijdvenster is mislukt. Probeer het opnieuw.");
+    } finally {
+      setSavingSchedule(false);
+    }
+  }
+
+  async function handleEmergencyStop() {
+    setStopping(true);
+    try {
+      await emergencyStop();
+      setError(null);
+      showNotice("Noodstop geactiveerd.");
+    } catch {
+      setError("Noodstop is mislukt. Probeer het opnieuw.");
+    } finally {
+      setStopping(false);
+    }
+  }
+
+  async function handleWake() {
+    setWaking(true);
+    try {
+      await wake();
+      setError(null);
+      showNotice("Systeem wakker gemaakt.");
+    } catch {
+      setError("Wakker maken is mislukt. Probeer het opnieuw.");
+    } finally {
+      setWaking(false);
+    }
   }
 
   const nodeEntries = Object.entries(nodes);
@@ -49,6 +99,17 @@ export default function DashboardPage() {
         </p>
       </header>
 
+      {error && (
+        <p className="dash-error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="dash-notice" role="status">
+          {notice}
+        </p>
+      )}
+
       <section className="dash-panel">
         <p className="dash-panel__eyebrow">Nodes op het paneel</p>
         {nodeEntries.length === 0 ? (
@@ -65,17 +126,28 @@ export default function DashboardPage() {
       <section className="dash-panel dash-panel--controls">
         <p className="dash-panel__eyebrow">Noodbediening</p>
         <div className="dash-controls">
-          <button className="estop-button" onClick={() => emergencyStop()} type="button">
+          <button
+            className="estop-button"
+            onClick={handleEmergencyStop}
+            disabled={stopping}
+            type="button"
+          >
             <span className="estop-button__ring">
               <span className="estop-button__label">
-                Nood
-                <br />
-                stop
+                {stopping ? (
+                  "Bezig…"
+                ) : (
+                  <>
+                    Nood
+                    <br />
+                    stop
+                  </>
+                )}
               </span>
             </span>
           </button>
-          <button className="wake-button" onClick={() => wake()} type="button">
-            Wakker maken
+          <button className="wake-button" onClick={handleWake} disabled={waking} type="button">
+            {waking ? "Bezig…" : "Wakker maken"}
           </button>
         </div>
       </section>
@@ -111,8 +183,13 @@ export default function DashboardPage() {
               <span className="schedule-toggle__rocker" aria-hidden="true" />
               <span className="schedule-toggle__label">Ingeschakeld</span>
             </label>
-            <button className="schedule-save" onClick={handleScheduleSave} type="button">
-              Opslaan
+            <button
+              className="schedule-save"
+              onClick={handleScheduleSave}
+              disabled={savingSchedule}
+              type="button"
+            >
+              {savingSchedule ? "Bezig…" : "Opslaan"}
             </button>
           </div>
         </section>

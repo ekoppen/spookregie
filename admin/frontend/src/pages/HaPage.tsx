@@ -26,11 +26,11 @@ export default function HaPage() {
       await callHaService("light", turningOn ? "turn_on" : "turn_off", {
         entity_id: light.entity_id,
       });
-      setStates((prev) =>
-        prev.map((s) =>
-          s.entity_id === light.entity_id ? { ...s, state: turningOn ? "on" : "off" } : s,
-        ),
-      );
+      // Geen optimistische update: haal de echte staat bij HA op i.p.v. aan te
+      // nemen dat de schakeling gelukt is (call_service kan ok teruggeven
+      // terwijl HA het niet heeft opgepakt).
+      const fresh = await getHaStates();
+      setStates(fresh);
       setError(null);
     } catch {
       setError(`Schakelen van ${light.entity_id} is mislukt.`);

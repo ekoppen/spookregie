@@ -95,6 +95,16 @@
   color: var(--ash);
 }
 
+.scare-active-zone {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ash);
+}
+
+.scare-active-zone strong {
+  color: var(--signal);
+}
+
 /* Zone selector: breaker-panel channel chips, not a plain dropdown --
    this page is literally about switching audio channels per zone. */
 .scare-zone-row {

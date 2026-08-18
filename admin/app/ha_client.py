@@ -29,7 +29,7 @@ def call_service(ha_url, ha_token, domain, service, data, fetch=None):
     fetch = fetch or _default_fetch
     headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
     body = json.dumps(data).encode()
-    try:
-        fetch(f"{ha_url}/api/services/{domain}/{service}", method="POST", headers=headers, body=body)
-    except Exception:
-        pass
+    # Geen brede try/except meer hier: een echte netwerk-/HTTP-fout moet naar
+    # de aanroeper (routers/ha.py) doorstromen zodat de operator een foutmelding
+    # ziet i.p.v. een stille "ok" terwijl HA onbereikbaar was.
+    fetch(f"{ha_url}/api/services/{domain}/{service}", method="POST", headers=headers, body=body)

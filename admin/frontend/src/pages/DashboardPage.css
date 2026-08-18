@@ -98,6 +98,26 @@
   font-size: 0.85rem;
 }
 
+.dash-error {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid var(--alarm);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+.dash-notice {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 184, 77, 0.08);
+  border: 1px solid var(--signal);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--signal);
+}
+
 .dash-panel {
   margin-bottom: 1.5rem;
   padding: 1.25rem;
@@ -169,6 +189,13 @@
 .estop-button:focus-visible {
   outline: 2px solid var(--bone);
   outline-offset: 4px;
+}
+
+.estop-button:disabled,
+.wake-button:disabled,
+.schedule-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .estop-button__ring {
