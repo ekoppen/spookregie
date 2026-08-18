@@ -1,0 +1,12 @@
+.git
+.superpowers
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+logs
+admin.db
+media_store
+admin/frontend/node_modules
+admin/frontend/dist
+docs

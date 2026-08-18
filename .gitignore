@@ -7,3 +7,5 @@ admin.db
 media_store/
 admin/frontend/node_modules/
 admin/frontend/dist/
+.env
+/data/

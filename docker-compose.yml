@@ -1,0 +1,26 @@
+services:
+  beheerpagina:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Bij wijziging: `docker compose build` (nieuwe waarde wordt pas
+        # meegenomen bij een echte rebuild, niet bij alleen `up`).
+        VITE_MIRROR_STREAM_URL: ${VITE_MIRROR_STREAM_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-8000}:8000"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD moet gezet zijn in .env}
+      MQTT_HOST: ${MQTT_HOST:-homeassistant.local}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASS: ${MQTT_PASS:-}
+      HA_URL: ${HA_URL:-http://homeassistant.local:8123}
+      HA_TOKEN: ${HA_TOKEN:-}
+      ADMIN_PORT: 8000
+      ADMIN_DB_PATH: /data/admin.db
+      ADMIN_MEDIA_DIR: /data/media_store
+      LOG_DIR: /data/logs
+    volumes:
+      - ./data:/data

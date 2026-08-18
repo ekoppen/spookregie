@@ -143,6 +143,29 @@ die map zelf mee (geen aparte webserver nodig), dus na het starten van de
 service is de beheerpagina bereikbaar op `http://<backend-host>:<ADMIN_PORT>/`
 (standaard poort 8000).
 
+### Beheerpagina via Docker
+
+Alternatief voor de systemd-installatie hierboven — alleen de beheerpagina
+(backend + gebouwde frontend in één image); mirror-node en scare-node draaien
+op hun eigen Pi's en horen niet in deze stack.
+
+```bash
+cp .env.example .env
+sudoedit .env   # ADMIN_PASSWORD, MQTT_HOST en (indien van toepassing) HA_* zetten
+docker compose up -d --build
+```
+
+De beheerpagina is dan bereikbaar op `http://<server>:${ADMIN_PORT:-8000}/`.
+Database, mediabestanden en logs staan in `./data` (bind mount, overleeft een
+`docker compose down`). Verbindt met je bestaande MQTT-broker (bijv. Home
+Assistant's Mosquitto) via `MQTT_HOST`/`MQTT_PORT` in `.env` — er zit geen
+broker in deze stack.
+
+`VITE_MIRROR_STREAM_URL` (het LAN-adres van de mirror-node's live-preview-
+stream) wordt bij het **bouwen** van het image in de frontend vastgebakken.
+Wijzig je die waarde in `.env`, dan volstaat `docker compose up -d` niet —
+draai `docker compose build` (of `up -d --build`) opnieuw.
+
 ## MQTT-topics
 
 Alle namen komen uit `shared/mqtt_contract.py`:
