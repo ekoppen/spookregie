@@ -124,10 +124,6 @@ automation dus niet meer.
 
 ```bash
 sudo python3 -m pip install -r admin/requirements.txt
-cp admin/frontend/.env.example admin/frontend/.env
-# admin/frontend/.env: VITE_MIRROR_STREAM_URL naar het echte mirror-node-
-# LAN-adres zetten vóór de build — Vite-env-variabelen worden bij het bouwen
-# vastgebakken, niet bij het draaien.
 cd admin/frontend && npm install && npm run build && cd ../..
 sudo cp admin/admin-backend.service /etc/systemd/system/
 sudoedit /etc/systemd/system/admin-backend.service   # ADMIN_PASSWORD zetten!
@@ -161,10 +157,9 @@ Database, mediabestanden en logs staan in `./data` (bind mount, overleeft een
 Assistant's Mosquitto) via `MQTT_HOST`/`MQTT_PORT` in `.env` — er zit geen
 broker in deze stack.
 
-`VITE_MIRROR_STREAM_URL` (het LAN-adres van de mirror-node's live-preview-
-stream) wordt bij het **bouwen** van het image in de frontend vastgebakken.
-Wijzig je die waarde in `.env`, dan volstaat `docker compose up -d` niet —
-draai `docker compose build` (of `up -d --build`) opnieuw.
+De mirror-stream-URL, MQTT- en HA-verbinding stel je in via de
+Instellingen-pagina in de beheerpagina zelf, nadat de container draait —
+geen rebuild nodig.
 
 ## MQTT-topics
 

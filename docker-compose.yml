@@ -3,10 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        # Bij wijziging: `docker compose build` (nieuwe waarde wordt pas
-        # meegenomen bij een echte rebuild, niet bij alleen `up`).
-        VITE_MIRROR_STREAM_URL: ${VITE_MIRROR_STREAM_URL:-}
     restart: unless-stopped
     ports:
       - "${ADMIN_PORT:-8000}:8000"

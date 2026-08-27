@@ -7,13 +7,6 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /build
 
-# VITE_MIRROR_STREAM_URL wordt door Vite bij het bouwen in de JS-bundle
-# gebakken (niet pas bij het opstarten gelezen) — vandaar een build-ARG
-# in plaats van een runtime env var. Wijzig je 'm, dan moet je opnieuw
-# bouwen: `docker compose build`.
-ARG VITE_MIRROR_STREAM_URL=""
-ENV VITE_MIRROR_STREAM_URL=${VITE_MIRROR_STREAM_URL}
-
 COPY admin/frontend/package.json admin/frontend/package-lock.json ./
 RUN npm ci
 COPY admin/frontend/ ./
