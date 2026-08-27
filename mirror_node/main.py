@@ -9,16 +9,8 @@ import threading
 import cv2
 import paho.mqtt.client as mqtt
 
-from shared.mqtt_contract import (
-    SLEEP_PAYLOAD_ON,
-    TOPIC_MIRROR_TRIGGERED,
-    TOPIC_SYSTEM_SLEEP,
-    TOPIC_CONFIG_MIRROR,
-    TOPIC_CONTROL_MIRROR_PREVIEW,
-    TOPIC_CONTROL_MIRROR_TEST,
-    status_topic,
-    trigger_payload,
-)
+from shared.mqtt_contract import SLEEP_PAYLOAD_ON, Topics, trigger_payload
+from shared.topic_prefix import fetch_topic_prefix
 from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media
 from mirror_node.trigger import FrameDiffTrigger
@@ -34,6 +26,7 @@ MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 # Optioneel: brokers zonder authenticatie laten MQTT_USER leeg.
 MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
+MQTT_TOPIC_PREFIX_ENV = os.environ.get("MQTT_TOPIC_PREFIX", "")
 CAMERA_INDEX = int(os.environ.get("MIRROR_CAMERA_INDEX", "0"))
 ACTIVE_SECONDS = float(os.environ.get("MIRROR_ACTIVE_SECONDS", "6"))
 # Default schrijfbaar voor een gewone gebruiker die het script direct start;
@@ -88,25 +81,25 @@ def _apply_config_message(payload, is_preview, logger):
     _sync_overlay_in_background(config)
 
 
-def make_on_message(logger):
+def make_on_message(logger, topics):
     def on_message(client, userdata, msg):
         # Vangnet: een exception hier zou paho's netwerkthread killen — de node
         # blijft dan renderen maar reageert nergens meer op, ook niet op
         # system/sleep (de noodstop). Alles loggen en doorgaan dus.
         try:
-            if msg.topic == TOPIC_SYSTEM_SLEEP:
+            if msg.topic == topics.system_sleep:
                 if msg.payload.decode() == SLEEP_PAYLOAD_ON:
                     sleeping.set()
                 else:
                     sleeping.clear()
                 return
-            if msg.topic == TOPIC_CONFIG_MIRROR:
+            if msg.topic == topics.config_mirror:
                 _apply_config_message(msg.payload.decode(), is_preview=False, logger=logger)
                 return
-            if msg.topic == TOPIC_CONTROL_MIRROR_PREVIEW:
+            if msg.topic == topics.control_mirror_preview:
                 _apply_config_message(msg.payload.decode(), is_preview=True, logger=logger)
                 return
-            if msg.topic == TOPIC_CONTROL_MIRROR_TEST:
+            if msg.topic == topics.control_mirror_test:
                 test_trigger_requested.set()
         except Exception as exc:
             logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
@@ -188,13 +181,17 @@ def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
 
+    topic_prefix = fetch_topic_prefix(BACKEND_URL, fallback=MQTT_TOPIC_PREFIX_ENV)
+    topics = Topics(prefix=topic_prefix)
+
     client = mqtt.Client(client_id="mirror-node")
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
 
     # setup_logging vóór de callbacks: die loggen naar het lokale bestand,
     # wat ook werkt als de broker onbereikbaar is.
-    logger = setup_logging(NODE_NAME, LOG_DIR, mqtt_client=client)
+    logger = setup_logging(NODE_NAME, LOG_DIR, mqtt_client=client, mqtt_log_topic=topics.log(NODE_NAME))
+    logger.info("MQTT-topic-prefix: %r", topic_prefix)
 
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
@@ -202,21 +199,21 @@ def main():
         else:
             logger.error("MQTT verbinden mislukt (rc=%s)", rc)
             return
-        client.publish(status_topic(NODE_NAME), "online", retain=True)
-        client.subscribe(TOPIC_SYSTEM_SLEEP)
-        client.subscribe(TOPIC_CONFIG_MIRROR)
-        client.subscribe(TOPIC_CONTROL_MIRROR_PREVIEW)
-        client.subscribe(TOPIC_CONTROL_MIRROR_TEST)
+        client.publish(topics.status(NODE_NAME), "online", retain=True)
+        client.subscribe(topics.system_sleep)
+        client.subscribe(topics.config_mirror)
+        client.subscribe(topics.control_mirror_preview)
+        client.subscribe(topics.control_mirror_test)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.on_message = make_on_message(logger)
+    client.on_message = make_on_message(logger, topics)
     client.reconnect_delay_set(min_delay=1, max_delay=30)
     # Last-will: broker publiceert "offline" als deze node wegvalt.
-    client.will_set(status_topic(NODE_NAME), payload="offline", retain=True)
+    client.will_set(topics.status(NODE_NAME), payload="offline", retain=True)
     # connect_async + loop_start: node blijft draaien en probeert op de
     # achtergrond te (her)verbinden, i.p.v. te crashen als HA nu niet
     # bereikbaar is (fail-safe eis uit de spec).
@@ -258,7 +255,7 @@ def main():
 
             if trigger.detect(gray) and now > active_until:
                 active_until = now + ACTIVE_SECONDS
-                client.publish(TOPIC_MIRROR_TRIGGERED, trigger_payload())
+                client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
 
             # Handmatige test vanaf de beheerpagina: wel het effect tonen, maar

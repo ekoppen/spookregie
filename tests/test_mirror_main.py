@@ -81,16 +81,18 @@ def test_apply_config_message_ignores_non_dict_json():
 def test_on_message_survives_malformed_payload(monkeypatch):
     # Niet-UTF8 bytes: mag paho's netwerkthread niet killen.
     logger = _FakeLogger()
-    on_message = mirror_main.make_on_message(logger)
-    on_message(None, None, _FakeMsg(mirror_main.TOPIC_CONFIG_MIRROR, b"\xff\xfe"))
+    topics = mirror_main.Topics()
+    on_message = mirror_main.make_on_message(logger, topics)
+    on_message(None, None, _FakeMsg(topics.config_mirror, b"\xff\xfe"))
     assert logger.errors
 
 
 def test_on_message_sets_test_trigger_event():
     mirror_main.test_trigger_requested.clear()
-    on_message = mirror_main.make_on_message(_FakeLogger())
+    topics = mirror_main.Topics()
+    on_message = mirror_main.make_on_message(_FakeLogger(), topics)
 
-    on_message(None, None, _FakeMsg(mirror_main.TOPIC_CONTROL_MIRROR_TEST, b""))
+    on_message(None, None, _FakeMsg(topics.control_mirror_test, b""))
 
     assert mirror_main.test_trigger_requested.is_set()
     mirror_main.test_trigger_requested.clear()
