@@ -162,7 +162,8 @@ export default function SettingsPage() {
             <p className="settings-field__label" style={{ marginTop: "0.75rem" }}>
               Laat leeg voor geen namespace. Nodes halen deze waarde pas op bij
               hun eerstvolgende herstart — een lopende node picked een
-              wijziging hier niet live op.
+              wijziging hier niet live op. Home Assistant-automations/sensoren
+              volgen dit niet automatisch; pas die handmatig aan.
             </p>
           </section>
 

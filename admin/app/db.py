@@ -44,9 +44,20 @@ def init_db(path):
             mqtt_pass TEXT NOT NULL DEFAULT '',
             ha_url TEXT NOT NULL,
             ha_token TEXT NOT NULL DEFAULT '',
-            mirror_stream_url TEXT NOT NULL DEFAULT '',
-            mqtt_topic_prefix TEXT NOT NULL DEFAULT ''
+            mirror_stream_url TEXT NOT NULL DEFAULT ''
         )"""
     )
+    _ensure_column(conn, "app_settings", "mqtt_topic_prefix", "TEXT NOT NULL DEFAULT ''")
     conn.commit()
     return conn
+
+
+def _ensure_column(conn, table, column, ddl):
+    """Voegt een kolom toe aan een bestaande tabel als die er nog niet is.
+    CREATE TABLE IF NOT EXISTS is een no-op op een tabel die al bestaat --
+    een kolom toegevoegd door een latere feature (zoals mqtt_topic_prefix
+    hier) moet daarom via een aparte ALTER TABLE, anders crasht een
+    bestaande deploy bij het opstarten met "no such column"."""
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")

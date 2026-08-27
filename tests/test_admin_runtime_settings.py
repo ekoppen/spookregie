@@ -1,3 +1,5 @@
+import sqlite3
+
 from admin.app.db import init_db
 from admin.app.runtime_settings import read_runtime_settings, write_runtime_settings
 
@@ -76,3 +78,34 @@ def test_write_then_read_roundtrip_topic_prefix(tmp_path):
     settings = read_runtime_settings(conn)
 
     assert settings.mqtt_topic_prefix == "test"
+
+
+def test_init_db_adds_missing_column_to_existing_app_settings_table(tmp_path):
+    """Regressie: app_settings bestond al (uit een eerdere feature) zonder
+    mqtt_topic_prefix-kolom. init_db moet die kolom alsnog toevoegen aan een
+    bestaande tabel -- CREATE TABLE IF NOT EXISTS alleen is hier niet genoeg."""
+    db_path = str(tmp_path / "old-schema.db")
+    old_conn = sqlite3.connect(db_path)
+    old_conn.execute(
+        """CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    old_conn.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url) VALUES (1, 'oude-broker', 1883, 'http://ha.local:8123')"
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    conn = init_db(db_path)
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_host == "oude-broker"
+    assert settings.mqtt_topic_prefix == ""

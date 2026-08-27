@@ -59,7 +59,9 @@ Bij het opstarten halen beide nodes eenmalig de actuele MQTT-topic-prefix op
 bij de backend (`GET /api/node-config`, geen authenticatie nodig). Lukt dat
 niet, dan valt de node terug op zijn eigen `MQTT_TOPIC_PREFIX`. Een
 prefix-wijziging op de Instellingen-pagina vraagt dus een herstart van elke
-node om 'm op te pikken — er is bewust geen live push.
+node om 'm op te pikken — er is bewust geen live push. Home Assistant's eigen
+automations/sensoren (`home_assistant/README.md`) vallen hier *niet* onder en
+moeten bij een prefix-wijziging handmatig worden aangepast.
 
 Alleen mirror-node:
 
