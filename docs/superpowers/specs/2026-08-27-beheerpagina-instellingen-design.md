@@ -76,15 +76,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
 )
 ```
 
-`init_db` seedt deze tabel bij het aanmaken (rij ontbreekt nog) door
-rechtstreeks `os.environ.get("MQTT_HOST", ...)` etc. te lezen, met exact
-dezelfde variabelenamen/defaults als `config.get_settings()` nu al gebruikt
-voor deze velden — een eenmalige bootstrap-lezing, losstaand van de
-(hieronder verkleinde) `Settings`-dataclass, zodat een bestaande deploy bij
-het updaten niet leegloopt zonder eerst de nieuwe pagina te bezoeken. Daarna
-is de database leidend; deze env vars worden voor deze velden verder
-genegeerd (geen laag-op-laag-precedentie — dat zou "waarom verandert mijn
-UI-wijziging niks" opleveren als de env var toevallig ook nog gezet is).
+Zelfde lazy-default-patroon als `read_schedule`/`get_mirror_config`: geen
+eager insert bij het aanmaken van de tabel. Zolang er geen rij is, levert
+`read_runtime_settings` (zie hieronder) waarden op die het rechtstreeks uit
+`os.environ.get("MQTT_HOST", ...)` etc. berekent — exact dezelfde
+variabelenamen/defaults als `config.get_settings()` nu al gebruikt voor deze
+velden — zodat een bestaande deploy bij het updaten meteen met zijn huidige
+env-var-configuratie werkt, ook zonder ooit de Instellingen-pagina te
+bezoeken. Zodra iemand opslaat (ook al is het maar één veld) komt er een
+echte rij en is de database vanaf dan leidend; deze env vars worden voor
+deze velden verder genegeerd (geen laag-op-laag-precedentie — dat zou
+"waarom verandert mijn UI-wijziging niks" opleveren als de env var
+toevallig ook nog gezet is).
 
 ### `admin/app/config.py`
 
