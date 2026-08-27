@@ -1,7 +1,10 @@
 # Multi-stage build voor de beheerpagina (backend + gebouwde frontend in één image).
-# Mirror-node en scare-node draaien op hun eigen Pi's met camera/GPIO/audio-
-# toegang en horen hier bewust niet bij — dit image is alleen de centrale
-# beheerpagina.
+# Scare-node draait op zijn eigen Pi met GPIO/audio-toegang en hoort hier
+# bewust niet bij. mirror_node's code zit wél in dit image, maar alleen om
+# 'm headless (MIRROR_HEADLESS=1) als test-/ontwerp-hulpmiddel te kunnen
+# starten vanaf de Spiegel-pagina (zie admin/app/mirror_process.py) -- de
+# échte node-deployment (Pi + beamer + systemd) blijft hier volledig los
+# van staan.
 
 FROM node:20-alpine AS frontend-build
 
@@ -21,6 +24,7 @@ COPY admin/requirements.txt ./admin/requirements.txt
 RUN pip install --no-cache-dir -r admin/requirements.txt
 
 COPY shared/ ./shared/
+COPY mirror_node/ ./mirror_node/
 COPY admin/app/ ./admin/app/
 COPY admin/run.py ./admin/run.py
 COPY --from=frontend-build /build/dist ./admin/frontend/dist

@@ -2,3 +2,12 @@ fastapi
 uvicorn[standard]
 python-multipart
 paho-mqtt
+# Voor de "start mirror-node vanaf de Spiegel-pagina"-testfunctie (zie
+# docs/superpowers/specs/2026-08-27-mirror-node-inline-start-design.md).
+# Exact deze combinatie gepind: lan01 (huidige deploy-target) is een KVM-VM
+# zonder SSSE3, nieuwere numpy-wheels laden daar niet (RuntimeError: NumPy
+# was built with baseline optimizations ... X86_V2). Deze combinatie is al
+# handmatig geverifieerd te werken (import + echte array-encode/decode) op
+# lan01.
+opencv-python-headless==4.9.0.80
+numpy==1.24.4
