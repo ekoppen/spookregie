@@ -35,5 +35,17 @@ def init_db(path):
             enabled INTEGER NOT NULL DEFAULT 1
         )"""
     )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT ''
+        )"""
+    )
     conn.commit()
     return conn
