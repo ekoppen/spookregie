@@ -51,8 +51,15 @@ Beide nodes:
 | `MQTT_PORT` | `1883` | Broker-poort |
 | `MQTT_USER` | *(leeg)* | Optioneel; alleen ingesteld als niet leeg |
 | `MQTT_PASS` | *(leeg)* | Wachtwoord bij `MQTT_USER` |
+| `MQTT_TOPIC_PREFIX` | *(leeg)* | Terugval als de backend (`BACKEND_URL`) bij opstarten onbereikbaar is voor `GET /api/node-config` — normaal gesproken bepaalt de Instellingen-pagina dit centraal. |
 | `LOG_DIR` | `./logs` | Map voor lokale logbestanden; systemd zet dit op `/var/log/halloween` |
 | `BACKEND_URL` | `http://localhost:8000` | Beheerpagina-backend waar media-bestanden (`GET /api/media/<hash>`) vandaan komen |
+
+Bij het opstarten halen beide nodes eenmalig de actuele MQTT-topic-prefix op
+bij de backend (`GET /api/node-config`, geen authenticatie nodig). Lukt dat
+niet, dan valt de node terug op zijn eigen `MQTT_TOPIC_PREFIX`. Een
+prefix-wijziging op de Instellingen-pagina vraagt dus een herstart van elke
+node om 'm op te pikken — er is bewust geen live push.
 
 Alleen mirror-node:
 
