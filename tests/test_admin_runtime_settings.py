@@ -109,3 +109,52 @@ def test_init_db_adds_missing_column_to_existing_app_settings_table(tmp_path):
 
     assert settings.mqtt_host == "oude-broker"
     assert settings.mqtt_topic_prefix == ""
+
+
+def test_read_without_row_defaults_camera_source_to_empty(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    settings = read_runtime_settings(conn)
+
+    assert settings.mirror_camera_source == ""
+
+
+def test_write_then_read_roundtrip_camera_source(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    write_runtime_settings(conn, mirror_camera_source="rtsp://cam.local/stream1")
+    settings = read_runtime_settings(conn)
+
+    assert settings.mirror_camera_source == "rtsp://cam.local/stream1"
+
+
+def test_init_db_adds_camera_source_column_to_existing_table_without_it(tmp_path):
+    """Regressie, zelfde reden als bij mqtt_topic_prefix hierboven:
+    app_settings kan al bestaan (uit een eerdere feature) zonder deze
+    kolom -- init_db moet 'm alsnog toevoegen aan een bestaande tabel."""
+    db_path = str(tmp_path / "old-schema-2.db")
+    old_conn = sqlite3.connect(db_path)
+    old_conn.execute(
+        """CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT '',
+            mqtt_topic_prefix TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    old_conn.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url) VALUES (1, 'oude-broker', 1883, 'http://ha.local:8123')"
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    conn = init_db(db_path)
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_host == "oude-broker"
+    assert settings.mirror_camera_source == ""
