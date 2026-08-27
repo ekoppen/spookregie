@@ -163,6 +163,12 @@ def _open_camera(source):
         return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
 
 
+def _redact_source(source):
+    """Verbergt inloggegevens (user:pass@) uit een camera-URL voor logging."""
+    source = source or CAMERA_INDEX
+    return str(source).split("@")[-1] if "@" in str(source) else source
+
+
 def selfcheck():
     """Pakt één frame, draait het door het standaard xray-effect en
     laat/bewaart het resultaat. Heeft geen MQTT nodig."""
@@ -171,7 +177,7 @@ def selfcheck():
     ok, frame = cap.read()
     cap.release()
     if not ok:
-        print(f"selfcheck MISLUKT: geen frame van camera-bron {camera_source or CAMERA_INDEX}")
+        print(f"selfcheck MISLUKT: geen frame van camera-bron {_redact_source(camera_source)}")
         sys.exit(1)
 
     ghost = get_effect("xray")(frame, {})
@@ -241,7 +247,7 @@ def main():
 
     cap = _open_camera(camera_source)
     if not cap.isOpened():
-        logger.error("Kon camera-bron niet openen: %s", camera_source or CAMERA_INDEX)
+        logger.error("Kon camera-bron niet openen: %s", _redact_source(camera_source))
         return
 
     trigger = FrameDiffTrigger()

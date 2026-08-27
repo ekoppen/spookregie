@@ -126,6 +126,15 @@ def test_open_camera_uses_ffmpeg_url_for_network_source(monkeypatch):
     assert calls == [("rtsp://cam.local/stream1", mirror_main.cv2.CAP_FFMPEG)]
 
 
+def test_redact_source_strips_credentials():
+    assert mirror_main._redact_source("rtsp://user:pass@192.168.1.50:554/stream1") == "192.168.1.50:554/stream1"
+
+
+def test_redact_source_leaves_plain_source_untouched():
+    assert mirror_main._redact_source("rtsp://cam.local/stream1") == "rtsp://cam.local/stream1"
+    assert mirror_main._redact_source("") == mirror_main.CAMERA_INDEX
+
+
 def test_preview_config_also_syncs_overlay(monkeypatch):
     started = []
     monkeypatch.setattr(
