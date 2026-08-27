@@ -8,16 +8,8 @@ import time
 
 import paho.mqtt.client as mqtt
 
-from shared.mqtt_contract import (
-    SLEEP_PAYLOAD_ON,
-    TOPIC_MIRROR_TRIGGERED,
-    TOPIC_SYSTEM_SLEEP,
-    control_scare_test_topic,
-    config_scare_topic,
-    scare_topic,
-    status_topic,
-    trigger_payload,
-)
+from shared.mqtt_contract import SLEEP_PAYLOAD_ON, Topics, trigger_payload
+from shared.topic_prefix import fetch_topic_prefix
 from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media
 from scare_node.playback import pick_audio_file
@@ -31,6 +23,7 @@ MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 # Optioneel: brokers zonder authenticatie laten MQTT_USER leeg.
 MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
+MQTT_TOPIC_PREFIX_ENV = os.environ.get("MQTT_TOPIC_PREFIX", "")
 MEDIA_DIR = os.environ.get("SCARE_MEDIA_DIR", "/opt/halloween/media")
 PIR_PIN = int(os.environ.get("SCARE_PIR_PIN", "4"))
 COOLDOWN_SECONDS = float(os.environ.get("SCARE_COOLDOWN_SECONDS", "12"))
@@ -112,36 +105,36 @@ def play_scare(logger):
         logger.error("aplay faalde (returncode=%s) op %s", result.returncode, audio_file)
 
 
-def trigger_scare(client, logger):
+def trigger_scare(client, logger, topics):
     """Enige plek waar een scare start: cooldown-check, dan meteen het
     scare-topic publiceren (zodat HA/WLED niet op het geluid hoeft te
     wachten) en pas daarna afspelen."""
     if not cooldown.ready():
         return
-    client.publish(scare_topic(ZONE), trigger_payload())
+    client.publish(topics.scare(ZONE), trigger_payload())
     play_scare(logger)
 
 
-def make_on_message(logger):
+def make_on_message(logger, topics):
     def on_message(client, userdata, msg):
         # Vangnet: een exception hier zou paho's netwerkthread killen — de node
         # reageert dan nergens meer op, ook niet op system/sleep (de noodstop).
         try:
-            if msg.topic == TOPIC_SYSTEM_SLEEP:
+            if msg.topic == topics.system_sleep:
                 if msg.payload.decode() == SLEEP_PAYLOAD_ON:
                     sleeping.set()
                 else:
                     sleeping.clear()
                 return
-            if msg.topic == config_scare_topic(ZONE):
+            if msg.topic == topics.config_scare(ZONE):
                 _apply_scare_config(msg.payload.decode(), logger)
                 return
-            if msg.topic == control_scare_test_topic(ZONE):
-                trigger_scare(client, logger)
+            if msg.topic == topics.control_scare_test(ZONE):
+                trigger_scare(client, logger, topics)
                 return
-            if msg.topic == TOPIC_MIRROR_TRIGGERED and not sleeping.is_set():
+            if msg.topic == topics.mirror_triggered and not sleeping.is_set():
                 delay = random.uniform(0, 2)
-                threading.Timer(delay, trigger_scare, args=(client, logger)).start()
+                threading.Timer(delay, trigger_scare, args=(client, logger, topics)).start()
         except Exception as exc:
             logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
@@ -167,17 +160,20 @@ def selfcheck():
         print(f"selfcheck MISLUKT: aplay returncode={result.returncode}")
         sys.exit(1)
 
+    topic_prefix = fetch_topic_prefix(BACKEND_URL, fallback=MQTT_TOPIC_PREFIX_ENV)
+    topics = Topics(prefix=topic_prefix)
+
     client = mqtt.Client(client_id=f"scare-selfcheck-{ZONE}")
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
     try:
         client.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
         client.loop_start()
-        client.publish(scare_topic(ZONE), trigger_payload())
+        client.publish(topics.scare(ZONE), trigger_payload())
         time.sleep(0.5)
         client.loop_stop()
         client.disconnect()
-        print(f"MQTT OK: {scare_topic(ZONE)} gepubliceerd")
+        print(f"MQTT OK: {topics.scare(ZONE)} gepubliceerd")
     except OSError as exc:
         print(f"MQTT niet bereikbaar ({exc}) — audio werkte wel")
 
@@ -192,30 +188,34 @@ def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
 
+    topic_prefix = fetch_topic_prefix(BACKEND_URL, fallback=MQTT_TOPIC_PREFIX_ENV)
+    topics = Topics(prefix=topic_prefix)
+
     client = mqtt.Client(client_id=f"scare-node-{ZONE}")
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
     client.reconnect_delay_set(min_delay=1, max_delay=30)
 
-    logger = setup_logging(NODE_NAME, LOG_DIR, mqtt_client=client)
+    logger = setup_logging(NODE_NAME, LOG_DIR, mqtt_client=client, mqtt_log_topic=topics.log(NODE_NAME))
+    logger.info("MQTT-topic-prefix: %r", topic_prefix)
 
     def on_connect(client, userdata, flags, rc):
         if rc != 0:
             logger.error("MQTT verbinden mislukt (rc=%s)", rc)
             return
         logger.info("MQTT verbonden met %s:%s", MQTT_HOST, MQTT_PORT)
-        client.publish(status_topic(NODE_NAME), "online", retain=True)
-        client.subscribe(TOPIC_MIRROR_TRIGGERED)
-        client.subscribe(TOPIC_SYSTEM_SLEEP)
-        client.subscribe(config_scare_topic(ZONE))
-        client.subscribe(control_scare_test_topic(ZONE))
+        client.publish(topics.status(NODE_NAME), "online", retain=True)
+        client.subscribe(topics.mirror_triggered)
+        client.subscribe(topics.system_sleep)
+        client.subscribe(topics.config_scare(ZONE))
+        client.subscribe(topics.control_scare_test(ZONE))
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.on_message = make_on_message(logger)
+    client.on_message = make_on_message(logger, topics)
 
     # Mediamap bij opstarten valideren (spec-eis), niet pas midden in een
     # scare-moment. De uitkomst zelf wordt niet hergebruikt: elke scare kiest
@@ -227,7 +227,7 @@ def main():
         return
 
     # Last-will: broker publiceert "offline" als deze node wegvalt.
-    client.will_set(status_topic(NODE_NAME), payload="offline", retain=True)
+    client.will_set(topics.status(NODE_NAME), payload="offline", retain=True)
     # connect_async + loop_start: node blijft draaien en probeert op de
     # achtergrond te (her)verbinden, i.p.v. te crashen als HA nu niet
     # bereikbaar is (fail-safe eis uit de spec). on_message staat hierboven
@@ -243,7 +243,7 @@ def main():
     def on_motion():
         if sleeping.is_set():
             return
-        trigger_scare(client, logger)
+        trigger_scare(client, logger, topics)
 
     pir.when_motion = on_motion
 
