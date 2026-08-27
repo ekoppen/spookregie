@@ -23,6 +23,7 @@ from admin.app.routers import nodes as nodes_router
 from admin.app.routers import schedule as schedule_router
 from admin.app.routers import ha as ha_router
 from admin.app.routers import ws as ws_router
+from admin.app.routers import settings as settings_router
 from admin.app.routers.schedule import read_schedule
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json"}
@@ -86,6 +87,7 @@ def create_app(settings=None):
     app.include_router(schedule_router.router)
     app.include_router(ha_router.router)
     app.include_router(ws_router.router)
+    app.include_router(settings_router.router)
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if os.path.isdir(frontend_dist):
