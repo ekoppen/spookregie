@@ -16,7 +16,10 @@ COPY admin/frontend/ ./
 RUN npm run build
 
 
-FROM python:3.12-slim AS backend
+# 3.11, niet 3.12: numpy==1.24.4 (zie admin/requirements.txt) heeft geen
+# prebuilt wheel voor 3.12, dus pip valt terug op bouwen-vanaf-source, wat
+# hier faalt (geen setuptools.build_meta in dit image).
+FROM python:3.11-slim AS backend
 
 WORKDIR /app
 
