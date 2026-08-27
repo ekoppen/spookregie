@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getMirrorConfig, putMirrorConfig, previewMirrorConfig, testMirror } from "../api/mirror";
 import { getSettings } from "../api/settings";
+import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
+import { useWebSocket } from "../hooks/useWebSocket";
 import MediaLibrary from "../components/MediaLibrary";
 import OverlayCanvas from "../components/OverlayCanvas";
-import type { MirrorConfig } from "../types";
+import type { MirrorConfig, WsMessage } from "../types";
 import "./MirrorPage.css";
 
 const EFFECTS = ["xray", "thermal", "contour", "posterize"] as const;
@@ -33,6 +35,9 @@ export default function MirrorPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [streamUrl, setStreamUrl] = useState("");
+  const [running, setRunning] = useState(false);
+  const [processBusy, setProcessBusy] = useState(false);
+  const [logLines, setLogLines] = useState<string[]>([]);
 
   useEffect(() => {
     getMirrorConfig()
@@ -45,6 +50,11 @@ export default function MirrorPage() {
       .then((result) => setStreamUrl(result.mirror_stream_url))
       .catch(() => {
         /* live preview blijft dan gewoon "niet beschikbaar" tonen */
+      });
+    getMirrorProcessStatus()
+      .then((result) => setRunning(result.running))
+      .catch(() => {
+        /* status blijft "gestopt" tonen bij een netwerkfout */
       });
   }, []);
 
@@ -77,6 +87,12 @@ export default function MirrorPage() {
     };
   }, [config]);
 
+  useWebSocket((msg: WsMessage) => {
+    if (msg.type === "log" && msg.topic === "process/mirror-node") {
+      setLogLines((prev) => [...prev, msg.payload].slice(-200));
+    }
+  });
+
   function update(patch: Partial<MirrorConfig>) {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
   }
@@ -103,6 +119,32 @@ export default function MirrorPage() {
       setError("Testoproep is mislukt.");
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleStartProcess() {
+    setProcessBusy(true);
+    try {
+      const status = await startMirrorProcess();
+      setRunning(status.running);
+      setError(null);
+    } catch {
+      setError("Mirror-node starten is mislukt.");
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function handleStopProcess() {
+    setProcessBusy(true);
+    try {
+      const status = await stopMirrorProcess();
+      setRunning(status.running);
+      setError(null);
+    } catch {
+      setError("Mirror-node stoppen is mislukt.");
+    } finally {
+      setProcessBusy(false);
     }
   }
 
@@ -175,6 +217,38 @@ export default function MirrorPage() {
               selected={config.overlay_hash ? [config.overlay_hash] : []}
               onSelectionChange={(hashes) => update({ overlay_hash: hashes[0] ?? null })}
             />
+          </section>
+
+          <section className="mirror-panel">
+            <p className="mirror-panel__eyebrow">Mirror-node testen (zonder hardware)</p>
+            <div className="mirror-process-row">
+              <span
+                className={`mirror-process-status ${running ? "mirror-process-status--running" : ""}`}
+              >
+                {running ? "Draait" : "Gestopt"}
+              </span>
+              <button
+                className="mirror-apply"
+                type="button"
+                onClick={handleStartProcess}
+                disabled={processBusy || running}
+              >
+                {processBusy ? "Bezig…" : "Start"}
+              </button>
+              <button
+                className="mirror-test"
+                type="button"
+                onClick={handleStopProcess}
+                disabled={processBusy || !running}
+              >
+                {processBusy ? "Bezig…" : "Stop"}
+              </button>
+            </div>
+            <pre className="mirror-process-log">
+              {logLines.length
+                ? logLines.join("\n")
+                : "Nog geen logregels — start de mirror-node om ze hier te zien."}
+            </pre>
           </section>
 
           <section className="mirror-panel">

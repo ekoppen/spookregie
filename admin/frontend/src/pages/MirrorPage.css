@@ -199,6 +199,41 @@
   cursor: not-allowed;
 }
 
+.mirror-process-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.mirror-process-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.mirror-process-status--running {
+  color: var(--signal);
+}
+
+.mirror-process-log {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ash);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mirror-eyebrow__led {
     animation: none;
