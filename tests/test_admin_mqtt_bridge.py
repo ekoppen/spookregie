@@ -14,6 +14,8 @@ class FakeMqttClient:
         self.loop_started = False
         self.loop_stopped = False
         self.disconnected = False
+        self.subscribed = []
+        self.published = []
         FakeMqttClient.instances.append(self)
 
     def username_pw_set(self, username, password):
@@ -34,6 +36,12 @@ class FakeMqttClient:
 
     def disconnect(self):
         self.disconnected = True
+
+    def subscribe(self, topic):
+        self.subscribed.append(topic)
+
+    def publish(self, topic, payload=None, retain=False):
+        self.published.append((topic, payload, retain))
 
 
 def _settings(**overrides):
@@ -70,3 +78,47 @@ def test_reconfigure_disconnects_old_client_and_connects_new_one(monkeypatch):
     assert new_client.connected_to == ("broker-b", 1884)
     assert new_client.username == "op"
     assert new_client.password == "geheim"
+
+
+def test_start_subscribes_with_configured_prefix(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
+    bridge.start()
+    bridge._on_connect(bridge._client, None, None, 0)
+
+    assert bridge._client.subscribed == [
+        "test/status/+", "test/log/+", "test/mirror/triggered", "test/scare/+/triggered"
+    ]
+
+
+def test_publish_mirror_config_uses_configured_prefix(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
+
+    bridge.publish_mirror_config({"effect": "xray"})
+
+    assert bridge._client.published[-1][0] == "test/config/mirror"
+
+
+def test_on_message_strips_prefix_before_tracker_and_broadcast(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    class FakeTracker:
+        def __init__(self):
+            self.calls = []
+
+        def handle_message(self, topic, payload):
+            self.calls.append((topic, payload))
+
+    tracker = FakeTracker()
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=tracker)
+
+    class FakeMsg:
+        topic = "test/status/mirror"
+        payload = b"online"
+
+    bridge._on_message(bridge._client, None, FakeMsg())
+
+    assert tracker.calls == [("status/mirror", "online")]
