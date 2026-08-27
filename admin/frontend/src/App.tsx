@@ -7,6 +7,7 @@ import MirrorPage from "./pages/MirrorPage";
 import ScarePage from "./pages/ScarePage";
 import HaPage from "./pages/HaPage";
 import LogsPage from "./pages/LogsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, checking } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/scare" element={<ScarePage />} />
           <Route path="/ha" element={<HaPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
