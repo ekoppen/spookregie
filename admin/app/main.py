@@ -12,6 +12,7 @@ from admin.app.auth import SessionStore
 from admin.app.db import init_db
 from admin.app.mqtt_state import NodeStatusTracker
 from admin.app.mqtt_bridge import MqttBridge
+from admin.app.mirror_process import MirrorProcessManager
 from admin.app.runtime_settings import read_runtime_settings
 from admin.app.scheduler import Scheduler
 from admin.app.websocket_hub import WebSocketHub
@@ -25,6 +26,7 @@ from admin.app.routers import ha as ha_router
 from admin.app.routers import ws as ws_router
 from admin.app.routers import settings as settings_router
 from admin.app.routers import node_config as node_config_router
+from admin.app.routers import mirror_process as mirror_process_router
 from admin.app.routers.schedule import read_schedule
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json", "/api/node-config"}
@@ -64,6 +66,11 @@ def create_app(settings=None):
     app.state.bridge = MqttBridge(
         app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger
     )
+    app.state.mirror_process = MirrorProcessManager(
+        app.state.runtime_settings,
+        ws_hub=app.state.ws_hub,
+        log_dir=os.path.join(settings.log_dir, "mirror-node"),
+    )
     app.state.scheduler = Scheduler(
         app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger
     )
@@ -90,6 +97,7 @@ def create_app(settings=None):
     app.include_router(ws_router.router)
     app.include_router(settings_router.router)
     app.include_router(node_config_router.router)
+    app.include_router(mirror_process_router.router)
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if os.path.isdir(frontend_dist):
@@ -112,6 +120,7 @@ def create_app(settings=None):
         # krijgt hem hier pas (niet in create_app) — bekende FastAPI-volgorde,
         # geen ontwerpfout.
         app.state.bridge._loop = asyncio.get_event_loop()
+        app.state.mirror_process._loop = asyncio.get_event_loop()
         app.state.bridge.start()
         app.state.scheduler.start()
 
@@ -119,5 +128,6 @@ def create_app(settings=None):
     def _shutdown():
         app.state.scheduler.stop()
         app.state.bridge.stop()
+        app.state.mirror_process.stop()
 
     return app
