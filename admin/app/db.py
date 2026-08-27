@@ -44,7 +44,8 @@ def init_db(path):
             mqtt_pass TEXT NOT NULL DEFAULT '',
             ha_url TEXT NOT NULL,
             ha_token TEXT NOT NULL DEFAULT '',
-            mirror_stream_url TEXT NOT NULL DEFAULT ''
+            mirror_stream_url TEXT NOT NULL DEFAULT '',
+            mqtt_topic_prefix TEXT NOT NULL DEFAULT ''
         )"""
     )
     conn.commit()

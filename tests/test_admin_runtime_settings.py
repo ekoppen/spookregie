@@ -49,3 +49,30 @@ def test_write_only_updates_given_fields(tmp_path, monkeypatch):
     assert settings.mqtt_host == "pi-broker"
     assert settings.mqtt_user == "operator"
     assert settings.ha_url == "http://ha.local:8123"
+
+
+def test_read_without_row_falls_back_to_env_for_topic_prefix(tmp_path, monkeypatch):
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "env-prefix")
+    conn = init_db(str(tmp_path / "test.db"))
+
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_topic_prefix == "env-prefix"
+
+
+def test_read_without_row_defaults_topic_prefix_to_empty(tmp_path, monkeypatch):
+    monkeypatch.delenv("MQTT_TOPIC_PREFIX", raising=False)
+    conn = init_db(str(tmp_path / "test.db"))
+
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_topic_prefix == ""
+
+
+def test_write_then_read_roundtrip_topic_prefix(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    write_runtime_settings(conn, mqtt_topic_prefix="test")
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_topic_prefix == "test"
