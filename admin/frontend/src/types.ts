@@ -52,6 +52,7 @@ export interface AppSettings {
   mqtt_user: string;
   ha_url: string;
   mirror_stream_url: string;
+  mqtt_topic_prefix: string;
   mqtt_pass_set: boolean;
   ha_token_set: boolean;
 }
@@ -64,4 +65,5 @@ export interface AppSettingsUpdate {
   ha_url: string;
   ha_token?: string;
   mirror_stream_url: string;
+  mqtt_topic_prefix: string;
 }

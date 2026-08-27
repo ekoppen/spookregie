@@ -11,6 +11,7 @@ interface FormState {
   ha_url: string;
   ha_token: string;
   mirror_stream_url: string;
+  mqtt_topic_prefix: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -21,6 +22,7 @@ const EMPTY_FORM: FormState = {
   ha_url: "",
   ha_token: "",
   mirror_stream_url: "",
+  mqtt_topic_prefix: "",
 };
 
 export default function SettingsPage() {
@@ -42,6 +44,7 @@ export default function SettingsPage() {
           ha_url: result.ha_url,
           ha_token: "",
           mirror_stream_url: result.mirror_stream_url,
+          mqtt_topic_prefix: result.mqtt_topic_prefix,
         });
         setError(null);
       })
@@ -63,6 +66,7 @@ export default function SettingsPage() {
         ha_url: form.ha_url,
         ...(form.ha_token ? { ha_token: form.ha_token } : {}),
         mirror_stream_url: form.mirror_stream_url,
+        mqtt_topic_prefix: form.mqtt_topic_prefix,
       });
       const refreshed = await getSettings();
       setSettings(refreshed);
@@ -144,7 +148,22 @@ export default function SettingsPage() {
                   onChange={(e) => update({ mqtt_pass: e.target.value })}
                 />
               </label>
+              <label className="settings-field settings-field--wide">
+                <span className="settings-field__label">Topic-prefix (optioneel)</span>
+                <input
+                  className="settings-field__input"
+                  type="text"
+                  value={form.mqtt_topic_prefix}
+                  placeholder="bijv. spookregie of test"
+                  onChange={(e) => update({ mqtt_topic_prefix: e.target.value })}
+                />
+              </label>
             </div>
+            <p className="settings-field__label" style={{ marginTop: "0.75rem" }}>
+              Laat leeg voor geen namespace. Nodes halen deze waarde pas op bij
+              hun eerstvolgende herstart — een lopende node picked een
+              wijziging hier niet live op.
+            </p>
           </section>
 
           <section className="settings-panel">
