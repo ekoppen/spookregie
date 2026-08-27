@@ -39,7 +39,7 @@ def test_node_config_works_without_session_cookie(tmp_path, monkeypatch):
     response = client.get("/api/node-config")
 
     assert response.status_code == 200
-    assert response.json() == {"mqtt_topic_prefix": "seed-prefix"}
+    assert response.json() == {"mqtt_topic_prefix": "seed-prefix", "mirror_camera_source": ""}
 
 
 def test_node_config_reflects_saved_prefix(tmp_path):
@@ -51,4 +51,20 @@ def test_node_config_reflects_saved_prefix(tmp_path):
 
     response = client.get("/api/node-config")
 
-    assert response.json() == {"mqtt_topic_prefix": "gewijzigd"}
+    assert response.json() == {"mqtt_topic_prefix": "gewijzigd", "mirror_camera_source": ""}
+
+
+def test_node_config_includes_camera_source(tmp_path):
+    client, app = _client(tmp_path)
+    client.post("/api/login", json={"password": "testwachtwoord"})
+    client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883,
+        "mirror_camera_source": "rtsp://cam.local/stream1",
+    })
+
+    response = client.get("/api/node-config")
+
+    assert response.json() == {
+        "mqtt_topic_prefix": "",
+        "mirror_camera_source": "rtsp://cam.local/stream1",
+    }
