@@ -139,6 +139,10 @@ die map zelf mee (geen aparte webserver nodig), dus na het starten van de
 service is de beheerpagina bereikbaar op `http://<backend-host>:<ADMIN_PORT>/`
 (standaard poort 8000).
 
+De MQTT- en HA-verbinding stel je na het opstarten in via de
+Instellingen-pagina in de beheerpagina zelf — de waarden in de unit
+hierboven zijn alleen de eerste-opstart-seed.
+
 ### Beheerpagina via Docker
 
 Alternatief voor de systemd-installatie hierboven — alleen de beheerpagina

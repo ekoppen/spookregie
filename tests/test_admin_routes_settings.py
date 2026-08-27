@@ -98,6 +98,27 @@ def test_put_settings_rejects_missing_host(tmp_path):
     assert response.status_code == 400
 
 
+def test_put_settings_updates_runtime_settings_for_ha_router(tmp_path, monkeypatch):
+    client, app, _ = _client(tmp_path)
+
+    client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883,
+        "ha_url": "http://new-ha.local:8123", "ha_token": "new-token-xyz",
+        "mirror_stream_url": "",
+    })
+
+    def fake_get_states(ha_url, ha_token, fetch=None):
+        assert ha_url == "http://new-ha.local:8123"
+        assert ha_token == "new-token-xyz"
+        return [{"entity_id": "light.test", "state": "on"}]
+
+    monkeypatch.setattr("admin.app.routers.ha.get_states", fake_get_states)
+
+    response = client.get("/api/ha/states")
+
+    assert response.json() == [{"entity_id": "light.test", "state": "on"}]
+
+
 def test_put_settings_rejects_malformed_url(tmp_path):
     client, app, _ = _client(tmp_path)
 

@@ -11,6 +11,9 @@ WorkingDirectory=/opt/halloween
 # CHANGE: zet een eigen wachtwoord. Er is geen standaardwaarde — zonder deze
 # regel weigert de backend te starten (RuntimeError).
 Environment=ADMIN_PASSWORD=verander-mij
+# MQTT_HOST/HA_URL/HA_TOKEN hieronder zijn alleen de eerste-opstart-seed:
+# na de eerste keer opslaan op de Instellingen-pagina in de beheerpagina
+# zelf is de database leidend en wordt hier verder niet meer naar gekeken.
 Environment=MQTT_HOST=homeassistant.local
 # LogsDirectory maakt /var/log/halloween aan met de juiste eigenaar.
 Environment=LOG_DIR=/var/log/halloween
@@ -23,8 +26,8 @@ StateDirectory=halloween
 # Poort van de beheerpagina; de nodes halen hier ook hun media op
 # (BACKEND_URL in hun eigen unit moet hiernaar wijzen).
 Environment=ADMIN_PORT=8000
-# Home Assistant-koppeling (WLED-status/bediening). CHANGE: HA_TOKEN is een
-# long-lived access token uit je HA-profiel; leeg laten schakelt de proxy uit.
+# Home Assistant-koppeling (WLED-status/bediening) — alleen de eerste-opstart-
+# seed, zie de comment hierboven bij MQTT_HOST. Leeg laten schakelt de proxy uit.
 Environment=HA_URL=http://homeassistant.local:8123
 Environment=HA_TOKEN=
 Restart=always
