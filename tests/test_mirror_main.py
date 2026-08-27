@@ -98,6 +98,34 @@ def test_on_message_sets_test_trigger_event():
     mirror_main.test_trigger_requested.clear()
 
 
+def test_open_camera_uses_local_index_when_source_empty(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: calls.append(a) or "cap")
+
+    result = mirror_main._open_camera("")
+
+    assert calls == [(mirror_main.CAMERA_INDEX,)]
+    assert result == "cap"
+
+
+def test_open_camera_uses_local_index_when_source_is_numeric_string(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: calls.append(a) or "cap")
+
+    mirror_main._open_camera("2")
+
+    assert calls == [(2,)]
+
+
+def test_open_camera_uses_ffmpeg_url_for_network_source(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: calls.append(a) or "cap")
+
+    mirror_main._open_camera("rtsp://cam.local/stream1")
+
+    assert calls == [("rtsp://cam.local/stream1", mirror_main.cv2.CAP_FFMPEG)]
+
+
 def test_preview_config_also_syncs_overlay(monkeypatch):
     started = []
     monkeypatch.setattr(

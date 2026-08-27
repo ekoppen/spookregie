@@ -10,7 +10,7 @@ import cv2
 import paho.mqtt.client as mqtt
 
 from shared.mqtt_contract import SLEEP_PAYLOAD_ON, Topics, trigger_payload
-from shared.topic_prefix import fetch_topic_prefix
+from shared.topic_prefix import fetch_topic_prefix, fetch_mirror_camera_source
 from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media
 from mirror_node.trigger import FrameDiffTrigger
@@ -27,6 +27,7 @@ MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
 MQTT_TOPIC_PREFIX_ENV = os.environ.get("MQTT_TOPIC_PREFIX", "")
+MIRROR_CAMERA_SOURCE_ENV = os.environ.get("MIRROR_CAMERA_SOURCE", "")
 CAMERA_INDEX = int(os.environ.get("MIRROR_CAMERA_INDEX", "0"))
 ACTIVE_SECONDS = float(os.environ.get("MIRROR_ACTIVE_SECONDS", "6"))
 # Default schrijfbaar voor een gewone gebruiker die het script direct start;
@@ -150,14 +151,27 @@ def _render(frame, logger):
     return result
 
 
+def _open_camera(source):
+    """Opent de camera-bron: leeg -> lokale index (CAMERA_INDEX), een
+    numerieke string -> die index, anders -> een netwerkstream via FFmpeg.
+    Camera-merk-agnostisch: elke bron die OpenCV/FFmpeg begrijpt werkt."""
+    if not source:
+        return cv2.VideoCapture(CAMERA_INDEX)
+    try:
+        return cv2.VideoCapture(int(source))
+    except ValueError:
+        return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+
+
 def selfcheck():
     """Pakt één frame, draait het door het standaard xray-effect en
     laat/bewaart het resultaat. Heeft geen MQTT nodig."""
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    camera_source = fetch_mirror_camera_source(BACKEND_URL, fallback=MIRROR_CAMERA_SOURCE_ENV)
+    cap = _open_camera(camera_source)
     ok, frame = cap.read()
     cap.release()
     if not ok:
-        print(f"selfcheck MISLUKT: geen frame van camera index {CAMERA_INDEX}")
+        print(f"selfcheck MISLUKT: geen frame van camera-bron {camera_source or CAMERA_INDEX}")
         sys.exit(1)
 
     ghost = get_effect("xray")(frame, {})
@@ -183,6 +197,7 @@ def main():
 
     topic_prefix = fetch_topic_prefix(BACKEND_URL, fallback=MQTT_TOPIC_PREFIX_ENV)
     topics = Topics(prefix=topic_prefix)
+    camera_source = fetch_mirror_camera_source(BACKEND_URL, fallback=MIRROR_CAMERA_SOURCE_ENV)
 
     client = mqtt.Client(client_id="mirror-node")
     if MQTT_USER:
@@ -224,9 +239,9 @@ def main():
     streamer.start()
     logger.info("MJPEG-stream op poort %s (/stream)", STREAM_PORT)
 
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    cap = _open_camera(camera_source)
     if not cap.isOpened():
-        logger.error("Kon camera index %s niet openen", CAMERA_INDEX)
+        logger.error("Kon camera-bron niet openen: %s", camera_source or CAMERA_INDEX)
         return
 
     trigger = FrameDiffTrigger()
@@ -234,6 +249,8 @@ def main():
     cv2.setWindowProperty("mirror", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     active_until = 0.0
+    consecutive_failures = 0
+    MAX_FAILURES_BEFORE_REOPEN = 30  # ~15s bij 0.5s sleep tussen mislukte reads
     logger.info("mirror-node gestart")
 
     try:
@@ -241,8 +258,15 @@ def main():
             ok, frame = cap.read()
             if not ok:
                 logger.warning("Kon geen frame lezen van camera")
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_FAILURES_BEFORE_REOPEN:
+                    logger.warning("Camera blijft falen, heropen de verbinding")
+                    cap.release()
+                    cap = _open_camera(camera_source)
+                    consecutive_failures = 0
                 time.sleep(0.5)
                 continue
+            consecutive_failures = 0
 
             if sleeping.is_set():
                 cv2.imshow("mirror", frame * 0)
