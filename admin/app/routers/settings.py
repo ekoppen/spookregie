@@ -10,6 +10,11 @@ def _validate_url(value, field_name):
         raise HTTPException(status_code=400, detail=f"{field_name} moet leeg zijn of met http(s):// beginnen")
 
 
+def _validate_topic_prefix(value):
+    if "#" in value or "+" in value:
+        raise HTTPException(status_code=400, detail="mqtt_topic_prefix mag geen # of + bevatten")
+
+
 @router.get("/api/settings")
 def get_settings_route(request: Request):
     settings = read_runtime_settings(request.app.state.db)
@@ -19,6 +24,7 @@ def get_settings_route(request: Request):
         "mqtt_user": settings.mqtt_user,
         "ha_url": settings.ha_url,
         "mirror_stream_url": settings.mirror_stream_url,
+        "mqtt_topic_prefix": settings.mqtt_topic_prefix,
         "mqtt_pass_set": bool(settings.mqtt_pass),
         "ha_token_set": bool(settings.ha_token),
     }
@@ -44,12 +50,16 @@ async def put_settings_route(request: Request):
     _validate_url(ha_url, "ha_url")
     _validate_url(mirror_stream_url, "mirror_stream_url")
 
+    mqtt_topic_prefix = str(body.get("mqtt_topic_prefix", "")).strip()
+    _validate_topic_prefix(mqtt_topic_prefix)
+
     updates = {
         "mqtt_host": mqtt_host,
         "mqtt_port": mqtt_port,
         "mqtt_user": str(body.get("mqtt_user", "")),
         "ha_url": ha_url,
         "mirror_stream_url": mirror_stream_url,
+        "mqtt_topic_prefix": mqtt_topic_prefix,
     }
     mqtt_pass = body.get("mqtt_pass")
     if mqtt_pass:

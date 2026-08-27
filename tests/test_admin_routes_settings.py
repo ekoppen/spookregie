@@ -127,3 +127,45 @@ def test_put_settings_rejects_malformed_url(tmp_path):
     })
 
     assert response.status_code == 400
+
+
+def test_get_settings_includes_topic_prefix(tmp_path, monkeypatch):
+    monkeypatch.setenv("MQTT_TOPIC_PREFIX", "seed-prefix")
+    client, app, _ = _client(tmp_path)
+
+    response = client.get("/api/settings")
+
+    assert response.json()["mqtt_topic_prefix"] == "seed-prefix"
+
+
+def test_put_settings_persists_topic_prefix(tmp_path):
+    client, app, bridge = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883,
+        "mqtt_topic_prefix": "test",
+    })
+
+    assert response.status_code == 200
+    assert bridge.reconfigured_with.mqtt_topic_prefix == "test"
+    assert client.get("/api/settings").json()["mqtt_topic_prefix"] == "test"
+
+
+def test_put_settings_rejects_hash_in_topic_prefix(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "mqtt_topic_prefix": "test#",
+    })
+
+    assert response.status_code == 400
+
+
+def test_put_settings_rejects_plus_in_topic_prefix(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "mqtt_topic_prefix": "te+st",
+    })
+
+    assert response.status_code == 400
