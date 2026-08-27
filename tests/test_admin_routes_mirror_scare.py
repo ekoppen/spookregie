@@ -35,8 +35,6 @@ class FakeBridge:
 def _client(tmp_path):
     settings = Settings(
         admin_password="testwachtwoord",
-        mqtt_host="localhost", mqtt_port=1883, mqtt_user="", mqtt_pass="",
-        ha_url="http://localhost:8123", ha_token="",
         db_path=str(tmp_path / "test.db"), media_dir=str(tmp_path / "media"),
         port=8000,
     )

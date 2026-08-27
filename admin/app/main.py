@@ -12,6 +12,7 @@ from admin.app.auth import SessionStore
 from admin.app.db import init_db
 from admin.app.mqtt_state import NodeStatusTracker
 from admin.app.mqtt_bridge import MqttBridge
+from admin.app.runtime_settings import read_runtime_settings
 from admin.app.scheduler import Scheduler
 from admin.app.websocket_hub import WebSocketHub
 from admin.app.routers import auth as auth_router
@@ -55,10 +56,11 @@ def create_app(settings=None):
     app.state.logger = setup_logging("beheerpagina", settings.log_dir)
     app.state.sessions = SessionStore()
     app.state.db = init_db(settings.db_path)
+    app.state.runtime_settings = read_runtime_settings(app.state.db)
     app.state.tracker = NodeStatusTracker()
     app.state.ws_hub = WebSocketHub()
     app.state.bridge = MqttBridge(
-        settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger
+        app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger
     )
     app.state.scheduler = Scheduler(
         app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger

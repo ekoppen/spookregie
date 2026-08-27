@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from admin.app.config import Settings
 from admin.app.main import create_app
+from admin.app.runtime_settings import RuntimeSettings
 
 
 class FakeBridge:
@@ -20,8 +21,6 @@ class FakeBridge:
 def _client(tmp_path, monkeypatch=None):
     settings = Settings(
         admin_password="testwachtwoord",
-        mqtt_host="localhost", mqtt_port=1883, mqtt_user="", mqtt_pass="",
-        ha_url="http://localhost:8123", ha_token="testtoken",
         db_path=str(tmp_path / "test.db"), media_dir=str(tmp_path / "media"),
         port=8000,
     )
@@ -92,6 +91,10 @@ def test_wake_publishes_sleep_off(tmp_path):
 
 def test_ha_states_proxies_to_ha_client(tmp_path, monkeypatch):
     client, app, _ = _client(tmp_path)
+    app.state.runtime_settings = RuntimeSettings(
+        mqtt_host="localhost", mqtt_port=1883, mqtt_user="", mqtt_pass="",
+        ha_url="http://localhost:8123", ha_token="testtoken", mirror_stream_url="",
+    )
 
     def fake_get_states(ha_url, ha_token, fetch=None):
         assert ha_url == "http://localhost:8123"
