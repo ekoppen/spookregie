@@ -68,6 +68,7 @@ Alleen mirror-node:
 | Variabele | Default | Betekenis |
 |---|---|---|
 | `MIRROR_CAMERA_INDEX` | `0` | OpenCV camera-index |
+| `MIRROR_CAMERA_SOURCE` | *(leeg)* | Terugval als de backend bij opstarten onbereikbaar is voor `GET /api/node-config` — normaal gesproken bepaalt de Instellingen-pagina dit centraal. Leeg = gebruik `MIRROR_CAMERA_INDEX`; een RTSP/HTTP-URL gebruikt in plaats daarvan een netwerkcamera (elk merk met een standaard stream). |
 | `MIRROR_ACTIVE_SECONDS` | `6` | Hoe lang het effect na een trigger aanblijft |
 | `MIRROR_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor opgehaalde overlays; systemd zet dit op `/var/lib/halloween/media_cache` |
 | `MIRROR_STREAM_PORT` | `8091` | Poort van de MJPEG-live-preview (`/stream`) |
