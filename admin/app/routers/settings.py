@@ -92,5 +92,6 @@ async def put_settings_route(request: Request):
     new_settings = write_runtime_settings(db, **updates)
     request.app.state.runtime_settings = new_settings
     request.app.state.bridge.reconfigure(new_settings)
+    request.app.state.mirror_process._settings = new_settings
 
     return {"ok": True}

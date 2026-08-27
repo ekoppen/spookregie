@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     ports:
       - "${ADMIN_PORT:-8000}:8000"
+      - "${MIRROR_STREAM_PORT:-8091}:8091"
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD moet gezet zijn in .env}
       MQTT_HOST: ${MQTT_HOST:-homeassistant.local}
