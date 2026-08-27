@@ -1,45 +1,82 @@
 import json
 import time
 
-TOPIC_MIRROR_TRIGGERED = "mirror/triggered"
-TOPIC_SYSTEM_SLEEP = "system/sleep"
-TOPIC_CONFIG_MIRROR = "config/mirror"
-TOPIC_CONTROL_MIRROR_PREVIEW = "control/mirror/preview"
-TOPIC_CONTROL_MIRROR_TEST = "control/mirror/test-trigger"
 
-# Payloads op TOPIC_SYSTEM_SLEEP. Home Assistant publiceert deze exacte
+class Topics:
+    """Bouwt alle MQTT-topics van dit project op, optioneel onder een
+    gedeelde namespace-prefix. Elk proces (backend, mirror-node, scare-node)
+    maakt precies één instance bij het opstarten en gebruikt die overal --
+    nooit losse string-concatenatie op meerdere plekken."""
+
+    def __init__(self, prefix: str = ""):
+        self._prefix = prefix.strip("/")
+
+    def _p(self, topic: str) -> str:
+        return f"{self._prefix}/{topic}" if self._prefix else topic
+
+    @property
+    def mirror_triggered(self) -> str:
+        return self._p("mirror/triggered")
+
+    @property
+    def system_sleep(self) -> str:
+        return self._p("system/sleep")
+
+    @property
+    def config_mirror(self) -> str:
+        return self._p("config/mirror")
+
+    @property
+    def control_mirror_preview(self) -> str:
+        return self._p("control/mirror/preview")
+
+    @property
+    def control_mirror_test(self) -> str:
+        return self._p("control/mirror/test-trigger")
+
+    @property
+    def status_wildcard(self) -> str:
+        return self._p("status/+")
+
+    @property
+    def log_wildcard(self) -> str:
+        return self._p("log/+")
+
+    @property
+    def scare_triggered_wildcard(self) -> str:
+        return self._p("scare/+/triggered")
+
+    def scare(self, zone: str) -> str:
+        return self._p(f"scare/{zone}/triggered")
+
+    def log(self, node: str) -> str:
+        return self._p(f"log/{node}")
+
+    def status(self, node: str) -> str:
+        """Topic voor online/offline-status van een node (MQTT last-will)."""
+        return self._p(f"status/{node}")
+
+    def config_scare(self, zone: str) -> str:
+        return self._p(f"config/scare/{zone}")
+
+    def control_scare_test(self, zone: str) -> str:
+        return self._p(f"control/scare/{zone}/test-trigger")
+
+    def strip_prefix(self, topic: str) -> str:
+        """Geeft het topic terug zonder de geconfigureerde prefix. Voor
+        logica die op de kale topic-naam matcht (node-tracker, WS-broadcast)
+        -- die code hoeft nooit te weten dát er een prefix is."""
+        if self._prefix and topic.startswith(f"{self._prefix}/"):
+            return topic[len(self._prefix) + 1:]
+        return topic
+
+
+# Payloads op Topics().system_sleep. Home Assistant publiceert deze exacte
 # waarden (zie home_assistant/automations/time_window.yaml).
 SLEEP_PAYLOAD_ON = "on"
 SLEEP_PAYLOAD_OFF = "off"
-
-_SCARE_TOPIC_TEMPLATE = "scare/{zone}/triggered"
-_LOG_TOPIC_TEMPLATE = "log/{node}"
-_STATUS_TOPIC_TEMPLATE = "status/{node}"
-_CONFIG_SCARE_TEMPLATE = "config/scare/{zone}"
-_CONTROL_SCARE_TEST_TEMPLATE = "control/scare/{zone}/test-trigger"
 
 
 def trigger_payload():
     """JSON payload voor een 'iets is getriggerd'-bericht."""
     return json.dumps({"ts": time.time()})
-
-
-def scare_topic(zone):
-    return _SCARE_TOPIC_TEMPLATE.format(zone=zone)
-
-
-def log_topic(node):
-    return _LOG_TOPIC_TEMPLATE.format(node=node)
-
-
-def status_topic(node):
-    """Topic voor online/offline-status van een node (MQTT last-will)."""
-    return _STATUS_TOPIC_TEMPLATE.format(node=node)
-
-
-def config_scare_topic(zone):
-    return _CONFIG_SCARE_TEMPLATE.format(zone=zone)
-
-
-def control_scare_test_topic(zone):
-    return _CONTROL_SCARE_TEST_TEMPLATE.format(zone=zone)

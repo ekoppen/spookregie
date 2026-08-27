@@ -24,7 +24,9 @@ def test_setup_logging_writes_to_file(tmp_path):
 
 def test_setup_logging_publishes_to_mqtt_when_client_given(tmp_path):
     fake_client = FakeMqttClient()
-    logger = setup_logging("test-node-mqtt", str(tmp_path), mqtt_client=fake_client)
+    logger = setup_logging(
+        "test-node-mqtt", str(tmp_path), mqtt_client=fake_client, mqtt_log_topic="log/test-node-mqtt"
+    )
     logger.info("hello")
 
     assert len(fake_client.published) == 1
@@ -33,6 +35,14 @@ def test_setup_logging_publishes_to_mqtt_when_client_given(tmp_path):
     data = json.loads(payload)
     assert data["msg"] == "hello"
     assert data["level"] == "INFO"
+
+
+def test_setup_logging_skips_mqtt_handler_without_topic(tmp_path):
+    fake_client = FakeMqttClient()
+    logger = setup_logging("test-node-no-topic", str(tmp_path), mqtt_client=fake_client)
+    logger.info("hello")
+
+    assert fake_client.published == []
 
 
 def test_mqtt_log_handler_emit_publishes_json():
