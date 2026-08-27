@@ -72,6 +72,7 @@ Alleen mirror-node:
 | `MIRROR_ACTIVE_SECONDS` | `6` | Hoe lang het effect na een trigger aanblijft |
 | `MIRROR_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor opgehaalde overlays; systemd zet dit op `/var/lib/halloween/media_cache` |
 | `MIRROR_STREAM_PORT` | `8091` | Poort van de MJPEG-live-preview (`/stream`) |
+| `MIRROR_HEADLESS` | `0` | `1` = sla het fysieke fullscreen-venster (beamer) over; handig om zonder hardware aan het effect te testen via de MJPEG-preview. Camera lezen en effect toepassen blijven gewoon werken. |
 
 Alleen scare-node:
 

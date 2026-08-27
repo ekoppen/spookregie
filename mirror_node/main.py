@@ -36,6 +36,9 @@ LOG_DIR = os.environ.get("LOG_DIR", "./logs")
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 MEDIA_CACHE_DIR = os.environ.get("MIRROR_MEDIA_CACHE_DIR", "./media_cache")
 STREAM_PORT = int(os.environ.get("MIRROR_STREAM_PORT", "8091"))
+# Voor ontwerp/test zonder beamer: sla het fysieke fullscreen-venster over,
+# de MJPEG-preview blijft gewoon werken.
+MIRROR_HEADLESS = os.environ.get("MIRROR_HEADLESS", "0") == "1"
 
 sleeping = threading.Event()
 # Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
@@ -251,8 +254,9 @@ def main():
         return
 
     trigger = FrameDiffTrigger()
-    cv2.namedWindow("mirror", cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty("mirror", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    if not MIRROR_HEADLESS:
+        cv2.namedWindow("mirror", cv2.WND_PROP_FULLSCREEN)
+        cv2.setWindowProperty("mirror", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     active_until = 0.0
     consecutive_failures = 0
@@ -275,8 +279,9 @@ def main():
             consecutive_failures = 0
 
             if sleeping.is_set():
-                cv2.imshow("mirror", frame * 0)
-                cv2.waitKey(1)
+                if not MIRROR_HEADLESS:
+                    cv2.imshow("mirror", frame * 0)
+                    cv2.waitKey(1)
                 time.sleep(0.2)
                 continue
 
@@ -311,11 +316,13 @@ def main():
             else:
                 rendered = frame * 0
             streamer.publish_frame(rendered)
-            cv2.imshow("mirror", rendered)
-            cv2.waitKey(1)
+            if not MIRROR_HEADLESS:
+                cv2.imshow("mirror", rendered)
+                cv2.waitKey(1)
     finally:
         cap.release()
-        cv2.destroyAllWindows()
+        if not MIRROR_HEADLESS:
+            cv2.destroyAllWindows()
         streamer.stop()
         client.loop_stop()
 
