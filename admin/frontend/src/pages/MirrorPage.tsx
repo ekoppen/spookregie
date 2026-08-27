@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { getMirrorConfig, putMirrorConfig, previewMirrorConfig, testMirror } from "../api/mirror";
+import { getSettings } from "../api/settings";
 import MediaLibrary from "../components/MediaLibrary";
 import OverlayCanvas from "../components/OverlayCanvas";
 import type { MirrorConfig } from "../types";
 import "./MirrorPage.css";
 
 const EFFECTS = ["xray", "thermal", "contour", "posterize"] as const;
-const STREAM_URL = import.meta.env.VITE_MIRROR_STREAM_URL ?? "";
 
 const FIELD_LABELS: Record<string, string> = {
   intensity: "Intensiteit",
@@ -32,6 +32,7 @@ export default function MirrorPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [streamUrl, setStreamUrl] = useState("");
 
   useEffect(() => {
     getMirrorConfig()
@@ -40,6 +41,11 @@ export default function MirrorPage() {
         setError(null);
       })
       .catch(() => setError("Spiegelconfiguratie kon niet worden geladen."));
+    getSettings()
+      .then((result) => setStreamUrl(result.mirror_stream_url))
+      .catch(() => {
+        /* live preview blijft dan gewoon "niet beschikbaar" tonen */
+      });
   }, []);
 
   // Live preview: leading-edge throttle (max. 1x per 150ms), niet debounce --
@@ -173,9 +179,9 @@ export default function MirrorPage() {
 
           <section className="mirror-panel">
             <p className="mirror-panel__eyebrow">Live preview</p>
-            {STREAM_URL ? (
+            {streamUrl ? (
               <OverlayCanvas
-                streamUrl={STREAM_URL}
+                streamUrl={streamUrl}
                 overlayUrl={config.overlay_hash ? `/api/media/${config.overlay_hash}` : null}
                 scale={config.scale}
                 position={config.position}
@@ -184,8 +190,8 @@ export default function MirrorPage() {
               />
             ) : (
               <p className="mirror-stream-missing" role="alert">
-                Live preview niet beschikbaar — VITE_MIRROR_STREAM_URL is niet ingesteld bij het
-                bouwen van de frontend.
+                Live preview niet beschikbaar — de mirror-stream-URL is nog niet ingesteld op de
+                Instellingen-pagina.
               </p>
             )}
           </section>
