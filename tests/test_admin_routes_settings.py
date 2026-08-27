@@ -169,3 +169,54 @@ def test_put_settings_rejects_plus_in_topic_prefix(tmp_path):
     })
 
     assert response.status_code == 400
+
+
+def test_get_settings_includes_camera_source(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.get("/api/settings")
+
+    assert response.json()["mirror_camera_source"] == ""
+
+
+def test_put_settings_persists_camera_source(tmp_path):
+    client, app, bridge = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883,
+        "mirror_camera_source": "rtsp://user:pass@192.168.1.50:554/stream1",
+    })
+
+    assert response.status_code == 200
+    assert client.get("/api/settings").json()["mirror_camera_source"] == "rtsp://user:pass@192.168.1.50:554/stream1"
+
+
+def test_put_settings_accepts_numeric_camera_source(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "mirror_camera_source": "1",
+    })
+
+    assert response.status_code == 200
+    assert client.get("/api/settings").json()["mirror_camera_source"] == "1"
+
+
+def test_put_settings_accepts_empty_camera_source(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "mirror_camera_source": "",
+    })
+
+    assert response.status_code == 200
+
+
+def test_put_settings_rejects_malformed_camera_source(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "mirror_camera_source": "not-a-url-or-number",
+    })
+
+    assert response.status_code == 400

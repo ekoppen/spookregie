@@ -15,6 +15,21 @@ def _validate_topic_prefix(value):
         raise HTTPException(status_code=400, detail="mqtt_topic_prefix mag geen # of + bevatten")
 
 
+def _validate_camera_source(value):
+    if not value:
+        return
+    try:
+        int(value)
+        return
+    except ValueError:
+        pass
+    if not (value.startswith("rtsp://") or value.startswith("http://") or value.startswith("https://")):
+        raise HTTPException(
+            status_code=400,
+            detail="mirror_camera_source moet leeg zijn, een getal zijn, of met rtsp://, http:// of https:// beginnen",
+        )
+
+
 @router.get("/api/settings")
 def get_settings_route(request: Request):
     settings = read_runtime_settings(request.app.state.db)
@@ -25,6 +40,7 @@ def get_settings_route(request: Request):
         "ha_url": settings.ha_url,
         "mirror_stream_url": settings.mirror_stream_url,
         "mqtt_topic_prefix": settings.mqtt_topic_prefix,
+        "mirror_camera_source": settings.mirror_camera_source,
         "mqtt_pass_set": bool(settings.mqtt_pass),
         "ha_token_set": bool(settings.ha_token),
     }
@@ -53,6 +69,9 @@ async def put_settings_route(request: Request):
     mqtt_topic_prefix = str(body.get("mqtt_topic_prefix", "")).strip()
     _validate_topic_prefix(mqtt_topic_prefix)
 
+    mirror_camera_source = str(body.get("mirror_camera_source", "")).strip()
+    _validate_camera_source(mirror_camera_source)
+
     updates = {
         "mqtt_host": mqtt_host,
         "mqtt_port": mqtt_port,
@@ -60,6 +79,7 @@ async def put_settings_route(request: Request):
         "ha_url": ha_url,
         "mirror_stream_url": mirror_stream_url,
         "mqtt_topic_prefix": mqtt_topic_prefix,
+        "mirror_camera_source": mirror_camera_source,
     }
     mqtt_pass = body.get("mqtt_pass")
     if mqtt_pass:
