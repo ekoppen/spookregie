@@ -34,13 +34,17 @@ class MqttBridge:
         self._ws_hub = ws_hub
         self._loop = loop
         self._logger = logger
-        self._client = mqtt.Client(client_id="beheerpagina-backend")
+        self._client = self._build_client(settings)
+
+    def _build_client(self, settings):
+        client = mqtt.Client(client_id="beheerpagina-backend")
         if settings.mqtt_user:
-            self._client.username_pw_set(settings.mqtt_user, settings.mqtt_pass)
-        self._client.on_connect = self._on_connect
-        self._client.on_message = self._on_message
-        self._client.on_disconnect = self._on_disconnect
-        self._client.reconnect_delay_set(min_delay=1, max_delay=30)
+            client.username_pw_set(settings.mqtt_user, settings.mqtt_pass)
+        client.on_connect = self._on_connect
+        client.on_message = self._on_message
+        client.on_disconnect = self._on_disconnect
+        client.reconnect_delay_set(min_delay=1, max_delay=30)
+        return client
 
     def _log(self, level, msg, *args):
         if self._logger is not None:
@@ -90,6 +94,15 @@ class MqttBridge:
 
     def stop(self):
         self._client.loop_stop()
+
+    def reconfigure(self, settings):
+        """Herverbindt met nieuwe broker-instellingen zonder het hele proces
+        te herstarten -- aangeroepen na een succesvolle PUT /api/settings."""
+        self._settings = settings
+        self._client.loop_stop()
+        self._client.disconnect()
+        self._client = self._build_client(settings)
+        self.start()
 
     def publish_mirror_config(self, config):
         self._client.publish(TOPIC_CONFIG_MIRROR, json.dumps(config), retain=True)
