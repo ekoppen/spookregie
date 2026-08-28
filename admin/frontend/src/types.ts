@@ -13,7 +13,7 @@ export interface ScareConfig {
 export interface MediaItem {
   hash: string;
   filename: string;
-  category: "mirror_overlay" | "scare_audio";
+  category: "mirror_overlay" | "scare_audio" | "mirror_scare_video";
   uploaded_at: string;
 }
 

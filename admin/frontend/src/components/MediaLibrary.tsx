@@ -4,7 +4,7 @@ import type { MediaItem } from "../types";
 import "./MediaLibrary.css";
 
 interface Props {
-  category: "mirror_overlay" | "scare_audio";
+  category: "mirror_overlay" | "scare_audio" | "mirror_scare_video";
   selected: string[];
   onSelectionChange: (hashes: string[]) => void;
   selectionMode: "single" | "multiple";
@@ -19,6 +19,10 @@ const CATEGORY_COPY: Record<Props["category"], { empty: string; upload: string }
     empty: "Nog geen geluiden geüpload.",
     upload: "Geluid toevoegen",
   },
+  mirror_scare_video: {
+    empty: "Nog geen scare-video's geüpload.",
+    upload: "Video toevoegen",
+  },
 };
 
 function CategoryIcon({ category }: { category: Props["category"] }) {
@@ -28,6 +32,14 @@ function CategoryIcon({ category }: { category: Props["category"] }) {
         <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
         <circle cx="8.5" cy="9" r="1.4" fill="currentColor" />
         <path d="M4 15.5l4.5-4 3.5 3 3-2.5L21 15" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (category === "mirror_scare_video") {
+    return (
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+        <rect x="3" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M17 9.5l4-2.5v10l-4-2.5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
       </svg>
     );
   }

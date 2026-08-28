@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import MirrorPage from "./pages/MirrorPage";
+import MirrorScareVideoPage from "./pages/MirrorScareVideoPage";
 import ScarePage from "./pages/ScarePage";
 import HaPage from "./pages/HaPage";
 import LogsPage from "./pages/LogsPage";
@@ -30,6 +31,7 @@ export default function App() {
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/mirror" element={<MirrorPage />} />
+          <Route path="/mirror-scare" element={<MirrorScareVideoPage />} />
           <Route path="/scare" element={<ScarePage />} />
           <Route path="/ha" element={<HaPage />} />
           <Route path="/logs" element={<LogsPage />} />

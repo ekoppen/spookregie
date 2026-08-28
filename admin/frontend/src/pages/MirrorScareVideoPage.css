@@ -1,0 +1,141 @@
+.mirror-scare-video-page {
+  --void: #0b0b0f;
+  --panel: #16151c;
+  --panel-edge: #2a2733;
+  --ember: #ff6a1f;
+  --ember-dim: #c94f12;
+  --signal: #ffb84d;
+  --bone: #e8e3d8;
+  --ash: #8b8794;
+  --alarm: #ff5c5c;
+
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  max-width: 960px;
+  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 60% 35% at 50% 0%, rgba(255, 106, 31, 0.06), transparent 70%),
+    var(--void);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--bone);
+}
+
+.mirror-scare-video-header {
+  margin-bottom: 1.75rem;
+}
+
+.mirror-scare-video-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.mirror-scare-video-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 6px 1px rgba(255, 184, 77, 0.7);
+  animation: mirror-scare-video-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes mirror-scare-video-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.mirror-scare-video-heading {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+
+.mirror-scare-video-error {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid var(--alarm);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--alarm);
+}
+
+.mirror-scare-video-panel {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.mirror-scare-video-panel__eyebrow {
+  margin: 0 0 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.mirror-scare-video-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--ash);
+}
+
+.mirror-scare-video-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.mirror-scare-video-save {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: var(--ember);
+  border: none;
+  color: var(--void);
+  transition: background-color 0.15s ease;
+}
+
+.mirror-scare-video-save:hover:not(:disabled) {
+  background: var(--ember-dim);
+}
+
+.mirror-scare-video-save:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+.mirror-scare-video-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mirror-scare-video-eyebrow__led {
+    animation: none;
+  }
+}

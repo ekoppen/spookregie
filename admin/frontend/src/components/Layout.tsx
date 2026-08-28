@@ -4,6 +4,7 @@ import { logout } from "../api/auth";
 const links = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/mirror", label: "Mirror", end: false },
+  { to: "/mirror-scare", label: "Scare-video's", end: false },
   { to: "/scare", label: "Scare", end: false },
   { to: "/ha", label: "Home Assistant", end: false },
   { to: "/logs", label: "Logs", end: false },
