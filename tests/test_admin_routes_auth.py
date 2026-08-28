@@ -75,3 +75,6 @@ def test_media_download_with_valid_hash_bypasses_auth_check():
     assert _is_public_media_download("/api/media/", "GET") is False
     assert _is_public_media_download(f"/api/media/{valid_hash}/extra", "GET") is False
     assert _is_public_media_download("/api/media/not-a-hash", "GET") is False
+    assert _is_public_media_download(f"/api/media/{valid_hash}/audio", "GET") is True
+    assert _is_public_media_download(f"/api/media/{valid_hash}/audio", "POST") is False
+    assert _is_public_media_download("/api/media/not-a-hash/audio", "GET") is False

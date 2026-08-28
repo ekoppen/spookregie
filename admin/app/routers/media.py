@@ -1,6 +1,14 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, Form, Response
 
-from admin.app.media import save_media, get_media_path, list_media, delete_media, validate_upload
+from admin.app.media import (
+    save_media,
+    get_media_path,
+    get_media_audio_path,
+    list_media,
+    delete_media,
+    validate_upload,
+    extract_audio_if_video,
+)
 
 router = APIRouter()
 
@@ -12,6 +20,7 @@ async def upload_media(request: Request, file: UploadFile, category: str = Form(
     if error is not None:
         raise HTTPException(status_code=400, detail=error)
     h = save_media(request.app.state.db, request.app.state.settings.media_dir, data, file.filename, category)
+    extract_audio_if_video(request.app.state.settings.media_dir, h, category)
     return {"hash": h, "filename": file.filename, "category": category}
 
 
@@ -23,6 +32,16 @@ def list_media_route(request: Request, category: str | None = None):
 @router.get("/api/media/{hash_}")
 def download_media(hash_: str, request: Request):
     path = get_media_path(request.app.state.settings.media_dir, hash_)
+    if path is None:
+        return Response(status_code=404)
+    with open(path, "rb") as f:
+        data = f.read()
+    return Response(content=data, media_type="application/octet-stream")
+
+
+@router.get("/api/media/{hash_}/audio")
+def download_media_audio(hash_: str, request: Request):
+    path = get_media_audio_path(request.app.state.settings.media_dir, hash_)
     if path is None:
         return Response(status_code=404)
     with open(path, "rb") as f:

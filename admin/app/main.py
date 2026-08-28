@@ -33,15 +33,18 @@ _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json", "/api/node-config
 
 
 def _is_public_media_download(path, method):
-    """Alleen GET /api/media/<64-char hash> is publiek. Een simpele
-    startswith("/api/media/") zou ook toekomstige beheer-endpoints onder
-    dat pad (bijv. een lijst-endpoint) per ongeluk publiek maken."""
+    """Alleen GET /api/media/<64-char hash> (en zijn /audio-companion)
+    zijn publiek. Een simpele startswith("/api/media/") zou ook
+    toekomstige beheer-endpoints onder dat pad (bijv. een
+    lijst-endpoint) per ongeluk publiek maken."""
     if method != "GET":
         return False
     prefix = "/api/media/"
     if not path.startswith(prefix):
         return False
     remainder = path[len(prefix):]
+    if remainder.endswith("/audio"):
+        return is_content_hash(remainder[: -len("/audio")])
     return "/" not in remainder and is_content_hash(remainder)
 
 

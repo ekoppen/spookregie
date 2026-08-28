@@ -111,3 +111,55 @@ def test_upload_accepts_valid_png_and_wav(tmp_path):
     assert _upload(client, "spook.png", PNG, "mirror_overlay").status_code == 200
     assert _upload(client, "gil.wav", WAV, "scare_audio").status_code == 200
     assert len(client.get("/api/media").json()) == 2
+
+
+def _mp4_bytes():
+    return b"\x00\x00\x00\x18ftypisom" + b"fake-mp4-body"
+
+
+def test_upload_scare_video_extracts_audio_via_ffmpeg(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+
+    def fake_run(cmd, capture_output=True, timeout=30):
+        import subprocess
+        with open(cmd[-1], "wb") as f:
+            f.write(b"fake-wav-bytes")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
+
+    upload_resp = _upload(client, "zombie.mp4", _mp4_bytes(), "mirror_scare_video")
+    assert upload_resp.status_code == 200
+    h = upload_resp.json()["hash"]
+
+    from fastapi.testclient import TestClient as PlainTestClient
+    anon_client = PlainTestClient(client.app)
+    audio_resp = anon_client.get(f"/api/media/{h}/audio")
+    assert audio_resp.status_code == 200
+    assert audio_resp.content == b"fake-wav-bytes"
+
+
+def test_download_audio_for_video_without_sound_returns_404(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+
+    def fake_run_no_audio(cmd, capture_output=True, timeout=30):
+        import subprocess
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run_no_audio)
+
+    upload_resp = _upload(client, "bliksem.mp4", _mp4_bytes(), "mirror_scare_video")
+    h = upload_resp.json()["hash"]
+
+    from fastapi.testclient import TestClient as PlainTestClient
+    anon_client = PlainTestClient(client.app)
+    audio_resp = anon_client.get(f"/api/media/{h}/audio")
+    assert audio_resp.status_code == 404
+
+
+def test_upload_rejects_video_without_mp4_header(tmp_path):
+    client = _client(tmp_path)
+
+    response = _upload(client, "zombie.mp4", b"GIF89a-niet-een-mp4", "mirror_scare_video")
+
+    assert response.status_code == 400
