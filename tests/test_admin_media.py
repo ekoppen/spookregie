@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 from admin.app.db import init_db
 from admin.app.media import (
     MAX_UPLOAD_SIZE,
@@ -6,6 +9,8 @@ from admin.app.media import (
     list_media,
     delete_media,
     validate_upload,
+    extract_audio_if_video,
+    get_media_audio_path,
 )
 from shared.media_sync import content_hash
 
@@ -153,3 +158,83 @@ def test_delete_media_orphan_file_not_deleted(tmp_path):
     assert result is False  # No DB row, so delete returns False
     assert orphan_file.exists()  # File should still exist
     assert orphan_file.read_bytes() == b"orphan-data"  # Unchanged
+
+
+def _mp4_bytes():
+    return b"\x00\x00\x00\x18ftypisom" + b"fake-mp4-body"
+
+
+def test_validate_upload_accepts_valid_mp4_header():
+    assert validate_upload(_mp4_bytes(), "mirror_scare_video") is None
+
+
+def test_validate_upload_rejects_video_without_mp4_header():
+    assert validate_upload(b"GIF89a-niet-een-mp4", "mirror_scare_video") is not None
+
+
+def test_extract_audio_if_video_creates_companion_file(tmp_path, monkeypatch):
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+    video_hash = "a" * 64
+    with open(os.path.join(media_dir, video_hash), "wb") as f:
+        f.write(b"fake-mp4-bytes")
+
+    def fake_run(cmd, capture_output=True, timeout=30):
+        with open(cmd[-1], "wb") as f:
+            f.write(b"fake-wav-bytes")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
+
+    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+
+    assert get_media_audio_path(media_dir, video_hash) is not None
+    with open(get_media_audio_path(media_dir, video_hash), "rb") as f:
+        assert f.read() == b"fake-wav-bytes"
+
+
+def test_extract_audio_if_video_skips_non_video_category(tmp_path, monkeypatch):
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+    calls = []
+    monkeypatch.setattr("admin.app.media.subprocess.run", lambda *a, **k: calls.append(1))
+
+    extract_audio_if_video(media_dir, "a" * 64, "mirror_overlay")
+
+    assert calls == []
+
+
+def test_extract_audio_if_video_cleans_up_on_ffmpeg_failure(tmp_path, monkeypatch):
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+    video_hash = "b" * 64
+
+    def fake_run(cmd, capture_output=True, timeout=30):
+        with open(cmd[-1], "wb"):
+            pass  # ffmpeg laat soms een leeg bestand achter bij falen
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
+
+    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+
+    assert get_media_audio_path(media_dir, video_hash) is None
+
+
+def test_extract_audio_if_video_handles_missing_ffmpeg_binary(tmp_path, monkeypatch):
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+
+    def fake_run(cmd, capture_output=True, timeout=30):
+        raise FileNotFoundError("ffmpeg niet gevonden")
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
+
+    extract_audio_if_video(media_dir, "c" * 64, "mirror_scare_video")  # mag niet crashen
+
+    assert get_media_audio_path(media_dir, "c" * 64) is None
+
+
+def test_get_media_audio_path_rejects_malformed_hash(tmp_path):
+    media_dir = str(tmp_path / "media")
+    assert get_media_audio_path(media_dir, "not-a-hash") is None

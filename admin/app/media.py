@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 
 from shared.media_sync import content_hash, is_content_hash
@@ -19,6 +20,8 @@ def validate_upload(data, category):
         return "overlay moet een PNG-bestand zijn"
     if category == "scare_audio" and not (data[:4] == b"RIFF" and data[8:12] == b"WAVE"):
         return "scare-audio moet een WAV-bestand zijn"
+    if category == "mirror_scare_video" and data[4:8] != b"ftyp":
+        return "scare-video moet een MP4-bestand zijn"
     return None
 
 
@@ -39,6 +42,35 @@ def get_media_path(media_dir, hash_):
     if not is_content_hash(hash_):
         return None
     path = os.path.join(media_dir, hash_)
+    return path if os.path.exists(path) else None
+
+
+def extract_audio_if_video(media_dir, hash_, category):
+    """Extraheert het geluidsspoor van een geüploade scare-video naar
+    <hash>.audio via ffmpeg. Best-effort: geen geluidsspoor, een
+    ontbrekende ffmpeg-binary, of een mislukte extractie levert gewoon
+    geen bestand op -- de video-upload zelf mag hier nooit op stuklopen."""
+    if category != "mirror_scare_video":
+        return
+    video_path = os.path.join(media_dir, hash_)
+    audio_path = video_path + ".audio"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ar", "44100", "-ac", "2", audio_path],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0 and os.path.exists(audio_path):
+            os.remove(audio_path)
+    except Exception:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
+
+def get_media_audio_path(media_dir, hash_):
+    if not is_content_hash(hash_):
+        return None
+    path = os.path.join(media_dir, hash_ + ".audio")
     return path if os.path.exists(path) else None
 
 

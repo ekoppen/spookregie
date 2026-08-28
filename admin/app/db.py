@@ -28,6 +28,12 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            enabled_hashes TEXT NOT NULL DEFAULT '[]'
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS schedule (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             on_time TEXT NOT NULL DEFAULT '18:00',
