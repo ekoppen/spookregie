@@ -1,6 +1,8 @@
 import json
 import os
+import random
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -12,7 +14,7 @@ import paho.mqtt.client as mqtt
 from shared.mqtt_contract import SLEEP_PAYLOAD_ON, Topics, trigger_payload
 from shared.topic_prefix import fetch_topic_prefix, fetch_mirror_camera_source
 from shared.logging_setup import setup_logging
-from shared.media_sync import sync_media
+from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay
@@ -45,6 +47,7 @@ sleeping = threading.Event()
 # hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
 test_trigger_requested = threading.Event()
 active_config = ActiveMirrorConfig()
+synced_scare_videos = {}
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
 # locally (not imported from shared.media_sync) since it's a one-liner and
@@ -66,6 +69,38 @@ def _sync_overlay_in_background(config):
         args=(BACKEND_URL, MEDIA_CACHE_DIR, [overlay_hash]),
         daemon=True,
     ).start()
+
+
+def _sync_scare_videos_in_background(enabled_hashes):
+    """Haalt de ingeschakelde scare-video's (en hun optionele geluid) op de
+    achtergrond op -- zelfde reden als _sync_overlay_in_background:
+    sync_media kan ~10s blokkeren en mag de MQTT-callbackthread niet
+    ophouden."""
+    def _do_sync():
+        global synced_scare_videos
+        videos = sync_media(BACKEND_URL, MEDIA_CACHE_DIR, enabled_hashes)
+        result = {}
+        for h, video_path in videos.items():
+            audio_path = fetch_scare_video_audio(BACKEND_URL, MEDIA_CACHE_DIR, h)
+            result[h] = {"video": video_path, "audio": audio_path}
+        synced_scare_videos = result
+    threading.Thread(target=_do_sync, daemon=True).start()
+
+
+def _apply_scare_video_config_message(payload, logger):
+    try:
+        config = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige scare-video-config-JSON ontvangen, genegeerd")
+        return
+    if not isinstance(config, dict):
+        logger.error("Scare-video-config is geen JSON-object, genegeerd: %r", config)
+        return
+    hashes = config.get("enabled_hashes", [])
+    if not isinstance(hashes, list):
+        logger.error("enabled_hashes is geen lijst, genegeerd: %r", hashes)
+        return
+    _sync_scare_videos_in_background(hashes)
 
 
 def _apply_config_message(payload, is_preview, logger):
@@ -105,6 +140,9 @@ def make_on_message(logger, topics):
                 return
             if msg.topic == topics.control_mirror_test:
                 test_trigger_requested.set()
+                return
+            if msg.topic == topics.config_mirror_scare_video:
+                _apply_scare_video_config_message(msg.payload.decode(), logger)
         except Exception as exc:
             logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
@@ -164,6 +202,48 @@ def _open_camera(source):
         return cv2.VideoCapture(int(source))
     except ValueError:
         return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+
+
+def _play_scare_video(video_path, audio_path, streamer, logger):
+    """Speelt één scare-video (+ optioneel geluid) volledig af, blokkerend
+    -- vervangt het live camerabeeld voor de duur van de clip. Een falende
+    audio-subprocess (bv. geen ALSA-hardware in de Docker-testmodus) mag
+    de video niet onderbreken -- best-effort, gewoon stil doorspelen."""
+    if audio_path:
+        try:
+            subprocess.Popen(["aplay", audio_path])
+        except Exception as exc:
+            logger.warning("Kon geluid niet starten: %s", exc)
+
+    cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+    frame_delay = 1.0 / fps
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            streamer.publish_frame(frame)
+            if not MIRROR_HEADLESS:
+                cv2.imshow("mirror", frame)
+                cv2.waitKey(1)
+            time.sleep(frame_delay)
+    finally:
+        cap.release()
+
+
+def _handle_trigger(streamer, logger):
+    """Reageert op een trigger (echt of test): speelt een willekeurige
+    ingeschakelde scare-video af als er minstens één is gesynct, anders
+    geeft het het aantal seconden terug dat het gewone effect actief moet
+    blijven. Geeft None terug als er een video is afgespeeld (active_until
+    moet dan ongewijzigd blijven -- de video's eigen duur bepaalde al hoe
+    lang het live beeld vervangen werd)."""
+    if synced_scare_videos:
+        chosen = random.choice(list(synced_scare_videos.values()))
+        _play_scare_video(chosen["video"], chosen["audio"], streamer, logger)
+        return None
+    return ACTIVE_SECONDS
 
 
 def _redact_source(source):
@@ -228,6 +308,7 @@ def main():
         client.subscribe(topics.config_mirror)
         client.subscribe(topics.control_mirror_preview)
         client.subscribe(topics.control_mirror_test)
+        client.subscribe(topics.config_mirror_scare_video)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
@@ -289,17 +370,21 @@ def main():
             now = time.time()
 
             if trigger.detect(gray) and now > active_until:
-                active_until = now + ACTIVE_SECONDS
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
+                extra_seconds = _handle_trigger(streamer, logger)
+                if extra_seconds is not None:
+                    active_until = now + extra_seconds
 
             # Handmatige test vanaf de beheerpagina: wel het effect tonen, maar
             # bewust géén mirror/triggered publiceren — dat topic betekent
             # "echte beweging gezien" en laat de scare-nodes meedoen.
             if test_trigger_requested.is_set():
                 test_trigger_requested.clear()
-                active_until = now + ACTIVE_SECONDS
                 logger.info("mirror test-trigger")
+                extra_seconds = _handle_trigger(streamer, logger)
+                if extra_seconds is not None:
+                    active_until = now + extra_seconds
 
             # Ook renderen buiten de PIR-actieve window als er recent een
             # preview-config is gezet (beheerder is live aan het tweaken op

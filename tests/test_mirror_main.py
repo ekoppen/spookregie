@@ -146,3 +146,141 @@ def test_preview_config_also_syncs_overlay(monkeypatch):
         '{"overlay_hash": "' + "a" * 64 + '"}', is_preview=True, logger=_FakeLogger()
     )
     assert started and started[0]["args"][2] == ["a" * 64]
+
+
+def test_apply_scare_video_config_message_ignores_non_dict_json():
+    logger = _FakeLogger()
+    mirror_main._apply_scare_video_config_message("[1, 2, 3]", logger)
+    assert logger.errors
+
+
+def test_apply_scare_video_config_message_ignores_malformed_json():
+    logger = _FakeLogger()
+    mirror_main._apply_scare_video_config_message("{niet-geldig-json", logger)
+    assert logger.errors
+
+
+def test_apply_scare_video_config_message_ignores_non_list_hashes():
+    logger = _FakeLogger()
+    mirror_main._apply_scare_video_config_message('{"enabled_hashes": "niet-een-lijst"}', logger)
+    assert logger.errors
+
+
+def test_apply_scare_video_config_message_triggers_background_sync(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mirror_main, "_sync_scare_videos_in_background", lambda hashes: calls.append(hashes))
+
+    mirror_main._apply_scare_video_config_message('{"enabled_hashes": ["a"]}', _FakeLogger())
+
+    assert calls == [["a"]]
+
+
+def test_play_scare_video_publishes_all_frames(monkeypatch):
+    class FakeCap:
+        def __init__(self):
+            self._remaining = 3
+
+        def get(self, prop):
+            return 24.0
+
+        def read(self):
+            if self._remaining > 0:
+                self._remaining -= 1
+                return True, f"frame-{self._remaining}"
+            return False, None
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: FakeCap())
+    monkeypatch.setattr(mirror_main.time, "sleep", lambda s: None)
+    monkeypatch.setattr(mirror_main, "MIRROR_HEADLESS", True)
+
+    published = []
+
+    class FakeStreamer:
+        def publish_frame(self, frame):
+            published.append(frame)
+
+    mirror_main._play_scare_video("video.mp4", None, FakeStreamer(), _FakeLogger())
+
+    assert published == ["frame-2", "frame-1", "frame-0"]
+
+
+def test_play_scare_video_starts_audio_when_provided(monkeypatch):
+    class FakeCap:
+        def get(self, prop):
+            return 24.0
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: FakeCap())
+    monkeypatch.setattr(mirror_main.time, "sleep", lambda s: None)
+    monkeypatch.setattr(mirror_main, "MIRROR_HEADLESS", True)
+
+    popen_calls = []
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd: popen_calls.append(cmd))
+
+    class FakeStreamer:
+        def publish_frame(self, frame):
+            pass
+
+    mirror_main._play_scare_video("video.mp4", "audio.wav", FakeStreamer(), _FakeLogger())
+
+    assert popen_calls == [["aplay", "audio.wav"]]
+
+
+def test_play_scare_video_survives_audio_start_failure(monkeypatch):
+    class FakeCap:
+        def get(self, prop):
+            return 24.0
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda *a, **k: FakeCap())
+    monkeypatch.setattr(mirror_main.time, "sleep", lambda s: None)
+    monkeypatch.setattr(mirror_main, "MIRROR_HEADLESS", True)
+
+    def failing_popen(cmd):
+        raise FileNotFoundError("aplay niet gevonden")
+
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", failing_popen)
+
+    published = []
+
+    class FakeStreamer:
+        def publish_frame(self, frame):
+            published.append(frame)
+
+    mirror_main._play_scare_video("video.mp4", "audio.wav", FakeStreamer(), _FakeLogger())
+
+    assert published == []  # FakeCap.read() geeft meteen False terug, mag niet crashen
+
+
+def test_handle_trigger_plays_scare_video_when_available(monkeypatch):
+    mirror_main.synced_scare_videos = {"h1": {"video": "v.mp4", "audio": "a.wav"}}
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_play_scare_video", lambda v, a, s, l: play_calls.append((v, a)))
+
+    try:
+        result = mirror_main._handle_trigger("streamer", _FakeLogger())
+        assert result is None
+        assert play_calls == [("v.mp4", "a.wav")]
+    finally:
+        mirror_main.synced_scare_videos = {}
+
+
+def test_handle_trigger_returns_active_seconds_when_no_scare_videos():
+    mirror_main.synced_scare_videos = {}
+
+    result = mirror_main._handle_trigger("streamer", _FakeLogger())
+
+    assert result == mirror_main.ACTIVE_SECONDS
