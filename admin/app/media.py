@@ -63,8 +63,11 @@ def extract_audio_if_video(media_dir, hash_, category):
         if result.returncode != 0 and os.path.exists(audio_path):
             os.remove(audio_path)
     except Exception:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
+        try:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+        except Exception:
+            pass
 
 
 def get_media_audio_path(media_dir, hash_):

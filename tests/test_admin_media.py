@@ -235,6 +235,25 @@ def test_extract_audio_if_video_handles_missing_ffmpeg_binary(tmp_path, monkeypa
     assert get_media_audio_path(media_dir, "c" * 64) is None
 
 
+def test_extract_audio_if_video_survives_cleanup_failure(tmp_path, monkeypatch):
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+    video_hash = "d" * 64
+
+    def fake_run(cmd, capture_output=True, timeout=30):
+        with open(cmd[-1], "wb"):
+            pass  # ffmpeg laat een leeg bestand achter bij falen
+        return subprocess.CompletedProcess(cmd, 1)
+
+    def failing_remove(path):
+        raise PermissionError("kan niet verwijderen")
+
+    monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
+    monkeypatch.setattr("admin.app.media.os.remove", failing_remove)
+
+    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")  # mag niet crashen
+
+
 def test_get_media_audio_path_rejects_malformed_hash(tmp_path):
     media_dir = str(tmp_path / "media")
     assert get_media_audio_path(media_dir, "not-a-hash") is None
