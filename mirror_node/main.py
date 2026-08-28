@@ -8,6 +8,13 @@ import tempfile
 import time
 import threading
 
+# Vóór cv2-import: forceert TCP i.p.v. ffmpeg's standaard RTSP-transport.
+# Sommige camera's (in de praktijk waargenomen: Reolink) sturen RTP-pakketten
+# met beschadigde/dooreengehusselde sequentienummers over UDP, wat ffmpeg
+# eindeloos laat spammen met "bad cseq" en de renderloop laat vastlopen.
+# TCP is betrouwbaar/geordend, dus dat symptoom verdwijnt.
+os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+
 import cv2
 import paho.mqtt.client as mqtt
 
