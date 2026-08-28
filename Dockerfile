@@ -23,6 +23,10 @@ FROM python:3.11-slim AS backend
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg alsa-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY admin/requirements.txt ./admin/requirements.txt
 RUN pip install --no-cache-dir -r admin/requirements.txt
 
