@@ -272,7 +272,7 @@ def test_handle_trigger_plays_scare_video_when_available(monkeypatch):
 
     try:
         result = mirror_main._handle_trigger("streamer", _FakeLogger())
-        assert result is None
+        assert result == mirror_main.ACTIVE_SECONDS
         assert play_calls == [("v.mp4", "a.wav")]
     finally:
         mirror_main.synced_scare_videos = {}

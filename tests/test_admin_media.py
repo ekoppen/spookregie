@@ -1,5 +1,8 @@
 import os
+import shutil
 import subprocess
+
+import pytest
 
 from admin.app.db import init_db
 from admin.app.media import (
@@ -257,3 +260,37 @@ def test_extract_audio_if_video_survives_cleanup_failure(tmp_path, monkeypatch):
 def test_get_media_audio_path_rejects_malformed_hash(tmp_path):
     media_dir = str(tmp_path / "media")
     assert get_media_audio_path(media_dir, "not-a-hash") is None
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg niet geïnstalleerd")
+def test_extract_audio_if_video_produces_real_playable_wav(tmp_path):
+    """Regressietest: eerdere versie miste -f wav, waardoor ffmpeg altijd
+    non-zero exitte en er nooit een geluidsbestand ontstond -- elke test
+    die subprocess.run mockte kon dit niet zien."""
+    media_dir = str(tmp_path / "media")
+    os.makedirs(media_dir)
+    video_hash = "e" * 64
+    video_path = os.path.join(media_dir, video_hash)
+
+    # Genereer een echte, korte mp4 met een testtoon als geluidsspoor.
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-f", "lavfi", "-i", "color=c=black:s=64x64:d=1",
+            "-shortest", "-c:v", "libx264", "-c:a", "aac", "-f", "mp4",
+            video_path,
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    assert os.path.exists(video_path)
+
+    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+
+    audio_path = get_media_audio_path(media_dir, video_hash)
+    assert audio_path is not None
+    with open(audio_path, "rb") as f:
+        header = f.read(12)
+    assert header[:4] == b"RIFF"
+    assert header[8:12] == b"WAVE"

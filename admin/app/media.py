@@ -56,7 +56,7 @@ def extract_audio_if_video(media_dir, hash_, category):
     audio_path = video_path + ".audio"
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ar", "44100", "-ac", "2", audio_path],
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ar", "44100", "-ac", "2", "-f", "wav", audio_path],
             capture_output=True,
             timeout=30,
         )

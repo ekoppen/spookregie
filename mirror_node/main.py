@@ -235,14 +235,14 @@ def _play_scare_video(video_path, audio_path, streamer, logger):
 def _handle_trigger(streamer, logger):
     """Reageert op een trigger (echt of test): speelt een willekeurige
     ingeschakelde scare-video af als er minstens één is gesynct, anders
-    geeft het het aantal seconden terug dat het gewone effect actief moet
-    blijven. Geeft None terug als er een video is afgespeeld (active_until
-    moet dan ongewijzigd blijven -- de video's eigen duur bepaalde al hoe
-    lang het live beeld vervangen werd)."""
+    blijft het gewone effect actief. Geeft altijd ACTIVE_SECONDS terug --
+    de aanroeper gebruikt dit met een verse time.time() (na de eventueel
+    blokkerende video-afspeel) zodat een net geschrokken bezoeker die nog
+    beweegt de trigger niet meteen laat herhalen (de trigger zelf heeft
+    geen eigen cooldown; dit is wat er normaal voor zorgt)."""
     if synced_scare_videos:
         chosen = random.choice(list(synced_scare_videos.values()))
         _play_scare_video(chosen["video"], chosen["audio"], streamer, logger)
-        return None
     return ACTIVE_SECONDS
 
 
@@ -372,9 +372,8 @@ def main():
             if trigger.detect(gray) and now > active_until:
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
-                extra_seconds = _handle_trigger(streamer, logger)
-                if extra_seconds is not None:
-                    active_until = now + extra_seconds
+                cooldown = _handle_trigger(streamer, logger)
+                active_until = time.time() + cooldown
 
             # Handmatige test vanaf de beheerpagina: wel het effect tonen, maar
             # bewust géén mirror/triggered publiceren — dat topic betekent
@@ -382,9 +381,8 @@ def main():
             if test_trigger_requested.is_set():
                 test_trigger_requested.clear()
                 logger.info("mirror test-trigger")
-                extra_seconds = _handle_trigger(streamer, logger)
-                if extra_seconds is not None:
-                    active_until = now + extra_seconds
+                cooldown = _handle_trigger(streamer, logger)
+                active_until = time.time() + cooldown
 
             # Ook renderen buiten de PIR-actieve window als er recent een
             # preview-config is gezet (beheerder is live aan het tweaken op
