@@ -1,3 +1,5 @@
+import json
+
 import admin.app.mqtt_bridge as mqtt_bridge_module
 from admin.app.mqtt_bridge import MqttBridge
 from admin.app.runtime_settings import RuntimeSettings
@@ -122,3 +124,16 @@ def test_on_message_strips_prefix_before_tracker_and_broadcast(monkeypatch):
     bridge._on_message(bridge._client, None, FakeMsg())
 
     assert tracker.calls == [("status/mirror", "online")]
+
+
+def test_publish_mirror_scare_video_config_uses_configured_prefix(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
+
+    bridge.publish_mirror_scare_video_config(["a" * 64])
+
+    topic, payload, retain = bridge._client.published[-1]
+    assert topic == "test/config/mirror/scare-video"
+    assert json.loads(payload) == {"enabled_hashes": ["a" * 64]}
+    assert retain is True

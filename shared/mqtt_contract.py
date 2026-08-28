@@ -59,6 +59,10 @@ class Topics:
     def config_scare(self, zone: str) -> str:
         return self._p(f"config/scare/{zone}")
 
+    @property
+    def config_mirror_scare_video(self) -> str:
+        return self._p("config/mirror/scare-video")
+
     def control_scare_test(self, zone: str) -> str:
         return self._p(f"control/scare/{zone}/test-trigger")
 

@@ -102,6 +102,13 @@ class MqttBridge:
     def publish_mirror_test(self):
         self._client.publish(self._topics.control_mirror_test, "{}")
 
+    def publish_mirror_scare_video_config(self, enabled_hashes):
+        self._client.publish(
+            self._topics.config_mirror_scare_video,
+            json.dumps({"enabled_hashes": enabled_hashes}),
+            retain=True,
+        )
+
     def publish_scare_config(self, zone, enabled_hashes):
         self._client.publish(
             self._topics.config_scare(zone),

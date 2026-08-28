@@ -27,6 +27,7 @@ from admin.app.routers import ws as ws_router
 from admin.app.routers import settings as settings_router
 from admin.app.routers import node_config as node_config_router
 from admin.app.routers import mirror_process as mirror_process_router
+from admin.app.routers import mirror_scare_video as mirror_scare_video_router
 from admin.app.routers.schedule import read_schedule
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json", "/api/node-config"}
@@ -101,6 +102,7 @@ def create_app(settings=None):
     app.include_router(settings_router.router)
     app.include_router(node_config_router.router)
     app.include_router(mirror_process_router.router)
+    app.include_router(mirror_scare_video_router.router)
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if os.path.isdir(frontend_dist):
