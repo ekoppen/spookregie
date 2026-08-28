@@ -13,7 +13,15 @@ import threading
 # met beschadigde/dooreengehusselde sequentienummers over UDP, wat ffmpeg
 # eindeloos laat spammen met "bad cseq" en de renderloop laat vastlopen.
 # TCP is betrouwbaar/geordend, dus dat symptoom verdwijnt.
-os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+# stimeout (microseconden): socket-timeout voor de RTSP-verbinding. Zonder
+# dit blokkeert cap.read() voor onbepaalde tijd zodra de camera/verbinding
+# ook maar even hapert -- in de praktijk waargenomen, geen enkele
+# foutmelding, de hele renderloop staat dan stil. Met deze timeout geeft
+# read() na 5s zonder data gewoon False terug, en pakt de bestaande
+# heropen-logica (MAX_FAILURES_BEFORE_REOPEN) het vanzelf weer op.
+os.environ.setdefault(
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;5000000"
+)
 
 import cv2
 import paho.mqtt.client as mqtt
