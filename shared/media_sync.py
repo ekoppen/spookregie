@@ -70,3 +70,29 @@ def sync_media(base_url, cache_dir, wanted_hashes, fetch=None):
             f.write(data)
         result[h] = local_path
     return result
+
+
+def fetch_scare_video_audio(base_url, cache_dir, video_hash, fetch=None):
+    """Haalt het (optionele) geluidsspoor bij een scare-video op en
+    cachet het lokaal als <video_hash>.audio. Geen content-hash-
+    verificatie mogelijk (het geluid is een afgeleid bestand, niet
+    zelf-content-addressed zoals sync_media's hashes) -- een 404 (geen
+    geluid voor deze clip) of elke andere fout betekent gewoon 'stil
+    afspelen', geen foutpad."""
+    if fetch is None:
+        def fetch(url):
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                return _read_with_size_cap(resp)
+    if not is_content_hash(video_hash):
+        return None
+    os.makedirs(cache_dir, exist_ok=True)
+    local_path = os.path.join(cache_dir, f"{video_hash}.audio")
+    if os.path.exists(local_path):
+        return local_path
+    try:
+        data = fetch(f"{base_url}/api/media/{video_hash}/audio")
+    except Exception:
+        return None
+    with open(local_path, "wb") as f:
+        f.write(data)
+    return local_path

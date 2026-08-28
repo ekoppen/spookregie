@@ -2,6 +2,7 @@ from shared.media_sync import (
     content_hash,
     is_content_hash,
     sync_media,
+    fetch_scare_video_audio,
     _read_with_size_cap,
     _FETCH_MAX_SIZE,
 )
@@ -231,3 +232,58 @@ def test_sync_media_handles_oversized_fetch_error(tmp_path):
 
     # No file should be written
     assert list(cache_dir.glob("*")) == []
+
+
+def test_fetch_scare_video_audio_uses_cache_when_file_exists(tmp_path):
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    video_hash = "a" * 64
+    (cache_dir / f"{video_hash}.audio").write_bytes(b"cached-audio")
+    calls = []
+
+    def fake_fetch(url):
+        calls.append(url)
+        return b"should not be called"
+
+    result = fetch_scare_video_audio("http://backend", str(cache_dir), video_hash, fetch=fake_fetch)
+
+    assert result == str(cache_dir / f"{video_hash}.audio")
+    assert calls == []
+
+
+def test_fetch_scare_video_audio_fetches_missing_file(tmp_path):
+    cache_dir = tmp_path / "cache"
+    video_hash = "b" * 64
+    calls = []
+
+    def fake_fetch(url):
+        calls.append(url)
+        return b"fresh-audio-bytes"
+
+    result = fetch_scare_video_audio("http://backend", str(cache_dir), video_hash, fetch=fake_fetch)
+
+    assert calls == [f"http://backend/api/media/{video_hash}/audio"]
+    assert result == str(cache_dir / f"{video_hash}.audio")
+    assert (cache_dir / f"{video_hash}.audio").read_bytes() == b"fresh-audio-bytes"
+
+
+def test_fetch_scare_video_audio_returns_none_on_fetch_failure(tmp_path):
+    cache_dir = tmp_path / "cache"
+    video_hash = "c" * 64
+
+    def failing_fetch(url):
+        raise OSError("404")
+
+    result = fetch_scare_video_audio("http://backend", str(cache_dir), video_hash, fetch=failing_fetch)
+
+    assert result is None
+
+
+def test_fetch_scare_video_audio_rejects_malformed_hash(tmp_path):
+    cache_dir = tmp_path / "cache"
+
+    result = fetch_scare_video_audio(
+        "http://backend", str(cache_dir), "not-a-hash", fetch=lambda url: b"x"
+    )
+
+    assert result is None
