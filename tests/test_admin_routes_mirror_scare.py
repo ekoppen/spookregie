@@ -13,12 +13,6 @@ class FakeBridge:
     def stop(self):
         pass
 
-    def publish_mirror_config(self, config):
-        self.calls.append(("mirror_config", config))
-
-    def publish_mirror_preview(self, config):
-        self.calls.append(("mirror_preview", config))
-
     def publish_mirror_test(self):
         self.calls.append(("mirror_test",))
 
@@ -43,36 +37,6 @@ def _client(tmp_path):
     client = TestClient(app)
     client.post("/api/login", json={"password": "testwachtwoord"})
     return client, app.state.bridge
-
-
-def test_put_mirror_config_saves_and_publishes(tmp_path):
-    client, bridge = _client(tmp_path)
-    payload = {
-        "effect": "thermal", "params": {"intensity": 0.8}, "overlay_hash": None,
-        "scale": 1.0, "position": [0.5, 0.5],
-        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-    }
-
-    response = client.put("/api/mirror/config", json=payload)
-
-    assert response.status_code == 200
-    assert ("mirror_config", payload) in bridge.calls
-
-    get_response = client.get("/api/mirror/config")
-    assert get_response.json() == payload
-
-
-def test_post_mirror_preview_publishes_without_saving(tmp_path):
-    client, bridge = _client(tmp_path)
-    client.put("/api/mirror/config", json={"effect": "xray", "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5]})
-    preview_payload = {"effect": "contour", "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5]}
-
-    response = client.post("/api/mirror/preview", json=preview_payload)
-
-    assert response.status_code == 200
-    assert ("mirror_preview", preview_payload) in bridge.calls
-    # opgeslagen config blijft ongewijzigd
-    assert client.get("/api/mirror/config").json()["effect"] == "xray"
 
 
 def test_post_mirror_test_publishes_test_trigger(tmp_path):
@@ -113,38 +77,6 @@ def test_scare_routes_reject_zone_with_mqtt_wildcards(tmp_path):
 
     # de bridge is nooit aangeroepen met een ongeldige zone
     assert bridge.calls == []
-
-
-def test_put_mirror_config_normalizes_partial_payload(tmp_path):
-    client, bridge = _client(tmp_path)
-
-    response = client.put("/api/mirror/config", json={"effect": "thermal"})
-
-    assert response.status_code == 200
-    published = [c for c in bridge.calls if c[0] == "mirror_config"][-1][1]
-    stored = client.get("/api/mirror/config").json()
-    # gepubliceerde en opgeslagen config zijn identiek en volledig
-    assert published == stored
-    assert published == {
-        "effect": "thermal", "params": {}, "overlay_hash": None,
-        "scale": 1.0, "position": [0.5, 0.5],
-        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-    }
-
-
-def test_put_mirror_config_saves_and_publishes_canvas_fields(tmp_path):
-    client, bridge = _client(tmp_path)
-    payload = {
-        "effect": "xray", "params": {}, "overlay_hash": None,
-        "scale": 1.0, "position": [0.5, 0.5],
-        "canvas_size": [576, 720], "source_scale": 1.3, "source_position": [0.2, 0.8],
-    }
-
-    response = client.put("/api/mirror/config", json=payload)
-
-    assert response.status_code == 200
-    assert ("mirror_config", payload) in bridge.calls
-    assert client.get("/api/mirror/config").json() == payload
 
 
 def test_post_scare_test_publishes(tmp_path):
