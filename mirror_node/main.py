@@ -280,6 +280,19 @@ def _handle_trigger(streamer, logger):
     return ACTIVE_SECONDS
 
 
+def _decide_action(fired, winning):
+    """Bepaalt wat de hoofdlus deze cyclus moet doen op basis van of er
+    net een trigger is afgegaan en welke scene de SceneEngine nu als
+    winnaar aanwijst. Puur -- geen state, geen I/O -- zodat de
+    driewegs-keuze (scare-video afspelen / camera-effect renderen /
+    zwart beeld) los van de camera-lus getest kan worden."""
+    if winning is None:
+        return "blank"
+    if winning.get("source_mode") == "scare_video":
+        return "scare_video" if fired else "blank"
+    return "render"
+
+
 def _redact_source(source):
     """Verbergt inloggegevens (user:pass@) uit een camera-URL voor logging."""
     source = source or CAMERA_INDEX
@@ -418,21 +431,17 @@ def main():
                 fired = True
 
             winning = scene_engine.resolve(now < active_until, now_hhmm)
+            action = _decide_action(fired, winning)
 
-            # Bij het moment van afgaan zelf: als de winnende scene een
-            # scare-video is, speel die nu blokkerend af (bestaand
-            # _handle_trigger-pad, ongewijzigd) i.p.v. elke cyclus opnieuw.
-            if fired and winning is not None and winning.get("source_mode") == "scare_video":
+            if action == "scare_video":
+                # Bij het moment van afgaan zelf: speel de scare-video nu
+                # blokkerend af (bestaand _handle_trigger-pad, ongewijzigd)
+                # i.p.v. elke cyclus opnieuw. _play_scare_video streamt zijn
+                # eigen frames al, dus hier verder niets meer te renderen.
                 cooldown = _handle_trigger(streamer, logger)
                 active_until = time.time() + cooldown
-                winning = scene_engine.resolve(True, now_hhmm)
-
-            if winning is None:
                 rendered = frame * 0
-            elif winning.get("source_mode") == "scare_video":
-                # net al blokkerend afgespeeld (of nog in het venster van een
-                # eerdere trigger zonder nieuwe afgaande trigger deze cyclus)
-                # -- niets aanvullends te renderen.
+            elif action == "blank":
                 rendered = frame * 0
             else:
                 try:

@@ -183,6 +183,27 @@ def test_apply_scene_preview_message_sets_preview_and_syncs_overlay(monkeypatch)
         mirror_main.scene_engine._preview_set_at = None
 
 
+def test_decide_action_no_winner_is_blank():
+    assert mirror_main._decide_action(False, None) == "blank"
+    assert mirror_main._decide_action(True, None) == "blank"
+
+
+def test_decide_action_scare_video_scene_fired_plays_scare_video():
+    winning = {"source_mode": "scare_video"}
+    assert mirror_main._decide_action(True, winning) == "scare_video"
+
+
+def test_decide_action_scare_video_scene_not_fired_is_blank():
+    winning = {"source_mode": "scare_video"}
+    assert mirror_main._decide_action(False, winning) == "blank"
+
+
+def test_decide_action_camera_scene_renders_regardless_of_fired():
+    winning = {"source_mode": "camera"}
+    assert mirror_main._decide_action(True, winning) == "render"
+    assert mirror_main._decide_action(False, winning) == "render"
+
+
 def test_apply_scare_video_config_message_ignores_non_dict_json():
     logger = _FakeLogger()
     mirror_main._apply_scare_video_config_message("[1, 2, 3]", logger)
