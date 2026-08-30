@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { getNodes } from "../api/nodes";
 import { getSchedule, putSchedule, emergencyStop, wake } from "../api/schedule";
+import { listScenes, deleteScene, reorderScenes } from "../api/scenes";
+import { testMirror } from "../api/mirror";
+import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
 import { useWebSocket } from "../hooks/useWebSocket";
 import NodeStatusCard from "../components/NodeStatusCard";
-import type { NodeStatusMap, Schedule, WsMessage } from "../types";
+import SceneWizardModal from "../components/SceneWizardModal";
+import type { NodeStatusMap, Schedule, Scene, WsMessage } from "../types";
 import "./DashboardPage.css";
 
 export default function DashboardPage() {
@@ -14,6 +18,19 @@ export default function DashboardPage() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [waking, setWaking] = useState(false);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardSceneId, setWizardSceneId] = useState<number | null>(null);
+  const [running, setRunning] = useState(false);
+  const [processBusy, setProcessBusy] = useState(false);
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [testing, setTesting] = useState(false);
+
+  function refreshScenes() {
+    listScenes()
+      .then(setScenes)
+      .catch(() => setError("Scenes konden niet worden geladen."));
+  }
 
   useEffect(() => {
     getNodes()
@@ -22,14 +39,25 @@ export default function DashboardPage() {
     getSchedule()
       .then(setSchedule)
       .catch(() => setError("Tijdvenster kon niet worden geladen."));
+    refreshScenes();
+    getMirrorProcessStatus()
+      .then((result) => setRunning(result.running))
+      .catch(() => {
+        /* status blijft "gestopt" tonen bij een netwerkfout */
+      });
   }, []);
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
-    if (msg.type !== "status") return;
-    const match = msg.topic.match(/^status\/(.+)$/);
-    if (!match) return;
-    const node = match[1];
-    setNodes((prev) => ({ ...prev, [node]: { status: msg.payload as "online" | "offline" } }));
+    if (msg.type === "status") {
+      const match = msg.topic.match(/^status\/(.+)$/);
+      if (match) {
+        setNodes((prev) => ({ ...prev, [match[1]]: { status: msg.payload as "online" | "offline" } }));
+      }
+      return;
+    }
+    if (msg.type === "log" && msg.topic === "process/mirror-node") {
+      setLogLines((prev) => [...prev, msg.payload].slice(-200));
+    }
   }, []);
 
   const { connected } = useWebSocket(handleWsMessage);
@@ -80,6 +108,74 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleDeleteScene(id: number) {
+    try {
+      await deleteScene(id);
+      refreshScenes();
+    } catch {
+      setError("Scene verwijderen is mislukt.");
+    }
+  }
+
+  function handleMoveScene(id: number, direction: -1 | 1) {
+    const index = scenes.findIndex((s) => s.id === id);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= scenes.length) return;
+    const reordered = [...scenes];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setScenes(reordered);
+    reorderScenes(reordered.map((s) => s.id)).catch(() => {
+      setError("Volgorde wijzigen is mislukt.");
+      refreshScenes();
+    });
+  }
+
+  function openWizard(id: number | null) {
+    setWizardSceneId(id);
+    setWizardOpen(true);
+  }
+
+  function triggerSummary(scene: Scene): string {
+    if (scene.trigger_type === "always") return "Altijd";
+    if (scene.trigger_type === "motion") return "Beweging";
+    return `Tijdschema ${scene.trigger_from ?? "?"}–${scene.trigger_until ?? "?"}`;
+  }
+
+  async function handleStartProcess() {
+    setProcessBusy(true);
+    try {
+      const status = await startMirrorProcess();
+      setRunning(status.running);
+    } catch {
+      setError("Mirror-node starten is mislukt.");
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function handleStopProcess() {
+    setProcessBusy(true);
+    try {
+      const status = await stopMirrorProcess();
+      setRunning(status.running);
+    } catch {
+      setError("Mirror-node stoppen is mislukt.");
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    try {
+      await testMirror();
+    } catch {
+      setError("Testoproep is mislukt.");
+    } finally {
+      setTesting(false);
+    }
+  }
+
   const nodeEntries = Object.entries(nodes);
   const onlineCount = nodeEntries.filter(([, info]) => info.status === "online").length;
 
@@ -108,6 +204,68 @@ export default function DashboardPage() {
         <p className="dash-notice" role="status">
           {notice}
         </p>
+      )}
+
+      <section className="dash-panel">
+        <p className="dash-panel__eyebrow">Scenes</p>
+        <div className="scene-grid">
+          {scenes.map((scene, index) => (
+            <div className="scene-card" key={scene.id} data-enabled={scene.enabled}>
+              <p className="scene-card__name">{scene.name}</p>
+              <p className="scene-card__trigger">{triggerSummary(scene)}</p>
+              <div className="scene-card__actions">
+                <button type="button" onClick={() => handleMoveScene(scene.id, -1)} disabled={index === 0}>
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMoveScene(scene.id, 1)}
+                  disabled={index === scenes.length - 1}
+                >
+                  ▼
+                </button>
+                <button type="button" onClick={() => openWizard(scene.id)}>
+                  Bewerken
+                </button>
+                <button type="button" onClick={() => handleDeleteScene(scene.id)}>
+                  Verwijderen
+                </button>
+              </div>
+            </div>
+          ))}
+          <button type="button" className="scene-card scene-card--add" onClick={() => openWizard(null)}>
+            + Nieuwe scene
+          </button>
+        </div>
+      </section>
+
+      <section className="dash-panel">
+        <p className="dash-panel__eyebrow">Mirror-node</p>
+        <div className="mirror-process-row">
+          <span className={`mirror-process-status ${running ? "mirror-process-status--running" : ""}`}>
+            {running ? "Draait" : "Gestopt"}
+          </span>
+          <button type="button" onClick={handleStartProcess} disabled={processBusy || running}>
+            {processBusy ? "Bezig…" : "Start"}
+          </button>
+          <button type="button" onClick={handleStopProcess} disabled={processBusy || !running}>
+            {processBusy ? "Bezig…" : "Stop"}
+          </button>
+          <button type="button" onClick={handleTest} disabled={testing}>
+            {testing ? "Bezig…" : "Test"}
+          </button>
+        </div>
+        <pre className="mirror-process-log">
+          {logLines.length ? logLines.join("\n") : "Nog geen logregels — start de mirror-node om ze hier te zien."}
+        </pre>
+      </section>
+
+      {wizardOpen && (
+        <SceneWizardModal
+          sceneId={wizardSceneId}
+          onClose={() => setWizardOpen(false)}
+          onSaved={refreshScenes}
+        />
       )}
 
       <section className="dash-panel">

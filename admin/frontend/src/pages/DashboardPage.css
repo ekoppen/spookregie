@@ -362,3 +362,116 @@
     animation: none;
   }
 }
+
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.scene-card {
+  padding: 1rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scene-card[data-enabled="false"] {
+  opacity: 0.5;
+}
+
+.scene-card__name {
+  font-weight: 700;
+  color: var(--bone);
+}
+
+.scene-card__trigger {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.scene-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+}
+
+.scene-card__actions button {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+  cursor: pointer;
+}
+
+.scene-card--add {
+  align-items: center;
+  justify-content: center;
+  color: var(--ash);
+  cursor: pointer;
+  border-style: dashed;
+}
+
+.mirror-process-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mirror-process-row button {
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  color: var(--bone);
+  cursor: pointer;
+}
+
+.mirror-process-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mirror-process-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ash);
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+}
+
+.mirror-process-status--running {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.mirror-process-log {
+  margin-top: 0.75rem;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--ash);
+  white-space: pre-wrap;
+}
