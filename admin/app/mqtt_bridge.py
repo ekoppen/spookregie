@@ -93,11 +93,11 @@ class MqttBridge:
         self._client = self._build_client(settings)
         self.start()
 
-    def publish_mirror_config(self, config):
-        self._client.publish(self._topics.config_mirror, json.dumps(config), retain=True)
+    def publish_mirror_scenes(self, scenes):
+        self._client.publish(self._topics.config_mirror_scenes, json.dumps(scenes), retain=True)
 
-    def publish_mirror_preview(self, config):
-        self._client.publish(self._topics.control_mirror_preview, json.dumps(config))
+    def publish_mirror_scene_preview(self, scene):
+        self._client.publish(self._topics.control_mirror_scene_preview, json.dumps(scene))
 
     def publish_mirror_test(self):
         self._client.publish(self._topics.control_mirror_test, "{}")

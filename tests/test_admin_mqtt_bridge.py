@@ -94,14 +94,30 @@ def test_start_subscribes_with_configured_prefix(monkeypatch):
     ]
 
 
-def test_publish_mirror_config_uses_configured_prefix(monkeypatch):
+def test_publish_mirror_scenes_uses_configured_prefix(monkeypatch):
     monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
 
     bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
 
-    bridge.publish_mirror_config({"effect": "xray"})
+    bridge.publish_mirror_scenes([{"id": 1, "name": "Basis"}])
 
-    assert bridge._client.published[-1][0] == "test/config/mirror"
+    topic, payload, retain = bridge._client.published[-1]
+    assert topic == "test/config/mirror/scenes"
+    assert json.loads(payload) == [{"id": 1, "name": "Basis"}]
+    assert retain is True
+
+
+def test_publish_mirror_scene_preview_is_not_retained(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
+
+    bridge.publish_mirror_scene_preview({"id": 1, "effect": "xray"})
+
+    topic, payload, retain = bridge._client.published[-1]
+    assert topic == "test/control/mirror/scene-preview"
+    assert json.loads(payload) == {"id": 1, "effect": "xray"}
+    assert retain is False
 
 
 def test_on_message_strips_prefix_before_tracker_and_broadcast(monkeypatch):
