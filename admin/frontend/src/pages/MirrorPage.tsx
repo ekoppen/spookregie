@@ -217,6 +217,36 @@ export default function MirrorPage() {
         <p className="mirror-loading">Laden…</p>
       ) : (
         <>
+          <h2 className="mirror-group-title">1. Bron</h2>
+          <section className="mirror-panel">
+            <p className="mirror-panel__eyebrow">Camera-bron</p>
+            <div className="mirror-effect-row">
+              <label className="mirror-field mirror-field--wide">
+                <span className="mirror-field__label">URL (optioneel)</span>
+                <input
+                  className="mirror-field__input"
+                  type="text"
+                  value={cameraSourceDraft}
+                  placeholder="bijv. http://192.168.178.80:8080/stream"
+                  onChange={(e) => setCameraSourceDraft(e.target.value)}
+                />
+              </label>
+              <button
+                className="mirror-apply"
+                type="button"
+                onClick={handleSaveCameraSource}
+                disabled={savingCameraSource || !settings}
+              >
+                {savingCameraSource ? "Bezig…" : "Opslaan"}
+              </button>
+            </div>
+            <p className="mirror-field__label" style={{ marginTop: "0.5rem" }}>
+              Leeg = de lokale camera op de node zelf. De node haalt dit pas op bij zijn
+              eerstvolgende herstart.
+            </p>
+          </section>
+
+          <h2 className="mirror-group-title">2. Regie — wat er met het beeld gebeurt</h2>
           <section className="mirror-panel">
             <p className="mirror-panel__eyebrow">Effect & parameters</p>
             <div className="mirror-effect-row">
@@ -266,34 +296,6 @@ export default function MirrorPage() {
               selected={config.overlay_hash ? [config.overlay_hash] : []}
               onSelectionChange={(hashes) => update({ overlay_hash: hashes[0] ?? null })}
             />
-          </section>
-
-          <section className="mirror-panel">
-            <p className="mirror-panel__eyebrow">Camera-bron</p>
-            <div className="mirror-effect-row">
-              <label className="mirror-field mirror-field--wide">
-                <span className="mirror-field__label">URL (optioneel)</span>
-                <input
-                  className="mirror-field__input"
-                  type="text"
-                  value={cameraSourceDraft}
-                  placeholder="bijv. http://192.168.178.80:8080/stream"
-                  onChange={(e) => setCameraSourceDraft(e.target.value)}
-                />
-              </label>
-              <button
-                className="mirror-apply"
-                type="button"
-                onClick={handleSaveCameraSource}
-                disabled={savingCameraSource || !settings}
-              >
-                {savingCameraSource ? "Bezig…" : "Opslaan"}
-              </button>
-            </div>
-            <p className="mirror-field__label" style={{ marginTop: "0.5rem" }}>
-              Leeg = de lokale camera op de node zelf. De node haalt dit pas op bij zijn
-              eerstvolgende herstart.
-            </p>
           </section>
 
           <section className="mirror-panel">
@@ -395,6 +397,28 @@ export default function MirrorPage() {
                 op de Instellingen-pagina, of de mirror-node draait niet.
               </p>
             )}
+          </section>
+
+          <h2 className="mirror-group-title">3. Doel — waar het beeld naartoe gaat</h2>
+          <section className="mirror-panel">
+            <p className="mirror-panel__eyebrow">Fysiek scherm</p>
+            <p className="mirror-field__label">
+              Elke fysieke spiegel draait z'n eigen mirror-node op z'n eigen machine, met
+              precies één vast scherm/beamer eraan — dat is dus per node een
+              installatie-instelling, niet iets om centraal in deze app te wisselen. Op de
+              node zelf, in de systemd-unit (<code>mirror_node/mirror-node.service</code>):
+            </p>
+            <ul className="mirror-field__label" style={{ marginTop: "0.4rem", paddingLeft: "1.1rem" }}>
+              <li><code>DISPLAY</code> / <code>XAUTHORITY</code> — welke lokale X-sessie/scherm.</li>
+              <li>
+                <code>MIRROR_HEADLESS</code> — <code>1</code> slaat het fysieke fullscreen-venster over
+                (alleen de MJPEG-preview blijft werken); handig om zonder beamer te testen.
+              </li>
+            </ul>
+            <p className="mirror-field__label" style={{ marginTop: "0.4rem" }}>
+              Het weergaveformaat hierboven (Regie) bepaalt wél welke pixel-afmetingen daar
+              naartoe gaan — dat is dus het instelbare deel van "wat eruit gaat".
+            </p>
           </section>
 
           <section className="mirror-panel">
