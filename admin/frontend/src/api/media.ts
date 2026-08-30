@@ -17,7 +17,16 @@ export async function uploadMedia(file: File, category: string): Promise<MediaIt
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(text || `Upload mislukt (${response.status})`);
+    // Backend stuurt {"detail": "..."} bij een validatiefout (bijv. verkeerd
+    // bestandstype) -- die reden moet de gebruiker zien, niet alleen "mislukt".
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.detail === "string") detail = parsed.detail;
+    } catch {
+      /* geen JSON-body, val terug op de ruwe tekst */
+    }
+    throw new Error(detail || `Upload mislukt (${response.status})`);
   }
   return response.json();
 }

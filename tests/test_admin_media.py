@@ -92,6 +92,41 @@ def test_delete_media_removes_file_and_row(tmp_path):
     assert list_media(conn) == []
 
 
+def test_delete_media_clears_stale_overlay_reference(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    media_dir = str(tmp_path / "media")
+    h = save_media(conn, media_dir, b"\x89PNGdata", "spook.png", "mirror_overlay")
+    conn.execute(
+        "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
+        "VALUES (1, 'xray', '{}', ?, 1.0, '[0.5, 0.5]')",
+        (h,),
+    )
+    conn.commit()
+
+    delete_media(conn, media_dir, h)
+
+    row = conn.execute("SELECT overlay_hash FROM mirror_config WHERE id = 1").fetchone()
+    assert row[0] is None
+
+
+def test_delete_media_leaves_other_overlay_reference_untouched(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    media_dir = str(tmp_path / "media")
+    h1 = save_media(conn, media_dir, b"\x89PNGdata1", "spook.png", "mirror_overlay")
+    h2 = save_media(conn, media_dir, b"\x89PNGdata2", "geest.png", "mirror_overlay")
+    conn.execute(
+        "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
+        "VALUES (1, 'xray', '{}', ?, 1.0, '[0.5, 0.5]')",
+        (h2,),
+    )
+    conn.commit()
+
+    delete_media(conn, media_dir, h1)
+
+    row = conn.execute("SELECT overlay_hash FROM mirror_config WHERE id = 1").fetchone()
+    assert row[0] == h2
+
+
 def test_delete_media_returns_false_for_unknown_hash(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")

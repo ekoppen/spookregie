@@ -47,6 +47,7 @@ export default function MirrorPage() {
   const [savingCameraSource, setSavingCameraSource] = useState(false);
   const [canvasWidthDraft, setCanvasWidthDraft] = useState("");
   const [canvasHeightDraft, setCanvasHeightDraft] = useState("");
+  const [previewSource, setPreviewSource] = useState<"camera" | "processed">("camera");
   const [running, setRunning] = useState(false);
   const [processBusy, setProcessBusy] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -328,13 +329,55 @@ export default function MirrorPage() {
               </label>
             </div>
             <p className="mirror-field__label" style={{ marginTop: "0.5rem" }}>
-              Leeg = geen apart canvas, de camera-bron vult het beeld zoals nu. Met een
-              formaat kun je de bron en de overlay hieronder allebei los positioneren en
-              schalen binnen dat formaat (bijv. 576×720 voor een portret-scherm).
+              Leeg = geen apart canvas, de bron vult het beeld zoals nu. Met een formaat
+              kun je de bron en de overlay hieronder allebei los positioneren en schalen
+              binnen dat formaat (bijv. 576×720 voor een portret-scherm).
             </p>
-            {settings?.mirror_camera_source && isBrowserViewable(settings.mirror_camera_source) ? (
+
+            <div className="mirror-preview-toggle" role="radiogroup" aria-label="Weergavebron">
+              <button
+                type="button"
+                className="mirror-preview-toggle__option"
+                data-active={previewSource === "camera"}
+                onClick={() => setPreviewSource("camera")}
+              >
+                Rauwe camera-bron
+              </button>
+              <button
+                type="button"
+                className="mirror-preview-toggle__option"
+                data-active={previewSource === "processed"}
+                onClick={() => setPreviewSource("processed")}
+              >
+                Verwerkt beeld (mirror-node)
+              </button>
+            </div>
+
+            {previewSource === "camera" ? (
+              settings?.mirror_camera_source && isBrowserViewable(settings.mirror_camera_source) ? (
+                <OverlayCanvas
+                  streamUrl={settings.mirror_camera_source}
+                  overlayUrl={config.overlay_hash ? `/api/media/${config.overlay_hash}` : null}
+                  scale={config.scale}
+                  position={config.position}
+                  onPositionChange={(position) => update({ position })}
+                  onScaleChange={(scale) => update({ scale })}
+                  canvasSize={config.canvas_size}
+                  sourceScale={config.source_scale}
+                  sourcePosition={config.source_position}
+                  onSourcePositionChange={(source_position) => update({ source_position })}
+                  onSourceScaleChange={(source_scale) => update({ source_scale })}
+                />
+              ) : (
+                <p className="mirror-stream-missing" role="alert">
+                  {settings?.mirror_camera_source
+                    ? "Deze camera-bron (rtsp:// of een lokale index) kan de browser niet direct tonen — schakel over naar \"Verwerkt beeld\" zodra de mirror-node draait."
+                    : "Vul eerst een camera-bron-URL in (hierboven) om 'm hier te kunnen positioneren."}
+                </p>
+              )
+            ) : streamUrl ? (
               <OverlayCanvas
-                streamUrl={settings.mirror_camera_source}
+                streamUrl={streamUrl}
                 overlayUrl={config.overlay_hash ? `/api/media/${config.overlay_hash}` : null}
                 scale={config.scale}
                 position={config.position}
@@ -348,9 +391,8 @@ export default function MirrorPage() {
               />
             ) : (
               <p className="mirror-stream-missing" role="alert">
-                {settings?.mirror_camera_source
-                  ? "Deze camera-bron (rtsp:// of een lokale index) kan de browser niet direct tonen — gebruik de Live preview hieronder zodra de mirror-node draait."
-                  : "Vul eerst een camera-bron-URL in (hierboven) om 'm hier te kunnen positioneren."}
+                Verwerkt beeld niet beschikbaar — de mirror-stream-URL is nog niet ingesteld
+                op de Instellingen-pagina, of de mirror-node draait niet.
               </p>
             )}
           </section>
@@ -385,25 +427,6 @@ export default function MirrorPage() {
                 ? logLines.join("\n")
                 : "Nog geen logregels — start de mirror-node om ze hier te zien."}
             </pre>
-          </section>
-
-          <section className="mirror-panel">
-            <p className="mirror-panel__eyebrow">Live preview</p>
-            {streamUrl ? (
-              <OverlayCanvas
-                streamUrl={streamUrl}
-                overlayUrl={config.overlay_hash ? `/api/media/${config.overlay_hash}` : null}
-                scale={config.scale}
-                position={config.position}
-                onPositionChange={(position) => update({ position })}
-                onScaleChange={(scale) => update({ scale })}
-              />
-            ) : (
-              <p className="mirror-stream-missing" role="alert">
-                Live preview niet beschikbaar — de mirror-stream-URL is nog niet ingesteld op de
-                Instellingen-pagina.
-              </p>
-            )}
           </section>
 
           <div className="mirror-actions">

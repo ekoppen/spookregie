@@ -109,5 +109,12 @@ def delete_media(conn, media_dir, hash_):
             except OSError:
                 # File already gone or inaccessible; DB row is deleted regardless.
                 pass
+        # Anders blijft de spiegelconfig een overlay tonen die niet meer
+        # bestaat -- een kapot plaatje in de compositie-tool zonder enige
+        # foutmelding.
+        conn.execute(
+            "UPDATE mirror_config SET overlay_hash = NULL WHERE overlay_hash = ?", (hash_,)
+        )
+        conn.commit()
 
     return cursor.rowcount > 0

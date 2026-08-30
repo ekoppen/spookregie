@@ -77,8 +77,8 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
       await uploadMedia(file, category);
       setError(null);
       refresh();
-    } catch {
-      setError("Bestand kon niet worden geüpload.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bestand kon niet worden geüpload.");
     } finally {
       setUploading(false);
       e.target.value = "";
