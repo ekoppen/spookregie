@@ -33,7 +33,7 @@ from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
-from mirror_node.active_config import ActiveMirrorConfig
+from mirror_node.scenes import SceneEngine
 from mirror_node.stream import MJPEGStreamer
 
 NODE_NAME = "mirror"
@@ -61,7 +61,7 @@ sleeping = threading.Event()
 # Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
 # hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
 test_trigger_requested = threading.Event()
-active_config = ActiveMirrorConfig()
+scene_engine = SceneEngine()
 synced_scare_videos = {}
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
@@ -118,21 +118,32 @@ def _apply_scare_video_config_message(payload, logger):
     _sync_scare_videos_in_background(hashes)
 
 
-def _apply_config_message(payload, is_preview, logger):
+def _apply_scenes_message(payload, logger):
     try:
-        config = json.loads(payload)
+        scenes = json.loads(payload)
     except json.JSONDecodeError:
-        logger.error("Ongeldige config-JSON ontvangen, genegeerd")
+        logger.error("Ongeldige scenes-JSON ontvangen, genegeerd")
         return
-    if not isinstance(config, dict):
-        logger.error("Config-JSON is geen object, genegeerd: %r", config)
+    if not isinstance(scenes, list):
+        logger.error("Scenes-config is geen lijst, genegeerd: %r", scenes)
         return
-    if is_preview:
-        active_config.set_preview(config)
-        _sync_overlay_in_background(config)
+    scene_engine.set_scenes(scenes)
+    for scene in scenes:
+        if isinstance(scene, dict):
+            _sync_overlay_in_background(scene)
+
+
+def _apply_scene_preview_message(payload, logger):
+    try:
+        scene = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige scene-preview-JSON ontvangen, genegeerd")
         return
-    active_config.set_persistent(config)
-    _sync_overlay_in_background(config)
+    if not isinstance(scene, dict):
+        logger.error("Scene-preview is geen object, genegeerd: %r", scene)
+        return
+    scene_engine.set_preview(scene)
+    _sync_overlay_in_background(scene)
 
 
 def make_on_message(logger, topics):
@@ -147,11 +158,11 @@ def make_on_message(logger, topics):
                 else:
                     sleeping.clear()
                 return
-            if msg.topic == topics.config_mirror:
-                _apply_config_message(msg.payload.decode(), is_preview=False, logger=logger)
+            if msg.topic == topics.config_mirror_scenes:
+                _apply_scenes_message(msg.payload.decode(), logger)
                 return
-            if msg.topic == topics.control_mirror_preview:
-                _apply_config_message(msg.payload.decode(), is_preview=True, logger=logger)
+            if msg.topic == topics.control_mirror_scene_preview:
+                _apply_scene_preview_message(msg.payload.decode(), logger)
                 return
             if msg.topic == topics.control_mirror_test:
                 test_trigger_requested.set()
@@ -180,37 +191,36 @@ def _load_overlay(overlay_hash, logger):
     return _overlay_cache["image"]
 
 
-def _render(frame, logger):
-    config = active_config.get()
+def _render(frame, scene, logger):
     try:
-        effect_fn = get_effect(config.get("effect", "xray"))
+        effect_fn = get_effect(scene.get("effect", "xray"))
     except ValueError:
-        logger.error("Onbekend effect in actieve config: %s", config.get("effect"))
+        logger.error("Onbekend effect in actieve scene: %s", scene.get("effect"))
         return frame
 
-    result = effect_fn(frame, config.get("params", {}))
+    result = effect_fn(frame, scene.get("params", {}))
 
-    canvas_size = config.get("canvas_size")
+    canvas_size = scene.get("canvas_size")
     if canvas_size:
         result = place_on_canvas(
             result,
             tuple(canvas_size),
-            scale=config.get("source_scale", 1.0),
-            position=tuple(config.get("source_position", [0.5, 0.5])),
+            scale=scene.get("source_scale", 1.0),
+            position=tuple(scene.get("source_position", [0.5, 0.5])),
         )
 
-    overlay_hash = config.get("overlay_hash")
+    overlay_hash = scene.get("overlay_hash")
     if overlay_hash:
         overlay_img = _load_overlay(overlay_hash, logger)
         if overlay_img is not None and overlay_img.ndim == 3 and overlay_img.shape[2] == 4:
-            position = config.get("position", [0.5, 0.5])
+            position = scene.get("position", [0.5, 0.5])
             if len(position) != 2:
-                logger.warning("Ongeldige position in config, val terug op (0.5, 0.5): %r", position)
+                logger.warning("Ongeldige position in scene, val terug op (0.5, 0.5): %r", position)
                 position = (0.5, 0.5)
             result = composite_overlay(
                 result,
                 overlay_img,
-                scale=config.get("scale", 1.0),
+                scale=scene.get("scale", 1.0),
                 position=tuple(position),
             )
     return result
@@ -329,8 +339,8 @@ def main():
             return
         client.publish(topics.status(NODE_NAME), "online", retain=True)
         client.subscribe(topics.system_sleep)
-        client.subscribe(topics.config_mirror)
-        client.subscribe(topics.control_mirror_preview)
+        client.subscribe(topics.config_mirror_scenes)
+        client.subscribe(topics.control_mirror_scene_preview)
         client.subscribe(topics.control_mirror_test)
         client.subscribe(topics.config_mirror_scare_video)
 
@@ -392,36 +402,44 @@ def main():
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             now = time.time()
+            now_hhmm = time.strftime("%H:%M")
 
+            fired = False
             if trigger.detect(gray) and now > active_until:
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
-                cooldown = _handle_trigger(streamer, logger)
-                active_until = time.time() + cooldown
+                active_until = time.time() + ACTIVE_SECONDS
+                fired = True
 
-            # Handmatige test vanaf de beheerpagina: wel het effect tonen, maar
-            # bewust géén mirror/triggered publiceren — dat topic betekent
-            # "echte beweging gezien" en laat de scare-nodes meedoen.
             if test_trigger_requested.is_set():
                 test_trigger_requested.clear()
                 logger.info("mirror test-trigger")
+                active_until = time.time() + ACTIVE_SECONDS
+                fired = True
+
+            winning = scene_engine.resolve(now < active_until, now_hhmm)
+
+            # Bij het moment van afgaan zelf: als de winnende scene een
+            # scare-video is, speel die nu blokkerend af (bestaand
+            # _handle_trigger-pad, ongewijzigd) i.p.v. elke cyclus opnieuw.
+            if fired and winning is not None and winning.get("source_mode") == "scare_video":
                 cooldown = _handle_trigger(streamer, logger)
                 active_until = time.time() + cooldown
+                winning = scene_engine.resolve(True, now_hhmm)
 
-            # Ook renderen buiten de PIR-actieve window als er recent een
-            # preview-config is gezet (beheerder is live aan het tweaken op
-            # de mirror-pagina) — anders toont de live preview alleen een
-            # zwart beeld zolang niemand voor de camera staat.
-            if now < active_until or active_config.preview_recently_set():
+            if winning is None:
+                rendered = frame * 0
+            elif winning.get("source_mode") == "scare_video":
+                # net al blokkerend afgespeeld (of nog in het venster van een
+                # eerdere trigger zonder nieuwe afgaande trigger deze cyclus)
+                # -- niets aanvullends te renderen.
+                rendered = frame * 0
+            else:
                 try:
-                    rendered = _render(frame, logger)
+                    rendered = _render(frame, winning, logger)
                 except Exception as exc:
-                    # Val terug op het rauwe beeld: een kapotte config mag de
-                    # camera-loop nooit onderuit halen (fail-safe eis).
                     logger.error("Fout bij renderen: %s", exc)
                     rendered = frame
-            else:
-                rendered = frame * 0
             streamer.publish_frame(rendered)
             if not MIRROR_HEADLESS:
                 cv2.imshow("mirror", rendered)

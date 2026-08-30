@@ -1,5 +1,7 @@
 import pytest
 
+import json
+
 # Zonder paho/cv2 (optionele node-dependencies) alleen dit bestand overslaan,
 # i.p.v. de hele testsuite te laten afbreken tijdens collection.
 pytest.importorskip("paho.mqtt.client")
@@ -72,18 +74,12 @@ class _FakeMsg:
         self.payload = payload
 
 
-def test_apply_config_message_ignores_non_dict_json():
-    logger = _FakeLogger()
-    mirror_main._apply_config_message("[1, 2, 3]", is_preview=False, logger=logger)
-    assert logger.errors
-
-
 def test_on_message_survives_malformed_payload(monkeypatch):
     # Niet-UTF8 bytes: mag paho's netwerkthread niet killen.
     logger = _FakeLogger()
     topics = mirror_main.Topics()
     on_message = mirror_main.make_on_message(logger, topics)
-    on_message(None, None, _FakeMsg(topics.config_mirror, b"\xff\xfe"))
+    on_message(None, None, _FakeMsg(topics.config_mirror_scenes, b"\xff\xfe"))
     assert logger.errors
 
 
@@ -135,17 +131,56 @@ def test_redact_source_leaves_plain_source_untouched():
     assert mirror_main._redact_source("") == mirror_main.CAMERA_INDEX
 
 
-def test_preview_config_also_syncs_overlay(monkeypatch):
+def test_apply_scenes_message_ignores_non_list_json():
+    logger = _FakeLogger()
+    mirror_main._apply_scenes_message('{"not": "a list"}', logger)
+    assert logger.errors
+
+
+def test_apply_scenes_message_ignores_malformed_json():
+    logger = _FakeLogger()
+    mirror_main._apply_scenes_message("{niet-geldig-json", logger)
+    assert logger.errors
+
+
+def test_apply_scenes_message_updates_scene_engine():
+    scene = {"id": 1, "trigger_type": "always", "overlay_hash": None}
+    mirror_main._apply_scenes_message(json.dumps([scene]), _FakeLogger())
+
+    assert mirror_main.scene_engine.resolve(False, "12:00") == scene
+
+
+def test_apply_scenes_message_syncs_overlay_for_each_scene(monkeypatch):
     started = []
     monkeypatch.setattr(
-        mirror_main.threading,
-        "Thread",
+        mirror_main.threading, "Thread",
         lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
     )
-    mirror_main._apply_config_message(
-        '{"overlay_hash": "' + "a" * 64 + '"}', is_preview=True, logger=_FakeLogger()
+    scenes = [
+        {"id": 1, "trigger_type": "always", "overlay_hash": "a" * 64},
+        {"id": 2, "trigger_type": "motion", "overlay_hash": "b" * 64},
+    ]
+
+    mirror_main._apply_scenes_message(json.dumps(scenes), _FakeLogger())
+
+    synced_hashes = [kw["args"][2] for kw in started]
+    assert synced_hashes == [["a" * 64], ["b" * 64]]
+
+
+def test_apply_scene_preview_message_sets_preview_and_syncs_overlay(monkeypatch):
+    started = []
+    monkeypatch.setattr(
+        mirror_main.threading, "Thread",
+        lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
     )
-    assert started and started[0]["args"][2] == ["a" * 64]
+    scene = {"id": 5, "trigger_type": "always", "overlay_hash": "a" * 64}
+    try:
+        mirror_main._apply_scene_preview_message(json.dumps(scene), _FakeLogger())
+        assert mirror_main.scene_engine.resolve(False, "12:00") == scene
+        assert started and started[0]["args"][2] == ["a" * 64]
+    finally:
+        mirror_main.scene_engine._preview = None
+        mirror_main.scene_engine._preview_set_at = None
 
 
 def test_apply_scare_video_config_message_ignores_non_dict_json():
