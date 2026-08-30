@@ -55,6 +55,10 @@ def init_db(path):
     )
     _ensure_column(conn, "app_settings", "mqtt_topic_prefix", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "app_settings", "mirror_camera_source", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "mirror_config", "canvas_width", "INTEGER")
+    _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
+    _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")
+    _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
     conn.commit()
     return conn
 

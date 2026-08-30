@@ -32,7 +32,7 @@ from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.effects import get_effect
-from mirror_node.overlay import composite_overlay
+from mirror_node.overlay import composite_overlay, place_on_canvas
 from mirror_node.active_config import ActiveMirrorConfig
 from mirror_node.stream import MJPEGStreamer
 
@@ -189,6 +189,15 @@ def _render(frame, logger):
         return frame
 
     result = effect_fn(frame, config.get("params", {}))
+
+    canvas_size = config.get("canvas_size")
+    if canvas_size:
+        result = place_on_canvas(
+            result,
+            tuple(canvas_size),
+            scale=config.get("source_scale", 1.0),
+            position=tuple(config.get("source_position", [0.5, 0.5])),
+        )
 
     overlay_hash = config.get("overlay_hash")
     if overlay_hash:

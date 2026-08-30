@@ -47,7 +47,11 @@ def _client(tmp_path):
 
 def test_put_mirror_config_saves_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
-    payload = {"effect": "thermal", "params": {"intensity": 0.8}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5]}
+    payload = {
+        "effect": "thermal", "params": {"intensity": 0.8}, "overlay_hash": None,
+        "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
+    }
 
     response = client.put("/api/mirror/config", json=payload)
 
@@ -124,7 +128,23 @@ def test_put_mirror_config_normalizes_partial_payload(tmp_path):
     assert published == {
         "effect": "thermal", "params": {}, "overlay_hash": None,
         "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
     }
+
+
+def test_put_mirror_config_saves_and_publishes_canvas_fields(tmp_path):
+    client, bridge = _client(tmp_path)
+    payload = {
+        "effect": "xray", "params": {}, "overlay_hash": None,
+        "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": [576, 720], "source_scale": 1.3, "source_position": [0.2, 0.8],
+    }
+
+    response = client.put("/api/mirror/config", json=payload)
+
+    assert response.status_code == 200
+    assert ("mirror_config", payload) in bridge.calls
+    assert client.get("/api/mirror/config").json() == payload
 
 
 def test_post_scare_test_publishes(tmp_path):

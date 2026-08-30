@@ -16,6 +16,9 @@ class ActiveMirrorConfig:
             "overlay_hash": None,
             "scale": 1.0,
             "position": [0.5, 0.5],
+            "canvas_size": None,
+            "source_scale": 1.0,
+            "source_position": [0.5, 0.5],
         }
         self._preview = None
         self._preview_set_at = None

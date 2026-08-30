@@ -119,6 +119,15 @@
   display: block;
 }
 
+.mirror-field--wide {
+  flex: 1;
+  min-width: 16rem;
+}
+
+.mirror-field--wide .mirror-field__input {
+  width: 100%;
+}
+
 .mirror-field__label {
   display: block;
   margin-bottom: 0.4rem;

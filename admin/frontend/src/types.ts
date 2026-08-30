@@ -4,6 +4,9 @@ export interface MirrorConfig {
   overlay_hash: string | null;
   scale: number;
   position: [number, number];
+  canvas_size: [number, number] | null;
+  source_scale: number;
+  source_position: [number, number];
 }
 
 export interface ScareConfig {

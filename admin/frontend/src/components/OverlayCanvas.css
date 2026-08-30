@@ -22,6 +22,21 @@
   display: block;
 }
 
+/* Bronlaag in canvas-modus: op eigen (schaalbare) grootte getoond i.p.v.
+   gerekt over de viewfinder, vol zichtbaar (i.t.t. de overlay-ghost) --
+   dit IS het beeld waar het om gaat. */
+.overlay-canvas__source {
+  display: block;
+  cursor: grab;
+  touch-action: none;
+  outline: 1px dashed var(--panel-edge);
+  outline-offset: 2px;
+}
+
+.overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__source {
+  cursor: grabbing;
+}
+
 /* Camera-viewfinder corner brackets: the signature "in-focus" affordance. */
 .overlay-canvas__bracket {
   position: absolute;
@@ -168,6 +183,12 @@
 
 .overlay-canvas__viewfinder[data-dragging="true"] .overlay-canvas__crosshair-line {
   background: var(--signal);
+}
+
+.overlay-canvas__levers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 /* Vertical zoom lever, echoing the estop/rocker analog-control language. */
