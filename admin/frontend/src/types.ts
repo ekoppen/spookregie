@@ -1,4 +1,9 @@
-export interface MirrorConfig {
+export interface Scene {
+  id: number;
+  name: string;
+  order_index: number;
+  enabled: boolean;
+  source_mode: "camera" | "scare_video";
   effect: "xray" | "thermal" | "contour" | "posterize";
   params: Record<string, number>;
   overlay_hash: string | null;
@@ -7,6 +12,9 @@ export interface MirrorConfig {
   canvas_size: [number, number] | null;
   source_scale: number;
   source_position: [number, number];
+  trigger_type: "always" | "motion" | "schedule";
+  trigger_from: string | null;
+  trigger_until: string | null;
 }
 
 export interface ScareConfig {
