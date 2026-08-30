@@ -10,6 +10,8 @@ WLED-koppeling; het tijdvenster zit in de beheerpagina-backend (`admin/`),
 die als enige `system/sleep` publiceert. Elke node blijft zelfstandig werken als
 MQTT/HA wegvalt. Volledig ontwerp: `docs/superpowers/specs/`.
 
+Het spiegel-effect wordt geprogrammeerd als **scenes** (bron + regie + doel + trigger) vanaf het Dashboard van de beheerpagina — niet meer via een losse configuratiepagina. Elke scene heeft een eigen trigger-voorwaarde (beweging / tijdschema / altijd); de mirror-node kiest continu, in een vaste prioriteitsvolgorde, welke scene op dat moment wint.
+
 ## Layout
 
 | Map | Inhoud |
@@ -187,6 +189,8 @@ Alle namen komen uit `shared/mqtt_contract.py`:
 | `system/sleep` | backend → nodes | `on` / `off` (retained) |
 | `log/<node>` | nodes → | JSON-logregels |
 | `status/<node>` | nodes → | `online` / `offline` (retained, last-will) |
+| `config/mirror/scenes` | backend → mirror | JSON-array van scene-objecten (retained) |
+| `control/mirror/scene-preview` | backend → mirror | JSON scene-object (niet retained, live-editing) |
 
 HA-kant (broker, automations, dashboard-sensoren): zie
 [`home_assistant/README.md`](home_assistant/README.md).
