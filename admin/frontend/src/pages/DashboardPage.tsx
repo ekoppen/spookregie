@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getNodes } from "../api/nodes";
 import { getSchedule, putSchedule, emergencyStop, wake } from "../api/schedule";
-import { listScenes, deleteScene, reorderScenes } from "../api/scenes";
+import { listScenes, deleteScene, reorderScenes, updateScene } from "../api/scenes";
 import { testMirror } from "../api/mirror";
 import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -117,6 +117,16 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleToggleScene(scene: Scene) {
+    const { id, order_index: _order_index, ...draft } = scene;
+    try {
+      await updateScene(id, { ...draft, enabled: !scene.enabled });
+      refreshScenes();
+    } catch {
+      setError("Scene in-/uitschakelen is mislukt.");
+    }
+  }
+
   function handleMoveScene(id: number, direction: -1 | 1) {
     const index = scenes.findIndex((s) => s.id === id);
     const target = index + direction;
@@ -213,6 +223,11 @@ export default function DashboardPage() {
             <div className="scene-card" key={scene.id} data-enabled={scene.enabled}>
               <p className="scene-card__name">{scene.name}</p>
               <p className="scene-card__trigger">{triggerSummary(scene)}</p>
+              <label className="schedule-toggle">
+                <input type="checkbox" checked={scene.enabled} onChange={() => handleToggleScene(scene)} />
+                <span className="schedule-toggle__rocker" aria-hidden="true" />
+                <span className="schedule-toggle__label">{scene.enabled ? "Aan" : "Uit"}</span>
+              </label>
               <div className="scene-card__actions">
                 <button type="button" onClick={() => handleMoveScene(scene.id, -1)} disabled={index === 0}>
                   ▲

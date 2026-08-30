@@ -29,6 +29,8 @@ from admin.app.routers import settings as settings_router
 from admin.app.routers import node_config as node_config_router
 from admin.app.routers import mirror_process as mirror_process_router
 from admin.app.routers import mirror_scare_video as mirror_scare_video_router
+from admin.app.routers.mirror_scare_video import read_enabled_hashes
+from admin.app.routers.scenes import _list_scenes
 from admin.app.routers.schedule import read_schedule
 
 _PUBLIC_EXACT_PATHS = {"/api/login", "/docs", "/openapi.json", "/api/node-config"}
@@ -68,8 +70,18 @@ def create_app(settings=None):
     app.state.runtime_settings = read_runtime_settings(app.state.db)
     app.state.tracker = NodeStatusTracker()
     app.state.ws_hub = WebSocketHub()
+
+    def _republish_retained_config():
+        # Zonder dit blijft een net herstarte mirror-node (of een broker-
+        # reconnect) zwart: config/mirror/scenes en config/mirror/scare-video
+        # zijn retained topics die alleen bij een CRUD-actie op de
+        # beheerpagina gepubliceerd worden, nooit uit zichzelf.
+        app.state.bridge.publish_mirror_scenes(_list_scenes(app.state.db))
+        app.state.bridge.publish_mirror_scare_video_config(read_enabled_hashes(app.state.db))
+
     app.state.bridge = MqttBridge(
-        app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger
+        app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger,
+        on_connect_extra=_republish_retained_config,
     )
     app.state.mirror_process = MirrorProcessManager(
         app.state.runtime_settings,

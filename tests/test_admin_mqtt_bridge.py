@@ -1,6 +1,10 @@
 import json
 
+from fastapi.testclient import TestClient
+
 import admin.app.mqtt_bridge as mqtt_bridge_module
+from admin.app.config import Settings
+from admin.app.main import create_app
 from admin.app.mqtt_bridge import MqttBridge
 from admin.app.runtime_settings import RuntimeSettings
 
@@ -140,6 +144,75 @@ def test_on_message_strips_prefix_before_tracker_and_broadcast(monkeypatch):
     bridge._on_message(bridge._client, None, FakeMsg())
 
     assert tracker.calls == [("status/mirror", "online")]
+
+
+def test_on_connect_calls_on_connect_extra_hook(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    calls = []
+
+    bridge = MqttBridge(
+        _settings(mqtt_topic_prefix="test"), tracker=object(),
+        on_connect_extra=lambda: calls.append("republished"),
+    )
+    bridge._on_connect(bridge._client, None, None, 0)
+
+    assert calls == ["republished"]
+
+
+def test_on_connect_extra_failure_does_not_crash_on_connect(monkeypatch):
+    """Zonder deze bescherming zou een DB-foutje tijdens republiceren de
+    hele MQTT-netwerkthread (en dus status/log-verwerking) laten crashen."""
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    def _boom():
+        raise RuntimeError("db weg")
+
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object(), on_connect_extra=_boom)
+
+    bridge._on_connect(bridge._client, None, None, 0)  # mag niet raisen
+
+    assert bridge._client.subscribed  # subscribes zijn nog steeds gebeurd
+
+
+def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, monkeypatch):
+    """Simuleert een broker-(her)verbinding via _on_connect en verifieert dat
+    de retained config/mirror/scenes en config/mirror/scare-video topics
+    opnieuw gepubliceerd worden vanuit de echte DB-inhoud -- dit is de fix
+    voor een mirror-node die na een herstart zwart blijft omdat er nooit een
+    retained bericht op die topics heeft gestaan."""
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+
+    settings = Settings(
+        admin_password="testwachtwoord",
+        db_path=str(tmp_path / "test.db"), media_dir=str(tmp_path / "media"),
+        port=8000,
+    )
+    app = create_app(settings=settings)
+    client = TestClient(app)
+    client.post("/api/login", json={"password": "testwachtwoord"})
+
+    scene_payload = {
+        "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
+        "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
+        "trigger_type": "always", "trigger_from": None, "trigger_until": None,
+    }
+    created = client.post("/api/scenes", json=scene_payload).json()
+    client.put("/api/mirror/scare-video-config", json={"enabled_hashes": ["a" * 64]})
+
+    # Wis wat de CRUD-routes hierboven al publiceerden -- we willen alleen
+    # zien wat een verse (her)verbinding publiceert, zonder enige handmatige
+    # actie op de beheerpagina.
+    app.state.bridge._client.published.clear()
+
+    app.state.bridge._on_connect(app.state.bridge._client, None, None, 0)
+
+    published = {
+        topic: (json.loads(payload), retain)
+        for topic, payload, retain in app.state.bridge._client.published
+    }
+    assert published["config/mirror/scenes"] == ([created], True)
+    assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)
 
 
 def test_publish_mirror_scare_video_config_uses_configured_prefix(monkeypatch):

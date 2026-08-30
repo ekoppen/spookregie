@@ -293,6 +293,23 @@ def _decide_action(fired, winning):
     return "render"
 
 
+def _resolve_action(scene_engine, fired, motion_active, now_hhmm):
+    """Wrapper om scene_engine.resolve() + _decide_action() die de staart
+    van een scare-video-venster afvangt: zodra de clip zelf al is
+    afgespeeld (fired=False, dit is niet het trigger-moment), moet de
+    mirror niet zwart blijven tot active_until verloopt maar meteen
+    terugvallen op wat er zonder beweging zou draaien (typisch de
+    always-basisscene) -- vervangt de dubbele resolve()-aanroep die er
+    vóór het extraheren van _decide_action was en er bij die refactor per
+    ongeluk uitviel. Geeft (action, winning) terug."""
+    winning = scene_engine.resolve(motion_active, now_hhmm)
+    action = _decide_action(fired, winning)
+    if action == "blank" and not fired and winning is not None and winning.get("source_mode") == "scare_video":
+        winning = scene_engine.resolve(False, now_hhmm)
+        action = _decide_action(fired, winning)
+    return action, winning
+
+
 def _redact_source(source):
     """Verbergt inloggegevens (user:pass@) uit een camera-URL voor logging."""
     source = source or CAMERA_INDEX
@@ -430,8 +447,7 @@ def main():
                 active_until = time.time() + ACTIVE_SECONDS
                 fired = True
 
-            winning = scene_engine.resolve(now < active_until, now_hhmm)
-            action = _decide_action(fired, winning)
+            action, winning = _resolve_action(scene_engine, fired, now < active_until, now_hhmm)
 
             if action == "scare_video":
                 # Bij het moment van afgaan zelf: speel de scare-video nu

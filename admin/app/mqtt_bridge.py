@@ -14,12 +14,18 @@ class MqttBridge:
     iets wijzigt. Alle topics lopen door een `Topics`-instance, gebouwd uit
     `settings.mqtt_topic_prefix` -- zie shared/mqtt_contract.py."""
 
-    def __init__(self, settings, tracker, ws_hub=None, loop=None, logger=None):
+    def __init__(self, settings, tracker, ws_hub=None, loop=None, logger=None, on_connect_extra=None):
         self._settings = settings
         self._tracker = tracker
         self._ws_hub = ws_hub
         self._loop = loop
         self._logger = logger
+        # Aangeroepen (zonder argumenten) nadat _on_connect klaar is met
+        # subscriben -- laat create_app() retained config (scenes,
+        # scare-video) opnieuw publiceren bij elke (her)verbinding, zonder
+        # dat MqttBridge zelf iets van de DB hoeft te weten. Zie
+        # `_republish_retained_config` in main.py.
+        self._on_connect_extra = on_connect_extra
         self._topics = Topics(prefix=settings.mqtt_topic_prefix)
         self._client = self._build_client(settings)
 
@@ -48,6 +54,14 @@ class MqttBridge:
         client.subscribe(self._topics.log_wildcard)
         client.subscribe(self._topics.mirror_triggered)
         client.subscribe(self._topics.scare_triggered_wildcard)
+        if self._on_connect_extra is not None:
+            # Republiceert retained config (scenes, scare-video) bij elke
+            # (her)verbinding -- zonder dit blijft een net herstarte
+            # mirror-node zwart tot iemand handmatig een scene opslaat.
+            try:
+                self._on_connect_extra()
+            except Exception:
+                self._log("error", "republiceren van config na MQTT-connect mislukt")
 
     def _on_disconnect(self, client, userdata, rc):
         if rc != 0:

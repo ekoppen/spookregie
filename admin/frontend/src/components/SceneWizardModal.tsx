@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getScene, createScene, updateScene, previewScene, type SceneDraft } from "../api/scenes";
 import { getSettings } from "../api/settings";
 import MediaLibrary from "./MediaLibrary";
@@ -89,13 +89,38 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
   }, [sceneId]);
 
   // Live preview tijdens het bewerken -- alleen mogelijk voor een al
-  // opgeslagen scene (de preview-route heeft een id nodig). Simpele
-  // fire-and-forget bij elke wijziging, geen aparte throttle-timer:
-  // elke keypress/sleep-update is al een expliciete, door de gebruiker
-  // bedoelde wijziging.
+  // opgeslagen scene (de preview-route heeft een id nodig), en alleen voor
+  // een camera-scene: een scare_video-scene heeft niets previewbaars (de
+  // Animatie/Output-stappen worden er ook al voor overgeslagen), en zou de
+  // SceneEngine op de mirror-node juist volledig zwart laten renderen
+  // (fired=False, volledige 30s-TTL) zolang de wizard openstaat.
+  // Leading-edge throttle (max. 1x per 150ms), niet debounce -- debounce
+  // stuurt tijdens een sleep pas iets zodra de operator stopt met bewegen,
+  // waardoor de live preview de sleep niet in (bijna-)realtime volgt.
+  // Zelfde patroon als de inmiddels verwijderde MirrorPage.tsx gebruikte.
+  const lastPreviewSentAtRef = useRef(0);
+  const previewThrottleTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (sceneId === null || !loaded) return;
-    previewScene(sceneId, draft).catch((err) => console.error("Preview mislukt:", err));
+    if (sceneId === null || !loaded || draft.source_mode !== "camera") return;
+    const THROTTLE_MS = 150;
+
+    function send() {
+      lastPreviewSentAtRef.current = Date.now();
+      previewScene(sceneId!, draft).catch((err) => console.error("Preview mislukt:", err));
+    }
+
+    const elapsed = Date.now() - lastPreviewSentAtRef.current;
+    if (elapsed >= THROTTLE_MS) {
+      send();
+    } else {
+      if (previewThrottleTimerRef.current) window.clearTimeout(previewThrottleTimerRef.current);
+      previewThrottleTimerRef.current = window.setTimeout(send, THROTTLE_MS - elapsed);
+    }
+
+    return () => {
+      if (previewThrottleTimerRef.current) window.clearTimeout(previewThrottleTimerRef.current);
+    };
   }, [sceneId, draft, loaded]);
 
   function update(patch: Partial<SceneDraft>) {
