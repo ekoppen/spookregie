@@ -65,6 +65,10 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
   const [canvasHeightDraft, setCanvasHeightDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Bewaakt dat de preview-effect niet met de nog-lege EMPTY_DRAFT vuurt
+  // voordat de echte scene binnen is -- anders gaat er heel even een fout
+  // beeld (default xray/camera) naar de fysieke spiegel-hardware.
+  const [loaded, setLoaded] = useState(sceneId === null);
 
   useEffect(() => {
     getSettings()
@@ -78,6 +82,7 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
           setDraft(scene);
           setCanvasWidthDraft(scene.canvas_size ? String(scene.canvas_size[0]) : "");
           setCanvasHeightDraft(scene.canvas_size ? String(scene.canvas_size[1]) : "");
+          setLoaded(true);
         })
         .catch(() => setError("Scene kon niet worden geladen."));
     }
@@ -89,9 +94,9 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
   // elke keypress/sleep-update is al een expliciete, door de gebruiker
   // bedoelde wijziging.
   useEffect(() => {
-    if (sceneId === null) return;
+    if (sceneId === null || !loaded) return;
     previewScene(sceneId, draft).catch((err) => console.error("Preview mislukt:", err));
-  }, [sceneId, draft]);
+  }, [sceneId, draft, loaded]);
 
   function update(patch: Partial<SceneDraft>) {
     setDraft((prev) => ({ ...prev, ...patch }));
