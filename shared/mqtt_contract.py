@@ -23,12 +23,12 @@ class Topics:
         return self._p("system/sleep")
 
     @property
-    def config_mirror(self) -> str:
-        return self._p("config/mirror")
+    def config_mirror_scenes(self) -> str:
+        return self._p("config/mirror/scenes")
 
     @property
-    def control_mirror_preview(self) -> str:
-        return self._p("control/mirror/preview")
+    def control_mirror_scene_preview(self) -> str:
+        return self._p("control/mirror/scene-preview")
 
     @property
     def control_mirror_test(self) -> str:
