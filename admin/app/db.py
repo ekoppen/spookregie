@@ -28,6 +28,27 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS scenes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            order_index INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            source_mode TEXT NOT NULL DEFAULT 'camera',
+            effect TEXT NOT NULL DEFAULT 'xray',
+            params TEXT NOT NULL DEFAULT '{}',
+            overlay_hash TEXT,
+            scale REAL NOT NULL DEFAULT 1.0,
+            position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+            canvas_width INTEGER,
+            canvas_height INTEGER,
+            source_scale REAL NOT NULL DEFAULT 1.0,
+            source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+            trigger_type TEXT NOT NULL DEFAULT 'always',
+            trigger_from TEXT,
+            trigger_until TEXT
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -59,6 +80,7 @@ def init_db(path):
     _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
     _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")
     _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
+    _migrate_mirror_config_to_scenes(conn)
     conn.commit()
     return conn
 
@@ -72,3 +94,29 @@ def _ensure_column(conn, table, column, ddl):
     cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _migrate_mirror_config_to_scenes(conn):
+    """Migreert de (oude, enkelvoudige) mirror_config-rij naar één
+    'Basis'-scene, zodat een bestaande deploy na de upgrade precies
+    hetzelfde beeld blijft tonen. Idempotent: doet niets zodra er al
+    minstens één scene bestaat, en niets als er nooit een
+    mirror_config-rij was (verse installatie)."""
+    existing = conn.execute("SELECT COUNT(*) FROM scenes").fetchone()[0]
+    if existing > 0:
+        return
+    row = conn.execute(
+        "SELECT effect, params, overlay_hash, scale, position, "
+        "canvas_width, canvas_height, source_scale, source_position "
+        "FROM mirror_config WHERE id = 1"
+    ).fetchone()
+    if row is None:
+        return
+    conn.execute(
+        """INSERT INTO scenes
+             (name, order_index, enabled, source_mode, effect, params, overlay_hash,
+              scale, position, canvas_width, canvas_height, source_scale, source_position,
+              trigger_type)
+           VALUES ('Basis', 0, 1, 'camera', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'always')""",
+        row,
+    )
