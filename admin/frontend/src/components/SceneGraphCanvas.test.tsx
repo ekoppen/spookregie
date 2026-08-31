@@ -31,6 +31,8 @@ const SCENE: Scene = {
   is_root: true,
   canvas_x: 0,
   canvas_y: 0,
+  output_id: null,
+  color: null,
 };
 
 describe("SceneGraphCanvas -- klikken op een stap-chip", () => {
