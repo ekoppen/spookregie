@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getScene, createScene, updateScene, previewScene, type SceneDraft } from "../api/scenes";
+import { getScene, createScene, updateScene, deleteScene, previewScene, type SceneDraft } from "../api/scenes";
 import { getSettings } from "../api/settings";
 import MediaLibrary from "./MediaLibrary";
 import OverlayCanvas from "./OverlayCanvas";
@@ -145,6 +145,21 @@ export default function SceneWizardModal({ sceneId, initialStep, onClose, onSave
       onClose();
     } catch {
       setError("Opslaan is mislukt. Probeer het opnieuw.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (sceneId === null) return;
+    if (!window.confirm(`Scene "${draft.name}" verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+    setSaving(true);
+    try {
+      await deleteScene(sceneId);
+      onSaved();
+      onClose();
+    } catch {
+      setError("Verwijderen is mislukt. Probeer het opnieuw.");
     } finally {
       setSaving(false);
     }
@@ -303,6 +318,11 @@ export default function SceneWizardModal({ sceneId, initialStep, onClose, onSave
         </div>
 
         <footer className="scene-modal__footer">
+          {sceneId !== null && (
+            <button type="button" className="scene-modal__delete" disabled={saving} onClick={handleDelete}>
+              Verwijderen
+            </button>
+          )}
           <button
             type="button"
             className="scene-modal__nav"

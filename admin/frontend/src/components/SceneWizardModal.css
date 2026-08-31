@@ -136,7 +136,8 @@
 }
 
 .scene-modal__nav,
-.scene-modal__save {
+.scene-modal__save,
+.scene-modal__delete {
   padding: 0.65rem 1.3rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -162,4 +163,16 @@
   border: none;
   color: var(--void);
   margin-left: auto;
+}
+
+.scene-modal__delete {
+  background: transparent;
+  border: 1px solid var(--alarm);
+  color: var(--alarm);
+  margin-right: auto;
+}
+
+.scene-modal__delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
