@@ -571,8 +571,15 @@ def main():
 
     cap = open_camera(camera_source, CAMERA_INDEX)
     if not cap.isOpened():
-        logger.error("Kon camera-bron niet openen: %s", _redact_source(camera_source))
-        return
+        # Geen fallback-camera beschikbaar (bv. all-static-image-install
+        # zonder camera_stream-source, of een kapotte lokale webcam-index)
+        # -- niet meer hard exitten (Belangrijk 8): een camera-loze
+        # installatie is nu een geldige configuratie, per-player
+        # source-resolutie (_ensure_source) neemt het over zodra de eerste
+        # graaf-config binnenkomt.
+        logger.warning("Kon fallback-camerabron niet openen: %s -- ga verder zonder", _redact_source(camera_source))
+        cap.release()
+        cap = None
 
     trigger = FrameDiffTrigger()
     if not MIRROR_HEADLESS:
@@ -600,18 +607,24 @@ def main():
                 ok = True
             elif acquired is not None:
                 ok, frame = acquired.read()
-            else:
+            elif cap is not None:
                 # Geen (nog) bekende source voor de huidige player -- val
                 # terug op de startup-camera zodat het beeld nooit
                 # volledig leeg blijft vóór de eerste graaf-config binnen is.
                 ok, frame = cap.read()
+            else:
+                # Geen fallback-camera (Belangrijk 8) EN nog geen
+                # geresolvede source -- gewoon wachten tot de eerste
+                # graaf-config met een geldige source binnenkomt.
+                ok, frame = False, None
 
             if not ok:
                 logger.warning("Kon geen frame lezen van camera")
                 consecutive_failures += 1
                 if consecutive_failures >= MAX_FAILURES_BEFORE_REOPEN:
                     logger.warning("Camera blijft falen, heropen de verbinding")
-                    cap.release()
+                    if cap is not None:
+                        cap.release()
                     # ponytail: guard resolved_source is not None -- source_state.kind
                     # kan nog "camera_stream" zijn van een vorige iteratie terwijl de
                     # huidige player's source dit frame (nog) niet resolvet, anders
@@ -701,7 +714,8 @@ def main():
                 cv2.imshow("mirror", rendered)
                 cv2.waitKey(1)
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
         if not MIRROR_HEADLESS:
             cv2.destroyAllWindows()
         streamer.stop()
