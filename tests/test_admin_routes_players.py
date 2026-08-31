@@ -1,3 +1,4 @@
+import sqlite3
 from fastapi.testclient import TestClient
 from admin.app.config import Settings
 from admin.app.main import create_app
@@ -362,3 +363,13 @@ def test_deleting_player_removes_its_branches(tmp_path):
 
     response = client.get(f"/api/players/{player['id']}/branches")
     assert response.status_code == 404
+    # De 404 hierboven komt alleen van de players-existence-check in de
+    # route en bewijst dus niets over de branches-tabel zelf (Task 3
+    # review-finding) -- rechtstreeks tellen is de enige echte garantie
+    # dat DELETE FROM player_branches ook echt gebeurd is.
+    raw = sqlite3.connect(str(tmp_path / "test.db"))
+    count = raw.execute(
+        "SELECT COUNT(*) FROM player_branches WHERE player_id = ?", (player["id"],)
+    ).fetchone()[0]
+    raw.close()
+    assert count == 0
