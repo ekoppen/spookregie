@@ -56,6 +56,16 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'camera_stream',
+            value TEXT NOT NULL DEFAULT '',
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -95,6 +105,7 @@ def init_db(path):
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
     _migrate_outputs(conn)
+    _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
     conn.commit()
     return conn
@@ -220,6 +231,25 @@ def _migrate_outputs(conn):
 
     # Always link scenes to the output
     conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))
+
+
+def _migrate_sources(conn):
+    """Zorgt dat er minstens één source bestaat, gevuld vanuit de huidige
+    (enige) output's camera_source bij de allereerste run na deze upgrade.
+    Idempotent: doet niets zodra er al een source is -- zelfde reden als
+    _migrate_outputs hierboven: geen 'value nog leeg? opnieuw vullen'-pad
+    op elke run, dat zou een bewust leeggemaakte source terugzetten."""
+    existing = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+    if existing > 0:
+        return
+    output_row = conn.execute("SELECT name, camera_source FROM outputs ORDER BY id LIMIT 1").fetchone()
+    if output_row is None:
+        return
+    output_name, camera_source = output_row
+    conn.execute(
+        "INSERT INTO sources (name, kind, value, canvas_x, canvas_y) VALUES (?, 'camera_stream', ?, ?, ?)",
+        (f"{output_name} camera", camera_source, -300.0, 0.0),
+    )
 
 
 def _migrate_scene_edges_to_triggers(conn):

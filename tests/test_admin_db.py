@@ -407,3 +407,67 @@ def test_triggers_migration_is_idempotent(tmp_path):
     conn = init_db(path)
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "triggers" in tables
+
+
+def test_sources_table_created(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "sources" in tables
+
+
+def test_default_source_created_from_output_camera_source(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(
+        """CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT '',
+            mqtt_topic_prefix TEXT NOT NULL DEFAULT '',
+            mirror_camera_source TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    raw.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url, mirror_camera_source) "
+        "VALUES (1, 'broker', 1883, 'http://ha', 'rtsp://cam.local/stream')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- outputs- en sources-migratie samen
+
+    rows = conn.execute("SELECT name, kind, value FROM sources").fetchall()
+    assert rows == [("Spiegel camera", "camera_stream", "rtsp://cam.local/stream")]
+
+
+def test_source_migration_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    count = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+    assert count == 1
+
+
+def test_blanked_source_value_is_not_reverted_on_restart(tmp_path):
+    """Zelfde soort regressie als Finding 2 op outputs: een bewust
+    leeggemaakte source-waarde mag niet teruggezet worden bij herstart."""
+    path = str(tmp_path / "test.db")
+    conn = init_db(path)
+    source_id = conn.execute("SELECT id FROM sources LIMIT 1").fetchone()[0]
+    conn.execute("UPDATE sources SET value = '' WHERE id = ?", (source_id,))
+    conn.commit()
+    conn.close()
+
+    conn2 = init_db(path)  # herstart
+
+    rows = conn2.execute("SELECT value FROM sources").fetchall()
+    assert rows == [("",)]
