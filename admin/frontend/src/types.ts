@@ -1,4 +1,4 @@
-export interface Scene {
+export interface Player {
   id: number;
   name: string;
   enabled: boolean;
@@ -14,14 +14,31 @@ export interface Scene {
   is_root: boolean;
   canvas_x: number;
   canvas_y: number;
-  output_id: number | null;
   color: string | null;
+  source_id: number | null;
+  playback_mode: "once" | "repeat_once" | "repeat_while";
+  repeat_while_ha_entity_id: string | null;
+}
+
+export interface PlayerBranch {
+  id: number;
+  player_id: number;
+  name: string;
+}
+
+export interface Source {
+  id: number;
+  name: string;
+  kind: "camera_stream" | "static_image";
+  value: string;
+  canvas_x: number;
+  canvas_y: number;
 }
 
 export interface Trigger {
   id: number;
-  from_scene_id: number;
-  to_scene_id: number | null;
+  from_branch_id: number;
+  to_player_id: number | null;
   kind: "always" | "motion" | "schedule" | "ha_sensor" | null;
   schedule_from: string | null;
   schedule_until: string | null;
@@ -37,6 +54,14 @@ export interface Output {
   id: number;
   name: string;
   camera_source: string;
+  canvas_x: number;
+  canvas_y: number;
+}
+
+export interface OutputConnection {
+  id: number;
+  output_id: number;
+  from_branch_id: number;
 }
 
 export interface ScareConfig {
