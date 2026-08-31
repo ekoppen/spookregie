@@ -12,7 +12,6 @@ interface FormState {
   ha_token: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
-  mirror_camera_source: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -24,7 +23,6 @@ const EMPTY_FORM: FormState = {
   ha_token: "",
   mirror_stream_url: "",
   mqtt_topic_prefix: "",
-  mirror_camera_source: "",
 };
 
 export default function SettingsPage() {
@@ -47,7 +45,6 @@ export default function SettingsPage() {
           ha_token: "",
           mirror_stream_url: result.mirror_stream_url,
           mqtt_topic_prefix: result.mqtt_topic_prefix,
-          mirror_camera_source: result.mirror_camera_source,
         });
         setError(null);
       })
@@ -70,7 +67,6 @@ export default function SettingsPage() {
         ...(form.ha_token ? { ha_token: form.ha_token } : {}),
         mirror_stream_url: form.mirror_stream_url,
         mqtt_topic_prefix: form.mqtt_topic_prefix,
-        mirror_camera_source: form.mirror_camera_source,
       });
       const refreshed = await getSettings();
       setSettings(refreshed);
@@ -212,22 +208,10 @@ export default function SettingsPage() {
                   onChange={(e) => update({ mirror_stream_url: e.target.value })}
                 />
               </label>
-              <label className="settings-field settings-field--wide">
-                <span className="settings-field__label">Camera-bron (optioneel)</span>
-                <input
-                  className="settings-field__input"
-                  type="text"
-                  value={form.mirror_camera_source}
-                  placeholder="bijv. rtsp://gebruiker:wachtwoord@192.168.1.50:554/stream1"
-                  onChange={(e) => update({ mirror_camera_source: e.target.value })}
-                />
-              </label>
             </div>
             <p className="settings-field__label" style={{ marginTop: "0.75rem" }}>
-              Leeg = de lokale camera op de node zelf. Een RTSP/HTTP-URL
-              gebruikt die camera in plaats daarvan — elk merk met een
-              standaard stream werkt. Nodes halen dit pas op bij hun
-              eerstvolgende herstart.
+              De camera-bron stel je per output in op de nieuwe
+              Outputs-pagina, niet hier.
             </p>
           </section>
 

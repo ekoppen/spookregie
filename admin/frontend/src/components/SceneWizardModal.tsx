@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getScene, createScene, updateScene, deleteScene, previewScene, type SceneDraft } from "../api/scenes";
-import { getSettings } from "../api/settings";
+import { getOutput } from "../api/outputs";
 import MediaLibrary from "./MediaLibrary";
 import OverlayCanvas from "./OverlayCanvas";
 import type { Scene } from "../types";
@@ -71,11 +71,6 @@ export default function SceneWizardModal({ sceneId, initialStep, onClose, onSave
   const [loaded, setLoaded] = useState(sceneId === null);
 
   useEffect(() => {
-    getSettings()
-      .then((s) => setCameraSource(s.mirror_camera_source))
-      .catch(() => {
-        /* voorbeeldbeeld blijft dan "niet beschikbaar" */
-      });
     if (sceneId !== null) {
       getScene(sceneId)
         .then((scene) => {
@@ -87,6 +82,18 @@ export default function SceneWizardModal({ sceneId, initialStep, onClose, onSave
         .catch(() => setError("Scene kon niet worden geladen."));
     }
   }, [sceneId]);
+
+  useEffect(() => {
+    if (draft.output_id === null) {
+      setCameraSource("");
+      return;
+    }
+    getOutput(draft.output_id)
+      .then((output) => setCameraSource(output.camera_source))
+      .catch(() => {
+        /* voorbeeldbeeld blijft dan "niet beschikbaar" */
+      });
+  }, [draft.output_id]);
 
   // Live preview tijdens het bewerken -- alleen mogelijk voor een al
   // opgeslagen scene (de preview-route heeft een id nodig), en alleen voor
@@ -310,7 +317,7 @@ export default function SceneWizardModal({ sceneId, initialStep, onClose, onSave
                 />
               ) : (
                 <p className="scene-modal__label">
-                  Geen camera-bron ingesteld op de Instellingen-pagina — kan hier niet getoond worden.
+                  Geen camera-bron ingesteld op de Outputs-pagina voor deze output — kan hier niet getoond worden.
                 </p>
               )}
             </>
