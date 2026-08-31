@@ -6,14 +6,12 @@ import "./OutputsPage.css";
 
 interface Draft {
   name: string;
-  camera_source: string;
 }
 
 export default function OutputsPage() {
   const [outputs, setOutputs] = useState<Output[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [newName, setNewName] = useState("");
-  const [newCameraSource, setNewCameraSource] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -22,7 +20,7 @@ export default function OutputsPage() {
     listOutputs()
       .then((result) => {
         setOutputs(result);
-        setDrafts(Object.fromEntries(result.map((o) => [o.id, { name: o.name, camera_source: o.camera_source }])));
+        setDrafts(Object.fromEntries(result.map((o) => [o.id, { name: o.name }])));
         setError(null);
       })
       .catch(() => setError("Outputs konden niet worden geladen."));
@@ -45,9 +43,8 @@ export default function OutputsPage() {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      await createOutput({ name: newName.trim(), camera_source: newCameraSource.trim() });
+      await createOutput({ name: newName.trim(), camera_source: "", canvas_x: 0, canvas_y: 0 });
       setNewName("");
-      setNewCameraSource("");
       refresh();
       showNotice("Output aangemaakt.");
     } catch {
@@ -59,10 +56,11 @@ export default function OutputsPage() {
 
   async function handleSave(id: number) {
     const draft = drafts[id];
-    if (!draft) return;
+    const existing = outputs.find((o) => o.id === id);
+    if (!draft || !existing) return;
     setSaving(true);
     try {
-      await updateOutput(id, draft);
+      await updateOutput(id, { name: draft.name, camera_source: existing.camera_source, canvas_x: existing.canvas_x, canvas_y: existing.canvas_y });
       refresh();
       showNotice("Output opgeslagen.");
     } catch {
@@ -108,7 +106,7 @@ export default function OutputsPage() {
 
       <section className="outputs-panel">
         {outputs.map((output) => {
-          const draft = drafts[output.id] ?? { name: output.name, camera_source: output.camera_source };
+          const draft = drafts[output.id] ?? { name: output.name };
           return (
             <div className="outputs-row" key={output.id}>
               <input
@@ -116,13 +114,6 @@ export default function OutputsPage() {
                 type="text"
                 value={draft.name}
                 onChange={(e) => updateDraft(output.id, { name: e.target.value })}
-              />
-              <input
-                className="outputs-field__input outputs-field__input--wide"
-                type="text"
-                value={draft.camera_source}
-                placeholder="bijv. rtsp://gebruiker:wachtwoord@192.168.1.50:554/stream1"
-                onChange={(e) => updateDraft(output.id, { camera_source: e.target.value })}
               />
               <button type="button" onClick={() => handleSave(output.id)} disabled={saving}>
                 Opslaan
@@ -142,13 +133,6 @@ export default function OutputsPage() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
-          <input
-            className="outputs-field__input outputs-field__input--wide"
-            type="text"
-            placeholder="Camera-bron (optioneel)"
-            value={newCameraSource}
-            onChange={(e) => setNewCameraSource(e.target.value)}
-          />
           <button type="button" onClick={handleCreate} disabled={saving || !newName.trim()}>
             + Output toevoegen
           </button>
@@ -156,10 +140,8 @@ export default function OutputsPage() {
       </section>
 
       <p className="outputs-field__label">
-        Leeg = de lokale camera op de node zelf. Een RTSP/HTTP-URL gebruikt die
-        camera in plaats daarvan — elk merk met een standaard stream werkt.
         Nodes halen dit pas op bij hun eerstvolgende herstart. Een output met
-        nog scenes eraan gekoppeld kan niet verwijderd worden.
+        nog players eraan gekoppeld kan niet verwijderd worden.
       </p>
     </div>
   );
