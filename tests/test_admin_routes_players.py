@@ -289,3 +289,76 @@ def test_published_graph_includes_output_id(tmp_path):
     kind, graph = bridge.calls[-1]
     assert kind == "graph"
     assert graph["output_id"] == default_output["id"]
+
+
+def test_new_player_gets_one_default_branch(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    created = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+
+    branches = client.get(f"/api/players/{created['id']}/branches").json()
+    assert len(branches) == 1
+    assert branches[0]["name"] == "Uitgang 1"
+
+
+def test_create_branch_on_player(tmp_path):
+    client, bridge = _client(tmp_path)
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+
+    response = client.post(f"/api/players/{player['id']}/branches", json={"name": "Extra pad"})
+
+    assert response.status_code == 200
+    created = response.json()
+    assert created["name"] == "Extra pad"
+    assert created["player_id"] == player["id"]
+    branches = client.get(f"/api/players/{player['id']}/branches").json()
+    assert len(branches) == 2
+
+
+def test_create_branch_requires_existing_player(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.post("/api/players/999/branches", json={"name": "X"})
+
+    assert response.status_code == 404
+
+
+def test_rename_branch(tmp_path):
+    client, bridge = _client(tmp_path)
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+    branch = client.get(f"/api/players/{player['id']}/branches").json()[0]
+
+    response = client.put(f"/api/branches/{branch['id']}", json={"name": "Hernoemd"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Hernoemd"
+
+
+def test_delete_branch(tmp_path):
+    client, bridge = _client(tmp_path)
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+    extra = client.post(f"/api/players/{player['id']}/branches", json={"name": "Extra"}).json()
+
+    response = client.delete(f"/api/branches/{extra['id']}")
+
+    assert response.status_code == 200
+    branches = client.get(f"/api/players/{player['id']}/branches").json()
+    assert len(branches) == 1
+
+
+def test_delete_branch_returns_404_for_unknown_id(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.delete("/api/branches/999")
+
+    assert response.status_code == 404
+
+
+def test_deleting_player_removes_its_branches(tmp_path):
+    client, bridge = _client(tmp_path)
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+
+    client.delete(f"/api/players/{player['id']}")
+
+    response = client.get(f"/api/players/{player['id']}/branches")
+    assert response.status_code == 404

@@ -585,3 +585,44 @@ def test_scenes_table_does_not_reappear_after_a_restart(tmp_path):
 
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "scenes" not in tables
+
+
+def test_player_branches_table_created(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "player_branches" in tables
+
+
+def test_existing_players_each_get_one_default_branch(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(2, 'B', 1, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)
+
+    rows = conn.execute("SELECT player_id, name FROM player_branches ORDER BY player_id").fetchall()
+    assert rows == [(1, "Uitgang 1"), (2, "Uitgang 1")]
+
+
+def test_player_branches_migration_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    count = conn.execute("SELECT COUNT(*) FROM player_branches").fetchone()[0]
+    assert count == 0  # verse install, geen players -> geen branches

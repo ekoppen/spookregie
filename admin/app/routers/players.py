@@ -4,6 +4,13 @@ from admin.app.graph_publish import publish_graph
 
 router = APIRouter()
 
+_BRANCH_COLUMNS = "id, player_id, name"
+
+
+def _row_to_branch(row):
+    return {"id": row[0], "player_id": row[1], "name": row[2]}
+
+
 _PLAYER_COLUMNS = (
     "id, name, enabled, source_mode, effect, params, overlay_hash, "
     "scale, position, canvas_width, canvas_height, source_scale, source_position, "
@@ -138,6 +145,8 @@ async def create_player_route(request: Request):
     if fields["is_root"]:
         _clear_other_roots(db, cursor.lastrowid)
     db.commit()
+    db.execute("INSERT INTO player_branches (player_id, name) VALUES (?, 'Uitgang 1')", (cursor.lastrowid,))
+    db.commit()
     publish_graph(db, request.app.state.bridge)
     return get_player_route(cursor.lastrowid, request)
 
@@ -203,6 +212,7 @@ def delete_player_route(player_id: int, request: Request):
     # opruimen: eigen uitgaande edges verdwijnen mee, inkomende edges
     # vallen terug op een lege output-stub i.p.v. een edge naar een
     # niet-bestaande scene te laten hangen.
+    db.execute("DELETE FROM player_branches WHERE player_id = ?", (player_id,))
     db.execute("DELETE FROM triggers WHERE from_scene_id = ?", (player_id,))
     db.execute(
         "UPDATE triggers SET to_scene_id = NULL, kind = NULL, "
@@ -211,6 +221,56 @@ def delete_player_route(player_id: int, request: Request):
     )
     db.commit()
     publish_graph(db, request.app.state.bridge)
+    return {"ok": True}
+
+
+@router.get("/api/players/{player_id:int}/branches")
+def list_player_branches_route(player_id: int, request: Request):
+    db = request.app.state.db
+    exists = db.execute("SELECT id FROM players WHERE id = ?", (player_id,)).fetchone()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Player niet gevonden")
+    rows = db.execute(
+        f"SELECT {_BRANCH_COLUMNS} FROM player_branches WHERE player_id = ? ORDER BY id", (player_id,)
+    ).fetchall()
+    return [_row_to_branch(r) for r in rows]
+
+
+@router.post("/api/players/{player_id:int}/branches")
+async def create_player_branch_route(player_id: int, request: Request):
+    db = request.app.state.db
+    exists = db.execute("SELECT id FROM players WHERE id = ?", (player_id,)).fetchone()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Player niet gevonden")
+    body = await request.json()
+    name = str(body.get("name", "")).strip() or "Nieuwe aftakking"
+    cursor = db.execute("INSERT INTO player_branches (player_id, name) VALUES (?, ?)", (player_id, name))
+    db.commit()
+    row = db.execute(f"SELECT {_BRANCH_COLUMNS} FROM player_branches WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _row_to_branch(row)
+
+
+@router.put("/api/branches/{branch_id:int}")
+async def update_player_branch_route(branch_id: int, request: Request):
+    db = request.app.state.db
+    existing = db.execute("SELECT id FROM player_branches WHERE id = ?", (branch_id,)).fetchone()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Aftakking niet gevonden")
+    body = await request.json()
+    name = str(body.get("name", "")).strip() or "Aftakking"
+    db.execute("UPDATE player_branches SET name = ? WHERE id = ?", (name, branch_id))
+    db.commit()
+    row = db.execute(f"SELECT {_BRANCH_COLUMNS} FROM player_branches WHERE id = ?", (branch_id,)).fetchone()
+    return _row_to_branch(row)
+
+
+@router.delete("/api/branches/{branch_id:int}")
+def delete_player_branch_route(branch_id: int, request: Request):
+    db = request.app.state.db
+    cursor = db.execute("DELETE FROM player_branches WHERE id = ?", (branch_id,))
+    db.commit()
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Aftakking niet gevonden")
     return {"ok": True}
 
 

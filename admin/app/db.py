@@ -76,6 +76,13 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS player_branches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id INTEGER NOT NULL,
+            name TEXT NOT NULL DEFAULT 'Uitgang 1'
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -120,6 +127,7 @@ def init_db(path):
     _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
     _migrate_scenes_to_players(conn)
+    _migrate_player_branches(conn)
     conn.commit()
     return conn
 
@@ -373,3 +381,17 @@ def _migrate_scenes_to_players(conn):
     if default_source is not None:
         conn.execute("UPDATE players SET source_id = ? WHERE source_id IS NULL", (default_source[0],))
     conn.execute("PRAGMA user_version = 3")
+
+
+def _migrate_player_branches(conn):
+    """Geeft elke bestaande player die nog geen enkele branch heeft er
+    precies één ('Uitgang 1'). Idempotent via PRAGMA user_version (>=4)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 4:
+        return
+    rows = conn.execute(
+        "SELECT p.id FROM players p WHERE NOT EXISTS "
+        "(SELECT 1 FROM player_branches b WHERE b.player_id = p.id)"
+    ).fetchall()
+    for (player_id,) in rows:
+        conn.execute("INSERT INTO player_branches (player_id, name) VALUES (?, 'Uitgang 1')", (player_id,))
+    conn.execute("PRAGMA user_version = 4")
