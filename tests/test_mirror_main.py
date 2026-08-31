@@ -115,43 +115,43 @@ def test_apply_graph_message_ignores_malformed_json():
     assert logger.errors
 
 
-def test_apply_graph_message_ignores_non_list_scenes_or_edges():
+def test_apply_graph_message_ignores_non_list_players_or_triggers():
     logger = _FakeLogger()
-    mirror_main._apply_graph_message(json.dumps({"scenes": "nope", "triggers": [], "root_scene_id": 1}), logger)
+    mirror_main._apply_graph_message(json.dumps({"players": "nope", "triggers": [], "root_player_id": 1}), logger)
     assert logger.errors
 
 
-def test_apply_graph_message_updates_scene_graph():
-    scene = {"id": 1, "trigger_type": None, "overlay_hash": None}
-    payload = {"scenes": [scene], "triggers": [], "root_scene_id": 1}
+def test_apply_graph_message_updates_player_graph():
+    player = {"id": 1, "trigger_type": None, "overlay_hash": None}
+    payload = {"players": [player], "branches": [], "triggers": [], "root_player_id": 1}
     mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
-    result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
-    assert result == scene
+    result, transitioned = mirror_main.player_graph.resolve(False, "12:00")
+    assert result == player
     assert transitioned is False
 
 
 def test_apply_graph_message_reads_triggers_key():
-    scene = {"id": 1, "trigger_type": None, "overlay_hash": None}
-    payload = {"scenes": [scene], "triggers": [], "root_scene_id": 1}
+    player = {"id": 1, "trigger_type": None, "overlay_hash": None}
+    payload = {"players": [player], "branches": [], "triggers": [], "root_player_id": 1}
     mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
-    result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
-    assert result == scene
+    result, transitioned = mirror_main.player_graph.resolve(False, "12:00")
+    assert result == player
     assert transitioned is False
 
 
-def test_apply_graph_message_syncs_overlay_for_each_scene(monkeypatch):
+def test_apply_graph_message_syncs_overlay_for_each_player(monkeypatch):
     started = []
     monkeypatch.setattr(
         mirror_main.threading, "Thread",
         lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
     )
-    scenes = [
+    players = [
         {"id": 1, "overlay_hash": "a" * 64},
         {"id": 2, "overlay_hash": "b" * 64},
     ]
-    payload = {"scenes": scenes, "triggers": [], "root_scene_id": 1}
+    payload = {"players": players, "branches": [], "triggers": [], "root_player_id": 1}
 
     mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
@@ -168,12 +168,12 @@ def test_apply_scene_preview_message_sets_preview_and_syncs_overlay(monkeypatch)
     scene = {"id": 5, "overlay_hash": "a" * 64}
     try:
         mirror_main._apply_scene_preview_message(json.dumps(scene), _FakeLogger())
-        result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
+        result, transitioned = mirror_main.player_graph.resolve(False, "12:00")
         assert result == scene
         assert started and started[0]["args"][2] == ["a" * 64]
     finally:
-        mirror_main.scene_graph._preview = None
-        mirror_main.scene_graph._preview_set_at = None
+        mirror_main.player_graph._preview = None
+        mirror_main.player_graph._preview_set_at = None
 
 
 def test_render_action_no_winner_is_blank():
@@ -358,3 +358,105 @@ def test_apply_ha_trigger_message_ignores_missing_entity_id():
     logger = _FakeLogger()
     mirror_main._apply_ha_trigger_message(json.dumps({}), logger)
     assert logger.errors
+
+
+def test_play_scare_video_sequence_once_plays_exactly_one_clip(monkeypatch):
+    mirror_main.synced_scare_videos = {"h1": {"video": "v.mp4", "audio": None}}
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+
+    try:
+        winning = {"playback_mode": "once"}
+        result = mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+        assert result == mirror_main.ACTIVE_SECONDS
+        assert len(play_calls) == 1
+    finally:
+        mirror_main.synced_scare_videos = {}
+
+
+def test_play_scare_video_sequence_repeat_once_plays_exactly_two_clips(monkeypatch):
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+
+    winning = {"playback_mode": "repeat_once"}
+    mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+
+    assert len(play_calls) == 2
+
+
+def test_play_scare_video_sequence_repeat_while_loops_until_sensor_drops(monkeypatch):
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+    states = iter(["on", "on", "off"])  # 1 verplichte keer + 2x nog 'on' + stop op 'off'
+    mirror_main._ha_entity_states["binary_sensor.tuin"] = "on"
+    monkeypatch.setattr(mirror_main, "_ha_entity_state", lambda entity_id: next(states, "off"))
+
+    winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": "binary_sensor.tuin"}
+    mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+
+    assert len(play_calls) == 3  # 1 gegarandeerde keer + 2 herhalingen zolang 'on'
+
+
+def test_play_scare_video_sequence_repeat_while_without_entity_id_plays_once(monkeypatch):
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+
+    winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": None}
+    mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+
+    assert len(play_calls) == 1
+
+
+def test_apply_ha_sensor_state_message_updates_state():
+    mirror_main._ha_entity_states.clear()
+    mirror_main._apply_ha_sensor_state_message(
+        json.dumps({"entity_id": "binary_sensor.tuin", "state": "on"}), _FakeLogger()
+    )
+
+    assert mirror_main._ha_entity_state("binary_sensor.tuin") == "on"
+    mirror_main._ha_entity_states.clear()
+
+
+def test_apply_ha_sensor_state_message_ignores_malformed_payload():
+    logger = _FakeLogger()
+    mirror_main._apply_ha_sensor_state_message("{niet-geldig-json", logger)
+    assert logger.errors
+
+
+def test_resolve_frame_source_reuses_open_capture_for_unchanged_source(monkeypatch):
+    open_calls = []
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: open_calls.append(value) or "cap-object")
+    state = mirror_main._SourceState()
+
+    cap1 = mirror_main._ensure_source(state, {"id": 5, "kind": "camera_stream", "value": "rtsp://a"}, _FakeLogger())
+    cap2 = mirror_main._ensure_source(state, {"id": 5, "kind": "camera_stream", "value": "rtsp://a"}, _FakeLogger())
+
+    assert cap1 is cap2
+    assert open_calls == ["rtsp://a"]  # maar 1x geopend, niet 2x
+
+
+def test_resolve_frame_source_reopens_when_source_id_changes(monkeypatch):
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: f"cap-{value}")
+    released = []
+    state = mirror_main._SourceState()
+    state.capture = type("FakeCap", (), {"release": lambda self: released.append(1)})()
+    state.source_id = 5
+
+    mirror_main._ensure_source(state, {"id": 6, "kind": "camera_stream", "value": "rtsp://b"}, _FakeLogger())
+
+    assert released == [1]  # oude capture netjes gesloten vóór de nieuwe geopend wordt
+    assert state.source_id == 6
+
+
+def test_resolve_frame_source_caches_static_image(monkeypatch):
+    read_calls = []
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.cv2, "imread", lambda path, *a: read_calls.append(path) or "decoded-image")
+    state = mirror_main._SourceState()
+
+    img1 = mirror_main._ensure_source(state, {"id": 7, "kind": "static_image", "value": "a" * 64}, _FakeLogger())
+    img2 = mirror_main._ensure_source(state, {"id": 7, "kind": "static_image", "value": "a" * 64}, _FakeLogger())
+
+    assert img1 == "decoded-image"
+    assert img2 == "decoded-image"
+    assert len(read_calls) == 1  # niet opnieuw gedecodeerd, id ongewijzigd

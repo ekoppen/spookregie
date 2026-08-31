@@ -62,10 +62,21 @@ sleeping = threading.Event()
 # Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
 # hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
 test_trigger_requested = threading.Event()
-scene_graph = PlayerGraph()
+player_graph = PlayerGraph()
 synced_scare_videos = {}
 _fired_ha_entities_lock = threading.Lock()
 _fired_ha_entities = set()
+_ha_entity_states_lock = threading.Lock()
+_ha_entity_states = {}
+
+# Laatst ontvangen graaf-metadata (naast player_graph zelf) die de
+# output-routing-publish en de dynamische source-resolutie nodig hebben --
+# bijgewerkt door _apply_graph_message, gelezen door main()'s lus.
+_current_output_id = None
+_current_output_connections = []
+_current_branches = []
+_current_sources = []
+_last_published_output_player_id = None
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
 # locally (not imported from shared.media_sync) since it's a one-liner and
@@ -122,6 +133,7 @@ def _apply_scare_video_config_message(payload, logger):
 
 
 def _apply_graph_message(payload, logger):
+    global _current_output_id, _current_output_connections, _current_branches, _current_sources
     try:
         graph = json.loads(payload)
     except json.JSONDecodeError:
@@ -130,21 +142,21 @@ def _apply_graph_message(payload, logger):
     if not isinstance(graph, dict):
         logger.error("Graaf-config is geen object, genegeerd: %r", graph)
         return
-    scenes = graph.get("scenes", [])
-    triggers = graph.get("triggers", [])
-    root_scene_id = graph.get("root_scene_id")
-    if not isinstance(scenes, list) or not isinstance(triggers, list):
-        logger.error("Graaf-config heeft geen geldige scenes/triggers-lijst, genegeerd: %r", graph)
-        return
-    # ponytail: branches komen pas met de nieuwe graaf-payload (Task 11);
-    # tot dan een lege lijst, wat identiek gedrag geeft aan de oude
-    # 3-parameter aanroep zolang triggers ook geen from_branch_id gebruiken
-    # die naar een echte branch moet resolven.
+    players = graph.get("players", [])
     branches = graph.get("branches", [])
-    scene_graph.set_graph(scenes, branches, triggers, root_scene_id)
-    for scene in scenes:
-        if isinstance(scene, dict):
-            _sync_overlay_in_background(scene)
+    triggers = graph.get("triggers", [])
+    root_player_id = graph.get("root_player_id")
+    if not isinstance(players, list) or not isinstance(triggers, list):
+        logger.error("Graaf-config heeft geen geldige players/triggers-lijst, genegeerd: %r", graph)
+        return
+    player_graph.set_graph(players, branches, triggers, root_player_id)
+    _current_output_id = graph.get("output_id")
+    _current_output_connections = graph.get("output_connections", [])
+    _current_branches = branches
+    _current_sources = graph.get("sources", [])
+    for player in players:
+        if isinstance(player, dict):
+            _sync_overlay_in_background(player)
 
 
 def _apply_scene_preview_message(payload, logger):
@@ -156,7 +168,7 @@ def _apply_scene_preview_message(payload, logger):
     if not isinstance(scene, dict):
         logger.error("Scene-preview is geen object, genegeerd: %r", scene)
         return
-    scene_graph.set_preview(scene)
+    player_graph.set_preview(scene)
     _sync_overlay_in_background(scene)
 
 
@@ -172,6 +184,26 @@ def _apply_ha_trigger_message(payload, logger):
         return
     with _fired_ha_entities_lock:
         _fired_ha_entities.add(entity_id)
+
+
+def _apply_ha_sensor_state_message(payload, logger):
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige ha-sensor-state-JSON ontvangen, genegeerd")
+        return
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    state = data.get("state") if isinstance(data, dict) else None
+    if not isinstance(entity_id, str) or not entity_id or not isinstance(state, str):
+        logger.error("ha-sensor-state-bericht zonder geldige entity_id/state, genegeerd: %r", data)
+        return
+    with _ha_entity_states_lock:
+        _ha_entity_states[entity_id] = state
+
+
+def _ha_entity_state(entity_id):
+    with _ha_entity_states_lock:
+        return _ha_entity_states.get(entity_id)
 
 
 def make_on_message(logger, topics):
@@ -200,6 +232,9 @@ def make_on_message(logger, topics):
             if msg.topic == topics.control_mirror_ha_trigger:
                 _apply_ha_trigger_message(msg.payload.decode(), logger)
                 return
+            if msg.topic == topics.control_mirror_ha_sensor_state:
+                _apply_ha_sensor_state_message(msg.payload.decode(), logger)
+                return
         except Exception as exc:
             logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
@@ -220,6 +255,49 @@ def _load_overlay(overlay_hash, logger):
         _overlay_cache["hash"] = overlay_hash
         _overlay_cache["image"] = cv2.imread(overlay_path, cv2.IMREAD_UNCHANGED)
     return _overlay_cache["image"]
+
+
+class _SourceState:
+    """Houdt bij welke source op dit moment 'open' is voor de camera-lus
+    -- capture-object bij camera_stream, gedecodeerd beeld bij
+    static_image -- zodat een ongewijzigde source niet elk frame opnieuw
+    geopend/gedecodeerd wordt, en een gewijzigde source de oude capture
+    netjes sluit voordat de nieuwe geopend wordt."""
+
+    def __init__(self):
+        self.source_id = None
+        self.kind = None
+        self.capture = None
+        self.image = None
+
+
+def _ensure_source(state, source, logger):
+    """Geeft het huidige frame-beeld (cv2 capture voor camera_stream, een
+    gedecodeerd beeld voor static_image) terug voor `source`, en heropent/
+    herdecodeert alleen als de source_id daadwerkelijk gewijzigd is sinds
+    de vorige aanroep."""
+    if source is None:
+        return None
+    if state.source_id == source.get("id") and state.kind == source.get("kind"):
+        return state.capture if state.kind == "camera_stream" else state.image
+    if state.capture is not None:
+        state.capture.release()
+        state.capture = None
+    state.image = None
+    state.source_id = source.get("id")
+    state.kind = source.get("kind")
+    if state.kind == "static_image":
+        value = source.get("value", "")
+        if not _HASH_RE.match(value):
+            logger.error("Ongeldige static_image-hash op source: %s", value)
+            return None
+        image_path = os.path.join(MEDIA_CACHE_DIR, value)
+        if not os.path.exists(image_path):
+            return None
+        state.image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        return state.image
+    state.capture = open_camera(source.get("value", ""), CAMERA_INDEX)
+    return state.capture
 
 
 def _render(frame, scene, logger):
@@ -299,9 +377,41 @@ def _handle_trigger(streamer, logger):
     return ACTIVE_SECONDS
 
 
+def _play_scare_video_sequence(winning, streamer, logger):
+    """Speelt scare-video's af volgens winning['playback_mode']: 'once'
+    precies 1x (bestaand gedrag, ongewijzigd), 'repeat_once' precies 2x,
+    'repeat_while' minstens 1x en daarna zolang de gekoppelde HA-sensor
+    (NIVEAU, geen puls -- ander mechanisme dan de HA-trigger hierboven,
+    zie het Global Constraints-punt over puls vs. niveau) 'on'/'detected'
+    blijft rapporteren. Geeft ACTIVE_SECONDS terug, zelfde contract als
+    het onderliggende _handle_trigger."""
+    mode = winning.get("playback_mode", "once")
+    if mode == "repeat_while":
+        entity_id = winning.get("repeat_while_ha_entity_id")
+        result = _handle_trigger(streamer, logger)
+        while entity_id and _ha_entity_state(entity_id) in ("on", "detected"):
+            result = _handle_trigger(streamer, logger)
+        return result
+    plays = 2 if mode == "repeat_once" else 1
+    result = ACTIVE_SECONDS
+    for _ in range(plays):
+        result = _handle_trigger(streamer, logger)
+    return result
+
+
+def _player_feeds_this_output(player_id, output_id, branches, output_connections):
+    """True als de gegeven player, via een van zijn branches, een
+    output_connections-rij heeft naar output_id."""
+    player_branch_ids = {b["id"] for b in branches if b.get("player_id") == player_id}
+    return any(
+        oc["from_branch_id"] in player_branch_ids and oc["output_id"] == output_id
+        for oc in output_connections
+    )
+
+
 def _render_action(winning, transitioned):
     """Bepaalt wat de hoofdlus deze cyclus moet doen, gegeven wat
-    scene_graph.resolve() teruggaf. Puur -- geen state, geen I/O --
+    player_graph.resolve() teruggaf. Puur -- geen state, geen I/O --
     zodat de driewegs-keuze (scare-video afspelen / camera-effect
     renderen / zwart beeld) los van de camera-lus getest kan worden."""
     if winning is None:
@@ -375,6 +485,7 @@ def main():
         client.subscribe(topics.control_mirror_test)
         client.subscribe(topics.config_mirror_scare_video)
         client.subscribe(topics.control_mirror_ha_trigger)
+        client.subscribe(topics.control_mirror_ha_sensor_state)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
@@ -410,16 +521,43 @@ def main():
     MAX_FAILURES_BEFORE_REOPEN = 30  # ~15s bij 0.5s sleep tussen mislukte reads
     logger.info("mirror-node gestart")
 
+    source_state = _SourceState()
     try:
         while True:
-            ok, frame = cap.read()
+            sources_by_id = {s["id"]: s for s in _current_sources}
+            current_player = player_graph._players.get(player_graph._current_id)
+            resolved_source = sources_by_id.get(current_player.get("source_id")) if current_player else None
+            acquired = _ensure_source(source_state, resolved_source, logger) if resolved_source else None
+
+            if resolved_source is not None and resolved_source.get("kind") == "static_image":
+                if acquired is None:
+                    time.sleep(0.5)
+                    continue
+                frame = acquired.copy()
+                ok = True
+            elif acquired is not None:
+                ok, frame = acquired.read()
+            else:
+                # Geen (nog) bekende source voor de huidige player -- val
+                # terug op de startup-camera zodat het beeld nooit
+                # volledig leeg blijft vóór de eerste graaf-config binnen is.
+                ok, frame = cap.read()
+
             if not ok:
                 logger.warning("Kon geen frame lezen van camera")
                 consecutive_failures += 1
                 if consecutive_failures >= MAX_FAILURES_BEFORE_REOPEN:
                     logger.warning("Camera blijft falen, heropen de verbinding")
                     cap.release()
-                    cap = open_camera(camera_source, CAMERA_INDEX)
+                    # ponytail: guard resolved_source is not None -- source_state.kind
+                    # kan nog "camera_stream" zijn van een vorige iteratie terwijl de
+                    # huidige player's source dit frame (nog) niet resolvet, anders
+                    # AttributeError op resolved_source.get(...) hieronder.
+                    if source_state.kind == "camera_stream" and source_state.capture is not None and resolved_source is not None:
+                        source_state.capture.release()
+                        source_state.capture = open_camera(resolved_source.get("value", ""), CAMERA_INDEX)
+                    else:
+                        cap = open_camera(camera_source, CAMERA_INDEX)
                     consecutive_failures = 0
                 time.sleep(0.5)
                 continue
@@ -438,7 +576,7 @@ def main():
 
             # fired: eenmalige puls voor dit frame, NIET het aanhoudende
             # "we zitten nog in de cooldown"-niveau (now < active_until).
-            # scene_graph.resolve() is stateful en volgt een edge alleen
+            # player_graph.resolve() is stateful en volgt een edge alleen
             # op het frame dat 'm matcht -- een niveau dat ACTIVE_SECONDS
             # lang True blijft laat een motion-edge bij elke terugkeer op
             # de bronscene opnieuw matchen, en ping-pongt de graaf
@@ -460,15 +598,31 @@ def main():
                 fired_ha_entities = frozenset(_fired_ha_entities)
                 _fired_ha_entities.clear()
 
-            winning, transitioned = scene_graph.resolve(fired, now_hhmm, fired_ha_entities)
+            winning, transitioned = player_graph.resolve(fired, now_hhmm, fired_ha_entities)
+
+            global _last_published_output_player_id
+            if (
+                winning is not None
+                and transitioned
+                and _current_output_id is not None
+                and _player_feeds_this_output(winning["id"], _current_output_id, _current_branches, _current_output_connections)
+                and winning["id"] != _last_published_output_player_id
+            ):
+                client.publish(
+                    topics.mirror_triggered, json.dumps({"player_id": winning["id"], "output_id": _current_output_id})
+                )
+                _last_published_output_player_id = winning["id"]
+
             action = _render_action(winning, transitioned)
 
             if action == "scare_video":
-                # Bij aankomst op een scare-video-scene: speel 'm nu
-                # blokkerend af (bestaand _handle_trigger-pad,
-                # ongewijzigd). _play_scare_video streamt zijn eigen
-                # frames al, dus hier verder niets meer te renderen.
-                cooldown = _handle_trigger(streamer, logger)
+                # Bij aankomst op een scare-video-scene: speel de
+                # scare-video('s) nu blokkerend af, volgens de
+                # playback_mode van de winnende player (once/repeat_once/
+                # repeat_while -- zie _play_scare_video_sequence).
+                # _play_scare_video streamt zijn eigen frames al, dus hier
+                # verder niets meer te renderen.
+                cooldown = _play_scare_video_sequence(winning, streamer, logger)
                 active_until = time.time() + cooldown
                 rendered = frame * 0
             elif action == "blank":

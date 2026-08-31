@@ -16,6 +16,9 @@ class FakeBridge:
     def reconfigure(self, runtime_settings):
         self.reconfigured_with = runtime_settings
 
+    def publish_mirror_graph(self, graph):
+        pass
+
 
 def _client(tmp_path):
     """Vervangt app.state.bridge door een FakeBridge -- anders roept een PUT
@@ -55,10 +58,20 @@ def test_node_config_reflects_saved_prefix(tmp_path):
 
 
 def test_node_config_includes_camera_source(tmp_path):
+    """Nieuwe source, gekoppeld aan de root-player -- bewijst dat de bron
+    via de root player's source_id resolvet (niet zomaar "de eerste
+    source in de tabel"). Een verse db heeft geen enkele player/source
+    totdat de test er zelf een aanmaakt (geen seed-data)."""
     client, app = _client(tmp_path)
     client.post("/api/login", json={"password": "testwachtwoord"})
-    output = client.get("/api/outputs").json()[0]
-    client.put(f"/api/outputs/{output['id']}", json={"name": output["name"], "camera_source": "rtsp://cam.local/stream1"})
+    source = client.post("/api/sources", json={
+        "name": "Tuin", "kind": "camera_stream", "value": "rtsp://cam.local/stream1",
+        "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+    # De allereerste player krijgt altijd is_root, ongeacht de body
+    # (zie admin/app/routers/players.py create_player_route).
+    player = client.post("/api/players", json={"name": "Basis", "source_id": source["id"]}).json()
+    assert player["is_root"] is True
 
     response = client.get("/api/node-config")
 
