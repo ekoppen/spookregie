@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { getNodes } from "../api/nodes";
 import { getSchedule, putSchedule, emergencyStop, wake } from "../api/schedule";
-import { listScenes, deleteScene, reorderScenes, updateScene } from "../api/scenes";
+import { listScenes } from "../api/scenes";
+import { listSceneEdges } from "../api/sceneEdges";
 import { testMirror } from "../api/mirror";
 import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
 import { useWebSocket } from "../hooks/useWebSocket";
 import NodeStatusCard from "../components/NodeStatusCard";
 import SceneWizardModal from "../components/SceneWizardModal";
-import type { NodeStatusMap, Schedule, Scene, WsMessage } from "../types";
+import SceneGraphCanvas from "../components/SceneGraphCanvas";
+import type { NodeStatusMap, Schedule, Scene, SceneEdge, WsMessage } from "../types";
 import "./DashboardPage.css";
 
 export default function DashboardPage() {
@@ -19,8 +21,10 @@ export default function DashboardPage() {
   const [stopping, setStopping] = useState(false);
   const [waking, setWaking] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
+  const [sceneEdges, setSceneEdges] = useState<SceneEdge[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSceneId, setWizardSceneId] = useState<number | null>(null);
+  const [wizardInitialStep, setWizardInitialStep] = useState<"input" | "animation" | "output">("input");
   const [running, setRunning] = useState(false);
   const [processBusy, setProcessBusy] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -30,6 +34,9 @@ export default function DashboardPage() {
     listScenes()
       .then(setScenes)
       .catch(() => setError("Scenes konden niet worden geladen."));
+    listSceneEdges()
+      .then(setSceneEdges)
+      .catch(() => setError("Verbindingen konden niet worden geladen."));
   }
 
   useEffect(() => {
@@ -108,47 +115,10 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleDeleteScene(id: number) {
-    try {
-      await deleteScene(id);
-      refreshScenes();
-    } catch {
-      setError("Scene verwijderen is mislukt.");
-    }
-  }
-
-  async function handleToggleScene(scene: Scene) {
-    const { id, order_index: _order_index, ...draft } = scene;
-    try {
-      await updateScene(id, { ...draft, enabled: !scene.enabled });
-      refreshScenes();
-    } catch {
-      setError("Scene in-/uitschakelen is mislukt.");
-    }
-  }
-
-  function handleMoveScene(id: number, direction: -1 | 1) {
-    const index = scenes.findIndex((s) => s.id === id);
-    const target = index + direction;
-    if (index === -1 || target < 0 || target >= scenes.length) return;
-    const reordered = [...scenes];
-    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-    setScenes(reordered);
-    reorderScenes(reordered.map((s) => s.id)).catch(() => {
-      setError("Volgorde wijzigen is mislukt.");
-      refreshScenes();
-    });
-  }
-
-  function openWizard(id: number | null) {
+  function openWizard(id: number | null, step: "input" | "animation" | "output" = "input") {
     setWizardSceneId(id);
+    setWizardInitialStep(step);
     setWizardOpen(true);
-  }
-
-  function triggerSummary(scene: Scene): string {
-    if (scene.trigger_type === "always") return "Altijd";
-    if (scene.trigger_type === "motion") return "Beweging";
-    return `Tijdschema ${scene.trigger_from ?? "?"}–${scene.trigger_until ?? "?"}`;
   }
 
   async function handleStartProcess() {
@@ -218,40 +188,13 @@ export default function DashboardPage() {
 
       <section className="dash-panel">
         <p className="dash-panel__eyebrow">Scenes</p>
-        <div className="scene-grid">
-          {scenes.map((scene, index) => (
-            <div className="scene-card" key={scene.id} data-enabled={scene.enabled}>
-              <p className="scene-card__name">{scene.name}</p>
-              <p className="scene-card__trigger">{triggerSummary(scene)}</p>
-              <label className="schedule-toggle">
-                <input type="checkbox" checked={scene.enabled} onChange={() => handleToggleScene(scene)} />
-                <span className="schedule-toggle__rocker" aria-hidden="true" />
-                <span className="schedule-toggle__label">{scene.enabled ? "Aan" : "Uit"}</span>
-              </label>
-              <div className="scene-card__actions">
-                <button type="button" onClick={() => handleMoveScene(scene.id, -1)} disabled={index === 0}>
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMoveScene(scene.id, 1)}
-                  disabled={index === scenes.length - 1}
-                >
-                  ▼
-                </button>
-                <button type="button" onClick={() => openWizard(scene.id)}>
-                  Bewerken
-                </button>
-                <button type="button" onClick={() => handleDeleteScene(scene.id)}>
-                  Verwijderen
-                </button>
-              </div>
-            </div>
-          ))}
-          <button type="button" className="scene-card scene-card--add" onClick={() => openWizard(null)}>
-            + Nieuwe scene
-          </button>
-        </div>
+        <SceneGraphCanvas
+          scenes={scenes}
+          edges={sceneEdges}
+          onSceneClick={(id, step) => openWizard(id, step)}
+          onGraphChanged={refreshScenes}
+          onAddScene={() => openWizard(null)}
+        />
       </section>
 
       <section className="dash-panel">
@@ -278,6 +221,7 @@ export default function DashboardPage() {
       {wizardOpen && (
         <SceneWizardModal
           sceneId={wizardSceneId}
+          initialStep={wizardInitialStep}
           onClose={() => setWizardOpen(false)}
           onSaved={refreshScenes}
         />
