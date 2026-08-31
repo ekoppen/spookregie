@@ -63,6 +63,8 @@ sleeping = threading.Event()
 test_trigger_requested = threading.Event()
 scene_graph = SceneGraph()
 synced_scare_videos = {}
+_fired_ha_entities_lock = threading.Lock()
+_fired_ha_entities = set()
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
 # locally (not imported from shared.media_sync) since it's a one-liner and
@@ -128,12 +130,12 @@ def _apply_graph_message(payload, logger):
         logger.error("Graaf-config is geen object, genegeerd: %r", graph)
         return
     scenes = graph.get("scenes", [])
-    edges = graph.get("edges", [])
+    triggers = graph.get("triggers", [])
     root_scene_id = graph.get("root_scene_id")
-    if not isinstance(scenes, list) or not isinstance(edges, list):
-        logger.error("Graaf-config heeft geen geldige scenes/edges-lijst, genegeerd: %r", graph)
+    if not isinstance(scenes, list) or not isinstance(triggers, list):
+        logger.error("Graaf-config heeft geen geldige scenes/triggers-lijst, genegeerd: %r", graph)
         return
-    scene_graph.set_graph(scenes, edges, root_scene_id)
+    scene_graph.set_graph(scenes, triggers, root_scene_id)
     for scene in scenes:
         if isinstance(scene, dict):
             _sync_overlay_in_background(scene)
@@ -150,6 +152,20 @@ def _apply_scene_preview_message(payload, logger):
         return
     scene_graph.set_preview(scene)
     _sync_overlay_in_background(scene)
+
+
+def _apply_ha_trigger_message(payload, logger):
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige ha-trigger-JSON ontvangen, genegeerd")
+        return
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not isinstance(entity_id, str) or not entity_id:
+        logger.error("ha-trigger-bericht zonder geldige entity_id, genegeerd: %r", data)
+        return
+    with _fired_ha_entities_lock:
+        _fired_ha_entities.add(entity_id)
 
 
 def make_on_message(logger, topics):
@@ -175,6 +191,9 @@ def make_on_message(logger, topics):
                 return
             if msg.topic == topics.config_mirror_scare_video:
                 _apply_scare_video_config_message(msg.payload.decode(), logger)
+            if msg.topic == topics.control_mirror_ha_trigger:
+                _apply_ha_trigger_message(msg.payload.decode(), logger)
+                return
         except Exception as exc:
             logger.error("Fout bij verwerken MQTT-bericht op topic %s: %s", msg.topic, exc)
     return on_message
@@ -361,6 +380,7 @@ def main():
         client.subscribe(topics.control_mirror_scene_preview)
         client.subscribe(topics.control_mirror_test)
         client.subscribe(topics.config_mirror_scare_video)
+        client.subscribe(topics.control_mirror_ha_trigger)
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
@@ -442,7 +462,11 @@ def main():
                 active_until = time.time() + ACTIVE_SECONDS
                 fired = True
 
-            winning, transitioned = scene_graph.resolve(fired, now_hhmm)
+            with _fired_ha_entities_lock:
+                fired_ha_entities = frozenset(_fired_ha_entities)
+                _fired_ha_entities.clear()
+
+            winning, transitioned = scene_graph.resolve(fired, now_hhmm, fired_ha_entities)
             action = _render_action(winning, transitioned)
 
             if action == "scare_video":

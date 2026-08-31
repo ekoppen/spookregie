@@ -145,13 +145,23 @@ def test_apply_graph_message_ignores_malformed_json():
 
 def test_apply_graph_message_ignores_non_list_scenes_or_edges():
     logger = _FakeLogger()
-    mirror_main._apply_graph_message(json.dumps({"scenes": "nope", "edges": [], "root_scene_id": 1}), logger)
+    mirror_main._apply_graph_message(json.dumps({"scenes": "nope", "triggers": [], "root_scene_id": 1}), logger)
     assert logger.errors
 
 
 def test_apply_graph_message_updates_scene_graph():
     scene = {"id": 1, "trigger_type": None, "overlay_hash": None}
-    payload = {"scenes": [scene], "edges": [], "root_scene_id": 1}
+    payload = {"scenes": [scene], "triggers": [], "root_scene_id": 1}
+    mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
+
+    result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
+    assert result == scene
+    assert transitioned is False
+
+
+def test_apply_graph_message_reads_triggers_key():
+    scene = {"id": 1, "trigger_type": None, "overlay_hash": None}
+    payload = {"scenes": [scene], "triggers": [], "root_scene_id": 1}
     mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
     result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
@@ -169,7 +179,7 @@ def test_apply_graph_message_syncs_overlay_for_each_scene(monkeypatch):
         {"id": 1, "overlay_hash": "a" * 64},
         {"id": 2, "overlay_hash": "b" * 64},
     ]
-    payload = {"scenes": scenes, "edges": [], "root_scene_id": 1}
+    payload = {"scenes": scenes, "triggers": [], "root_scene_id": 1}
 
     mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
@@ -355,3 +365,24 @@ def test_handle_trigger_returns_active_seconds_when_no_scare_videos():
     result = mirror_main._handle_trigger("streamer", _FakeLogger())
 
     assert result == mirror_main.ACTIVE_SECONDS
+
+
+def test_apply_ha_trigger_message_adds_entity_to_fired_set():
+    mirror_main._fired_ha_entities.clear()
+    mirror_main._apply_ha_trigger_message(json.dumps({"entity_id": "binary_sensor.tuin"}), _FakeLogger())
+
+    with mirror_main._fired_ha_entities_lock:
+        assert "binary_sensor.tuin" in mirror_main._fired_ha_entities
+    mirror_main._fired_ha_entities.clear()
+
+
+def test_apply_ha_trigger_message_ignores_malformed_payload():
+    logger = _FakeLogger()
+    mirror_main._apply_ha_trigger_message("{niet-geldig-json", logger)
+    assert logger.errors
+
+
+def test_apply_ha_trigger_message_ignores_missing_entity_id():
+    logger = _FakeLogger()
+    mirror_main._apply_ha_trigger_message(json.dumps({}), logger)
+    assert logger.errors
