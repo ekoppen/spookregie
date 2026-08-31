@@ -16,7 +16,7 @@ export default function PreviewPanel({ draft, onClose }: Props) {
 
   // Leading-edge throttle (max. 1x per 150ms), zelfde patroon als de
   // vroegere live-hardware-preview -- alleen doelt dit nu op de eigen
-  // /api/scenes/preview-frame-route i.p.v. de fysieke spiegel.
+  // /api/players/preview-frame-route i.p.v. de fysieke spiegel.
   useEffect(() => {
     const THROTTLE_MS = 150;
 
@@ -24,7 +24,7 @@ export default function PreviewPanel({ draft, onClose }: Props) {
       lastFetchedAtRef.current = Date.now();
       setLoading(true);
       try {
-        const response = await fetch("/api/scenes/preview-frame", {
+        const response = await fetch("/api/players/preview-frame", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },

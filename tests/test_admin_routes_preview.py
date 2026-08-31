@@ -33,9 +33,9 @@ _DRAFT = {
 }
 
 
-def test_preview_frame_returns_jpeg_for_the_default_output(tmp_path):
+def test_preview_frame_returns_jpeg_for_the_default_source(tmp_path):
     client = _client(tmp_path)
-    default_output = client.get("/api/outputs").json()[0]
+    default_source = client.get("/api/sources").json()[0]
     fake_frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
     with patch("admin.app.routers.preview.open_camera") as mock_open_camera:
@@ -43,7 +43,7 @@ def test_preview_frame_returns_jpeg_for_the_default_output(tmp_path):
         mock_cap.read.return_value = (True, fake_frame)
         mock_open_camera.return_value = mock_cap
 
-        response = client.post("/api/scenes/preview-frame", json={**_DRAFT, "output_id": default_output["id"]})
+        response = client.post("/api/players/preview-frame", json={**_DRAFT, "source_id": default_source["id"]})
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
@@ -51,10 +51,10 @@ def test_preview_frame_returns_jpeg_for_the_default_output(tmp_path):
     mock_cap.release.assert_called_once()
 
 
-def test_preview_frame_falls_back_to_default_output_when_output_id_is_null(tmp_path):
+def test_preview_frame_falls_back_to_default_source_when_source_id_is_null(tmp_path):
     """Regression voor Finding 5: een net-geopende, nog-niet-opgeslagen
-    wizard stuurt output_id: null (EMPTY_DRAFT) -- dat moet net als een
-    weggelaten output_id op de enige/eerste output terugvallen i.p.v. 400."""
+    wizard stuurt source_id: null (EMPTY_DRAFT) -- dat moet net als een
+    weggelaten source_id op de enige/eerste source terugvallen i.p.v. 400."""
     client = _client(tmp_path)
     fake_frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
@@ -63,37 +63,37 @@ def test_preview_frame_falls_back_to_default_output_when_output_id_is_null(tmp_p
         mock_cap.read.return_value = (True, fake_frame)
         mock_open_camera.return_value = mock_cap
 
-        response = client.post("/api/scenes/preview-frame", json={**_DRAFT, "output_id": None})
+        response = client.post("/api/players/preview-frame", json={**_DRAFT, "source_id": None})
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
 
 
-def test_preview_frame_rejects_unknown_output_id(tmp_path):
+def test_preview_frame_rejects_unknown_source_id(tmp_path):
     client = _client(tmp_path)
 
-    response = client.post("/api/scenes/preview-frame", json={**_DRAFT, "output_id": 999})
+    response = client.post("/api/players/preview-frame", json={**_DRAFT, "source_id": 999})
 
     assert response.status_code == 400
 
 
 def test_preview_frame_returns_502_when_camera_read_fails(tmp_path):
     client = _client(tmp_path)
-    default_output = client.get("/api/outputs").json()[0]
+    default_source = client.get("/api/sources").json()[0]
 
     with patch("admin.app.routers.preview.open_camera") as mock_open_camera:
         mock_cap = MagicMock()
         mock_cap.read.return_value = (False, None)
         mock_open_camera.return_value = mock_cap
 
-        response = client.post("/api/scenes/preview-frame", json={**_DRAFT, "output_id": default_output["id"]})
+        response = client.post("/api/players/preview-frame", json={**_DRAFT, "source_id": default_source["id"]})
 
     assert response.status_code == 502
 
 
 def test_preview_frame_rejects_unknown_effect(tmp_path):
     client = _client(tmp_path)
-    default_output = client.get("/api/outputs").json()[0]
+    default_source = client.get("/api/sources").json()[0]
     fake_frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
     with patch("admin.app.routers.preview.open_camera") as mock_open_camera:
@@ -102,11 +102,31 @@ def test_preview_frame_rejects_unknown_effect(tmp_path):
         mock_open_camera.return_value = mock_cap
 
         response = client.post(
-            "/api/scenes/preview-frame",
-            json={**_DRAFT, "output_id": default_output["id"], "effect": "onbestaand"},
+            "/api/players/preview-frame",
+            json={**_DRAFT, "source_id": default_source["id"], "effect": "onbestaand"},
         )
 
     assert response.status_code == 400
+
+
+def test_preview_frame_from_static_image_source(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+    image_hash = "deadbeef" * 8  # 64 hex chars -- geldig content-hash-formaat
+    media_dir = tmp_path / "media"
+    media_dir.mkdir(exist_ok=True)
+    (media_dir / image_hash).write_bytes(b"not-a-real-image-but-cv2.imread-is-mocked-below")
+    source = client.post("/api/sources", json={
+        "name": "Stilstaand", "kind": "static_image", "value": image_hash, "canvas_x": 0, "canvas_y": 0,
+    }).json()
+    fake_frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    monkeypatch.setattr("admin.app.routers.preview.cv2.imread", lambda *a, **k: fake_frame)
+
+    response = client.post(
+        "/api/players/preview-frame", json={**_DRAFT, "source_id": source["id"]}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
 
 
 def test_preview_frame_route_requires_auth(tmp_path):
@@ -119,6 +139,6 @@ def test_preview_frame_route_requires_auth(tmp_path):
     app.state.bridge = FakeBridge()
     client = TestClient(app)
 
-    response = client.post("/api/scenes/preview-frame", json=_DRAFT)
+    response = client.post("/api/players/preview-frame", json=_DRAFT)
 
     assert response.status_code == 401
