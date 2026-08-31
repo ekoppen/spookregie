@@ -13,8 +13,8 @@ class FakeBridge:
     def stop(self):
         pass
 
-    def publish_mirror_scenes(self, scenes):
-        self.calls.append(("scenes", scenes))
+    def publish_mirror_graph(self, graph):
+        self.calls.append(("graph", graph))
 
     def publish_mirror_scene_preview(self, scene):
         self.calls.append(("scene_preview", scene))
@@ -40,7 +40,7 @@ _SCENE_PAYLOAD = {
     "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
     "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
     "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-    "trigger_type": "always", "trigger_from": None, "trigger_until": None,
+    "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
 }
 
 
@@ -52,21 +52,10 @@ def test_create_scene_persists_and_publishes(tmp_path):
     assert response.status_code == 200
     created = response.json()
     assert created["name"] == "Basis"
-    assert created["order_index"] == 0
-    assert ("scenes", [created]) in bridge.calls
+    assert ("graph", {"scenes": [created], "edges": [], "root_scene_id": None}) in bridge.calls
 
     listed = client.get("/api/scenes").json()
     assert listed == [created]
-
-
-def test_create_scene_assigns_increasing_order_index(tmp_path):
-    client, bridge = _client(tmp_path)
-
-    first = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
-    second = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "Tweede"}).json()
-
-    assert first["order_index"] == 0
-    assert second["order_index"] == 1
 
 
 def test_get_scene_returns_404_for_unknown_id(tmp_path):
@@ -86,7 +75,7 @@ def test_update_scene_persists_and_publishes(tmp_path):
     assert response.status_code == 200
     assert response.json()["name"] == "Bijgewerkt"
     assert client.get(f"/api/scenes/{created['id']}").json()["name"] == "Bijgewerkt"
-    assert ("scenes", [response.json()]) in bridge.calls
+    assert ("graph", {"scenes": [response.json()], "edges": [], "root_scene_id": None}) in bridge.calls
 
 
 def test_update_scene_returns_404_for_unknown_id(tmp_path):
@@ -105,7 +94,7 @@ def test_delete_scene_removes_and_publishes(tmp_path):
 
     assert response.status_code == 200
     assert client.get("/api/scenes").json() == []
-    assert ("scenes", []) in bridge.calls
+    assert ("graph", {"scenes": [], "edges": [], "root_scene_id": None}) in bridge.calls
 
 
 def test_delete_scene_returns_404_for_unknown_id(tmp_path):
@@ -114,26 +103,6 @@ def test_delete_scene_returns_404_for_unknown_id(tmp_path):
     response = client.delete("/api/scenes/999")
 
     assert response.status_code == 404
-
-
-def test_reorder_scenes_updates_order_index(tmp_path):
-    client, bridge = _client(tmp_path)
-    a = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "A"}).json()
-    b = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "B"}).json()
-
-    response = client.put("/api/scenes/order", json={"order": [b["id"], a["id"]]})
-
-    assert response.status_code == 200
-    names = [s["name"] for s in client.get("/api/scenes").json()]
-    assert names == ["B", "A"]
-
-
-def test_reorder_scenes_rejects_non_list_order(tmp_path):
-    client, bridge = _client(tmp_path)
-
-    response = client.put("/api/scenes/order", json={"order": "niet-een-lijst"})
-
-    assert response.status_code == 400
 
 
 def test_preview_scene_publishes_without_saving(tmp_path):
@@ -183,3 +152,46 @@ def test_post_mirror_test_still_works(tmp_path):
 
     assert response.status_code == 200
     assert ("mirror_test",) in bridge.calls
+
+
+def test_setting_is_root_unsets_it_elsewhere(tmp_path):
+    client, bridge = _client(tmp_path)
+    a = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "A", "is_root": True}).json()
+    b = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "B"}).json()
+
+    client.put(f"/api/scenes/{b['id']}", json={**_SCENE_PAYLOAD, "name": "B", "is_root": True})
+
+    scenes = {s["id"]: s["is_root"] for s in client.get("/api/scenes").json()}
+    assert scenes[a["id"]] is False
+    assert scenes[b["id"]] is True
+
+
+def test_update_scene_position_does_not_publish_to_mqtt(tmp_path):
+    client, bridge = _client(tmp_path)
+    created = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
+    bridge.calls.clear()
+
+    response = client.put(f"/api/scenes/{created['id']}/position", json={"canvas_x": 12.5, "canvas_y": -3.0})
+
+    assert response.status_code == 200
+    assert bridge.calls == []
+    updated = client.get(f"/api/scenes/{created['id']}").json()
+    assert updated["canvas_x"] == 12.5
+    assert updated["canvas_y"] == -3.0
+
+
+def test_update_scene_position_returns_404_for_unknown_id(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.put("/api/scenes/999/position", json={"canvas_x": 0, "canvas_y": 0})
+
+    assert response.status_code == 404
+
+
+def test_update_scene_position_rejects_non_numeric(tmp_path):
+    client, bridge = _client(tmp_path)
+    created = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
+
+    response = client.put(f"/api/scenes/{created['id']}/position", json={"canvas_x": "nope", "canvas_y": 0})
+
+    assert response.status_code == 400

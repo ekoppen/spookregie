@@ -1,12 +1,13 @@
 import json
 from fastapi import APIRouter, HTTPException, Request
+from admin.app.graph_publish import publish_graph
 
 router = APIRouter()
 
 _SCENE_COLUMNS = (
-    "id, name, order_index, enabled, source_mode, effect, params, overlay_hash, "
+    "id, name, enabled, source_mode, effect, params, overlay_hash, "
     "scale, position, canvas_width, canvas_height, source_scale, source_position, "
-    "trigger_type, trigger_from, trigger_until"
+    "is_root, canvas_x, canvas_y"
 )
 
 _DEFAULT_SCENE = {
@@ -21,41 +22,36 @@ _DEFAULT_SCENE = {
     "canvas_size": None,
     "source_scale": 1.0,
     "source_position": [0.5, 0.5],
-    "trigger_type": "always",
-    "trigger_from": None,
-    "trigger_until": None,
+    "is_root": False,
+    "canvas_x": 0.0,
+    "canvas_y": 0.0,
 }
 
 
 def _row_to_scene(row):
-    canvas_width, canvas_height = row[10], row[11]
+    canvas_width, canvas_height = row[9], row[10]
     return {
         "id": row[0],
         "name": row[1],
-        "order_index": row[2],
-        "enabled": bool(row[3]),
-        "source_mode": row[4],
-        "effect": row[5],
-        "params": json.loads(row[6]),
-        "overlay_hash": row[7],
-        "scale": row[8],
-        "position": json.loads(row[9]),
+        "enabled": bool(row[2]),
+        "source_mode": row[3],
+        "effect": row[4],
+        "params": json.loads(row[5]),
+        "overlay_hash": row[6],
+        "scale": row[7],
+        "position": json.loads(row[8]),
         "canvas_size": [canvas_width, canvas_height] if canvas_width and canvas_height else None,
-        "source_scale": row[12],
-        "source_position": json.loads(row[13]),
-        "trigger_type": row[14],
-        "trigger_from": row[15],
-        "trigger_until": row[16],
+        "source_scale": row[11],
+        "source_position": json.loads(row[12]),
+        "is_root": bool(row[13]),
+        "canvas_x": row[14],
+        "canvas_y": row[15],
     }
 
 
 def _list_scenes(db):
-    rows = db.execute(f"SELECT {_SCENE_COLUMNS} FROM scenes ORDER BY order_index").fetchall()
+    rows = db.execute(f"SELECT {_SCENE_COLUMNS} FROM scenes ORDER BY id").fetchall()
     return [_row_to_scene(r) for r in rows]
-
-
-def _publish_scenes(request):
-    request.app.state.bridge.publish_mirror_scenes(_list_scenes(request.app.state.db))
 
 
 def _fields_from_body(body):
@@ -65,6 +61,10 @@ def _fields_from_body(body):
 def _canvas_columns(fields):
     canvas_size = fields["canvas_size"]
     return tuple(canvas_size) if canvas_size else (None, None)
+
+
+def _clear_other_roots(db, scene_id):
+    db.execute("UPDATE scenes SET is_root = 0 WHERE id != ?", (scene_id,))
 
 
 @router.get("/api/scenes")
@@ -87,25 +87,29 @@ async def create_scene_route(request: Request):
     body = await request.json()
     fields = _fields_from_body(body)
     db = request.app.state.db
-    max_order = db.execute("SELECT MAX(order_index) FROM scenes").fetchone()[0]
-    order_index = 0 if max_order is None else max_order + 1
     canvas_width, canvas_height = _canvas_columns(fields)
     cursor = db.execute(
+        # ponytail: order_index blijft NOT NULL in het schema (legacy
+        # migratiekolom, Taak 1) maar wordt door de graaf-app niet meer
+        # gebruikt -- vaste 0 om aan de constraint te voldoen zonder
+        # db.py aan te raken (buiten scope van deze taak).
         """INSERT INTO scenes
              (name, order_index, enabled, source_mode, effect, params, overlay_hash,
               scale, position, canvas_width, canvas_height, source_scale, source_position,
-              trigger_type, trigger_from, trigger_until)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              is_root, canvas_x, canvas_y)
+           VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            fields["name"], order_index, int(fields["enabled"]), fields["source_mode"],
+            fields["name"], int(fields["enabled"]), fields["source_mode"],
             fields["effect"], json.dumps(fields["params"]), fields["overlay_hash"],
             fields["scale"], json.dumps(fields["position"]), canvas_width, canvas_height,
             fields["source_scale"], json.dumps(fields["source_position"]),
-            fields["trigger_type"], fields["trigger_from"], fields["trigger_until"],
+            int(fields["is_root"]), fields["canvas_x"], fields["canvas_y"],
         ),
     )
+    if fields["is_root"]:
+        _clear_other_roots(db, cursor.lastrowid)
     db.commit()
-    _publish_scenes(request)
+    publish_graph(db, request.app.state.bridge)
     return get_scene_route(cursor.lastrowid, request)
 
 
@@ -121,42 +125,60 @@ async def update_scene_route(scene_id: int, request: Request):
     db.execute(
         """UPDATE scenes SET name=?, enabled=?, source_mode=?, effect=?, params=?, overlay_hash=?,
              scale=?, position=?, canvas_width=?, canvas_height=?, source_scale=?, source_position=?,
-             trigger_type=?, trigger_from=?, trigger_until=? WHERE id=?""",
+             is_root=?, canvas_x=?, canvas_y=? WHERE id=?""",
         (
             fields["name"], int(fields["enabled"]), fields["source_mode"], fields["effect"],
             json.dumps(fields["params"]), fields["overlay_hash"], fields["scale"],
             json.dumps(fields["position"]), canvas_width, canvas_height, fields["source_scale"],
-            json.dumps(fields["source_position"]), fields["trigger_type"], fields["trigger_from"],
-            fields["trigger_until"], scene_id,
+            json.dumps(fields["source_position"]), int(fields["is_root"]),
+            fields["canvas_x"], fields["canvas_y"], scene_id,
         ),
     )
+    if fields["is_root"]:
+        _clear_other_roots(db, scene_id)
     db.commit()
-    _publish_scenes(request)
+    publish_graph(db, request.app.state.bridge)
     return get_scene_route(scene_id, request)
+
+
+@router.put("/api/scenes/{scene_id:int}/position")
+async def update_scene_position_route(scene_id: int, request: Request):
+    db = request.app.state.db
+    existing = db.execute("SELECT id FROM scenes WHERE id = ?", (scene_id,)).fetchone()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Scene niet gevonden")
+    body = await request.json()
+    try:
+        x, y = float(body.get("canvas_x")), float(body.get("canvas_y"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="canvas_x/canvas_y moeten getallen zijn")
+    db.execute("UPDATE scenes SET canvas_x = ?, canvas_y = ? WHERE id = ?", (x, y, scene_id))
+    db.commit()
+    # Bewust GEEN publish_graph hier -- canvaspositie is een editor-
+    # aangelegenheid, de mirror-node heeft er niets aan, en dit endpoint
+    # wordt tijdens het slepen vaak aangeroepen.
+    return {"ok": True}
 
 
 @router.delete("/api/scenes/{scene_id:int}")
 def delete_scene_route(scene_id: int, request: Request):
     db = request.app.state.db
     cursor = db.execute("DELETE FROM scenes WHERE id = ?", (scene_id,))
-    db.commit()
     if cursor.rowcount == 0:
+        db.commit()
         raise HTTPException(status_code=404, detail="Scene niet gevonden")
-    _publish_scenes(request)
-    return {"ok": True}
-
-
-@router.put("/api/scenes/order")
-async def reorder_scenes_route(request: Request):
-    body = await request.json()
-    order = body.get("order")
-    if not isinstance(order, list):
-        raise HTTPException(status_code=400, detail="order moet een lijst met scene-id's zijn")
-    db = request.app.state.db
-    for index, scene_id in enumerate(order):
-        db.execute("UPDATE scenes SET order_index = ? WHERE id = ?", (index, scene_id))
+    # Geen DB-foreign-key-afdwinging in dit project -- expliciet
+    # opruimen: eigen uitgaande edges verdwijnen mee, inkomende edges
+    # vallen terug op een lege output-stub i.p.v. een edge naar een
+    # niet-bestaande scene te laten hangen.
+    db.execute("DELETE FROM scene_edges WHERE from_scene_id = ?", (scene_id,))
+    db.execute(
+        "UPDATE scene_edges SET to_scene_id = NULL, trigger_type = NULL, "
+        "trigger_from = NULL, trigger_until = NULL WHERE to_scene_id = ?",
+        (scene_id,),
+    )
     db.commit()
-    _publish_scenes(request)
+    publish_graph(db, request.app.state.bridge)
     return {"ok": True}
 
 
