@@ -33,7 +33,16 @@ class HaTriggerPoller:
             states = get_states(settings.ha_url, settings.ha_token)
             by_entity = {s.get("entity_id"): s.get("state") for s in states if isinstance(s, dict)}
             for entity_id in watched:
-                new_state = by_entity.get(entity_id)
+                if entity_id not in by_entity:
+                    # Entiteit ontbreekt in dit antwoord -- bijna altijd
+                    # een HA-uitval/-herstart (get_states geeft dan []
+                    # terug), niet een echte state-wijziging. Laatst-
+                    # bekende state ongemoeid laten: anders leest een
+                    # entiteit die nog steeds 'on' is zodra HA weer
+                    # online komt als een stijgende flank vanaf None, en
+                    # vuurt een ongewenste scare voor niemand.
+                    continue
+                new_state = by_entity[entity_id]
                 old_state = self._last_states.get(entity_id)
                 if new_state in self._FIRED_STATES and old_state not in self._FIRED_STATES:
                     self._bridge.publish_mirror_ha_trigger(entity_id)
