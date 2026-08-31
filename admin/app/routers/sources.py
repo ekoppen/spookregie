@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from admin.app.graph_publish import publish_graph
+
 router = APIRouter()
 
 _SOURCE_COLUMNS = "id, name, kind, value, canvas_x, canvas_y"
@@ -56,6 +58,7 @@ async def create_source_route(request: Request):
         (fields["name"], fields["kind"], fields["value"], fields["canvas_x"], fields["canvas_y"]),
     )
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return get_source_route(cursor.lastrowid, request)
 
 
@@ -72,6 +75,7 @@ async def update_source_route(source_id: int, request: Request):
         (fields["name"], fields["kind"], fields["value"], fields["canvas_x"], fields["canvas_y"], source_id),
     )
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return get_source_route(source_id, request)
 
 
@@ -86,4 +90,5 @@ def delete_source_route(source_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Source heeft nog players -- verplaats of verwijder die eerst")
     db.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return {"ok": True}

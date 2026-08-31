@@ -262,6 +262,7 @@ async def create_player_branch_route(player_id: int, request: Request):
     cursor = db.execute("INSERT INTO player_branches (player_id, name) VALUES (?, ?)", (player_id, name))
     db.commit()
     row = db.execute(f"SELECT {_BRANCH_COLUMNS} FROM player_branches WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    publish_graph(db, request.app.state.bridge)
     return _row_to_branch(row)
 
 
@@ -276,6 +277,7 @@ async def update_player_branch_route(branch_id: int, request: Request):
     db.execute("UPDATE player_branches SET name = ? WHERE id = ?", (name, branch_id))
     db.commit()
     row = db.execute(f"SELECT {_BRANCH_COLUMNS} FROM player_branches WHERE id = ?", (branch_id,)).fetchone()
+    publish_graph(db, request.app.state.bridge)
     return _row_to_branch(row)
 
 
@@ -295,6 +297,7 @@ def delete_player_branch_route(branch_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Aftakking heeft nog een output-verbinding -- verwijder die eerst")
     db.execute("DELETE FROM player_branches WHERE id = ?", (branch_id,))
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return {"ok": True}
 
 

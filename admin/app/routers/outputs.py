@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from admin.app.graph_publish import publish_graph
+
 router = APIRouter()
 
 _OUTPUT_COLUMNS = "id, name, camera_source, canvas_x, canvas_y"
@@ -41,6 +43,7 @@ async def create_output_route(request: Request):
     db = request.app.state.db
     cursor = db.execute("INSERT INTO outputs (name, camera_source, canvas_x, canvas_y) VALUES (?, ?, ?, ?)", (name, camera_source, canvas_x, canvas_y))
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return get_output_route(cursor.lastrowid, request)
 
 
@@ -59,6 +62,7 @@ async def update_output_route(output_id: int, request: Request):
     canvas_y = float(body.get("canvas_y", 0.0))
     db.execute("UPDATE outputs SET name = ?, camera_source = ?, canvas_x = ?, canvas_y = ? WHERE id = ?", (name, camera_source, canvas_x, canvas_y, output_id))
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return get_output_route(output_id, request)
 
 
@@ -75,4 +79,5 @@ def delete_output_route(output_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Output heeft nog verbindingen -- ontkoppel die eerst")
     db.execute("DELETE FROM outputs WHERE id = ?", (output_id,))
     db.commit()
+    publish_graph(db, request.app.state.bridge)
     return {"ok": True}

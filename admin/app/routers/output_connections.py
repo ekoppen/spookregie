@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from admin.app.graph_publish import publish_graph
+
 router = APIRouter()
 
 _CONNECTION_COLUMNS = "id, output_id, from_branch_id"
@@ -35,6 +37,7 @@ async def create_output_connection_route(request: Request):
     )
     db.commit()
     row = db.execute(f"SELECT {_CONNECTION_COLUMNS} FROM output_connections WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    publish_graph(db, request.app.state.bridge)
     return _row_to_connection(row)
 
 
@@ -45,4 +48,5 @@ def delete_output_connection_route(connection_id: int, request: Request):
     db.commit()
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Verbinding niet gevonden")
+    publish_graph(db, request.app.state.bridge)
     return {"ok": True}

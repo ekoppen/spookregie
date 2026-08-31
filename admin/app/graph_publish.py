@@ -1,10 +1,11 @@
 def publish_graph(db, bridge):
     """Publiceert de volledige graaf (players + sources + branches +
     triggers + output_connections + root + output) naar MQTT -- gedeeld
-    door players.py/triggers.py/sources.py/output_connections.py, elke
-    schrijvende route roept dit aan zodat opgeslagen en gepubliceerde
-    graaf nooit uit elkaar kunnen lopen. Lazy imports om een cirkel met de
-    routers te vermijden (die importeren dit bestand). output_id is
+    door players.py/triggers.py/sources.py/output_connections.py/outputs.py,
+    elke schrijvende route roept dit aan (behalve pure positie-updates)
+    zodat opgeslagen en gepubliceerde graaf nooit uit elkaar kunnen lopen.
+    Lazy imports om een cirkel met de routers te vermijden (die importeren
+    dit bestand). output_id is
     voorlopig altijd de eerste/enige output -- zelfde ruling als voorheen,
     een toekomstige multi-output-uitrol geeft dit expliciet mee per
     aanroep."""
