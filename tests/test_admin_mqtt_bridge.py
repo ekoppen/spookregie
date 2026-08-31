@@ -212,6 +212,9 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
     default_output_id = client.get("/api/outputs").json()[0]["id"]
     created = client.post("/api/players", json=scene_payload).json()
     client.put("/api/mirror/scare-video-config", json={"enabled_hashes": ["a" * 64]})
+    graph_sources = client.get("/api/sources").json()
+    graph_branches = client.get(f"/api/players/{created['id']}/branches").json()
+    graph_output_connections = client.get("/api/output-connections").json()
 
     # Wis wat de CRUD-routes hierboven al publiceerden -- we willen alleen
     # zien wat een verse (her)verbinding publiceert, zonder enige handmatige
@@ -226,7 +229,11 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
     }
     # Eerste (en enige) scene wordt automatisch root (Minor 12).
     assert published["config/mirror/graph"] == (
-        {"scenes": [created], "triggers": [], "root_scene_id": created["id"], "output_id": default_output_id},
+        {
+            "output_id": default_output_id, "players": [created], "sources": graph_sources,
+            "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
+            "root_player_id": created["id"],
+        },
         True,
     )
     assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)

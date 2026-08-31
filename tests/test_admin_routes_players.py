@@ -46,7 +46,7 @@ _PLAYER_PAYLOAD = {
 }
 
 
-def test_create_scene_persists_and_publishes(tmp_path):
+def test_create_player_persists_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
     default_output = client.get("/api/outputs").json()[0]
 
@@ -58,9 +58,16 @@ def test_create_scene_persists_and_publishes(tmp_path):
     # Eerste scene ooit wordt automatisch root (Minor 12), ook al vroeg de
     # payload expliciet is_root: False.
     assert created["is_root"] is True
+    graph_sources = client.get("/api/sources").json()
+    graph_branches = client.get(f"/api/players/{created['id']}/branches").json()
+    graph_output_connections = client.get("/api/output-connections").json()
     assert (
         "graph",
-        {"output_id": default_output["id"], "scenes": [created], "triggers": [], "root_scene_id": created["id"]},
+        {
+            "output_id": default_output["id"], "players": [created], "sources": graph_sources,
+            "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
+            "root_player_id": created["id"],
+        },
     ) in bridge.calls
 
     listed = client.get("/api/players").json()
@@ -89,7 +96,7 @@ def test_get_scene_returns_404_for_unknown_id(tmp_path):
     assert response.status_code == 404
 
 
-def test_update_scene_persists_and_publishes(tmp_path):
+def test_update_player_persists_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
     default_output = client.get("/api/outputs").json()[0]
     created = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
@@ -99,9 +106,16 @@ def test_update_scene_persists_and_publishes(tmp_path):
     assert response.status_code == 200
     assert response.json()["name"] == "Bijgewerkt"
     assert client.get(f"/api/players/{created['id']}").json()["name"] == "Bijgewerkt"
+    graph_sources = client.get("/api/sources").json()
+    graph_branches = client.get(f"/api/players/{created['id']}/branches").json()
+    graph_output_connections = client.get("/api/output-connections").json()
     assert (
         "graph",
-        {"output_id": default_output["id"], "scenes": [response.json()], "triggers": [], "root_scene_id": None},
+        {
+            "output_id": default_output["id"], "players": [response.json()], "sources": graph_sources,
+            "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
+            "root_player_id": None,
+        },
     ) in bridge.calls
 
 
@@ -113,7 +127,7 @@ def test_update_scene_returns_404_for_unknown_id(tmp_path):
     assert response.status_code == 404
 
 
-def test_delete_scene_removes_and_publishes(tmp_path):
+def test_delete_player_removes_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
     default_output = client.get("/api/outputs").json()[0]
     created = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
@@ -122,9 +136,15 @@ def test_delete_scene_removes_and_publishes(tmp_path):
 
     assert response.status_code == 200
     assert client.get("/api/players").json() == []
+    graph_sources = client.get("/api/sources").json()
+    graph_output_connections = client.get("/api/output-connections").json()
     assert (
         "graph",
-        {"output_id": default_output["id"], "scenes": [], "triggers": [], "root_scene_id": None},
+        {
+            "output_id": default_output["id"], "players": [], "sources": graph_sources,
+            "branches": [], "triggers": [], "output_connections": graph_output_connections,
+            "root_player_id": None,
+        },
     ) in bridge.calls
 
 
@@ -282,16 +302,23 @@ def test_scene_color_round_trips(tmp_path):
     assert fetched["color"] == "#ff8800"
 
 
-def test_published_graph_includes_output_id(tmp_path):
+def test_published_graph_has_the_full_new_shape(tmp_path):
     client, bridge = _client(tmp_path)
     default_output = client.get("/api/outputs").json()[0]
     bridge.calls.clear()
 
-    client.post("/api/players", json=_PLAYER_PAYLOAD)
+    created = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
 
     kind, graph = bridge.calls[-1]
     assert kind == "graph"
     assert graph["output_id"] == default_output["id"]
+    assert graph["players"] == [created]
+    assert graph["root_player_id"] == created["id"]
+    assert {s["kind"] for s in graph["sources"]} <= {"camera_stream", "static_image"}
+    branch = client.get(f"/api/players/{created['id']}/branches").json()[0]
+    assert graph["branches"] == [branch]
+    assert isinstance(graph["triggers"], list)
+    assert isinstance(graph["output_connections"], list)
 
 
 def test_new_player_gets_one_default_branch(tmp_path):

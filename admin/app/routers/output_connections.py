@@ -9,6 +9,16 @@ def _row_to_connection(row):
     return {"id": row[0], "output_id": row[1], "from_branch_id": row[2]}
 
 
+def _list_output_connections(db):
+    rows = db.execute(f"SELECT {_CONNECTION_COLUMNS} FROM output_connections ORDER BY id").fetchall()
+    return [_row_to_connection(r) for r in rows]
+
+
+@router.get("/api/output-connections")
+def list_output_connections_route(request: Request):
+    return _list_output_connections(request.app.state.db)
+
+
 @router.post("/api/output-connections")
 async def create_output_connection_route(request: Request):
     body = await request.json()
