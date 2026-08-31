@@ -14,6 +14,8 @@ export interface Scene {
   is_root: boolean;
   canvas_x: number;
   canvas_y: number;
+  output_id: number | null;
+  color: string | null;
 }
 
 export interface SceneEdge {
@@ -24,6 +26,27 @@ export interface SceneEdge {
   trigger_from: string | null;
   trigger_until: string | null;
   priority: number;
+}
+
+export interface Trigger {
+  id: number;
+  from_scene_id: number;
+  to_scene_id: number | null;
+  kind: "always" | "motion" | "schedule" | "ha_sensor" | null;
+  schedule_from: string | null;
+  schedule_until: string | null;
+  ha_entity_id: string | null;
+  priority: number;
+  canvas_x: number;
+  canvas_y: number;
+  name: string | null;
+  color: string | null;
+}
+
+export interface Output {
+  id: number;
+  name: string;
+  camera_source: string;
 }
 
 export interface ScareConfig {
@@ -73,7 +96,6 @@ export interface AppSettings {
   ha_url: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
-  mirror_camera_source: string;
   mqtt_pass_set: boolean;
   ha_token_set: boolean;
 }
@@ -87,5 +109,4 @@ export interface AppSettingsUpdate {
   ha_token?: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
-  mirror_camera_source: string;
 }
