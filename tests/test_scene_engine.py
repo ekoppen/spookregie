@@ -157,6 +157,124 @@ def test_preview_expires_after_timeout():
     assert scene == root
 
 
+def test_one_shot_pulse_causes_exactly_one_scare_video_transition():
+    """Regressie voor Critical 1 (mirror_node/main.py): de hoofdlus moet
+    een eenmalige puls doorgeven aan resolve(), niet het aanhoudende
+    cooldown-niveau. Met root --motion--> Scare en Scare --always--> root
+    (de gebruikelijke terugkeer-edge) zou een aanhoudend niveau bij elke
+    terugkeer op root de motion-edge opnieuw laten matchen en de graaf
+    oneindig laten ping-pongen. Eén puls (True op precies één resolve(),
+    daarna False) mag maar één keer naar Scare transitioneren."""
+    scenes = [
+        {"id": 1, "name": "Basis", "source_mode": "camera"},
+        {"id": 2, "name": "Scare", "source_mode": "scare_video"},
+    ]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+        {"from_scene_id": 2, "to_scene_id": 1, "trigger_type": "always",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    transitions_into_scare = 0
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")  # de ene puls
+    if scene["id"] == 2 and transitioned:
+        transitions_into_scare += 1
+    for _ in range(5):  # cooldown-vensters later, geen nieuwe puls
+        scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+        if scene["id"] == 2 and transitioned:
+            transitions_into_scare += 1
+
+    assert transitions_into_scare == 1
+
+
+def test_sustained_level_would_replay_scare_video_repeatedly():
+    """Tegenbewijs bij de vorige test: als motion_active per ongeluk het
+    aanhoudende niveau is (de bug die Critical 1 fixt) i.p.v. een puls,
+    ping-pongt dezelfde graaf oneindig door en 'transitioneert' telkens
+    opnieuw naar Scare -- exact het symptoom uit de bug-report."""
+    scenes = [
+        {"id": 1, "name": "Basis", "source_mode": "camera"},
+        {"id": 2, "name": "Scare", "source_mode": "scare_video"},
+    ]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+        {"from_scene_id": 2, "to_scene_id": 1, "trigger_type": "always",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    transitions_into_scare = 0
+    for _ in range(6):  # niveau blijft True zolang de cooldown "loopt"
+        scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
+        if scene["id"] == 2 and transitioned:
+            transitions_into_scare += 1
+
+    assert transitions_into_scare > 1  # de bug: meerdere replays uit één trigger
+
+
+def test_disabled_scene_is_never_resolved_to():
+    """Regressie voor Important 5: de oude SceneEngine sloeg enabled=False
+    over, de nieuwe SceneGraph deed dat niet meer. Een edge naar een
+    uitgeschakelde scene mag niet matchen."""
+    scenes = [
+        {"id": 1, "name": "Basis"},
+        {"id": 2, "name": "Uit", "enabled": False},
+    ]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
+
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is False
+
+
+def test_current_scene_disabled_between_graph_updates_resets_to_root():
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+    g.resolve(motion_active=True, now_hhmm="12:00")  # naar Scare
+    assert g._current_id == 2
+
+    g.set_graph(
+        [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare", "enabled": False}],
+        edges,
+        root_scene_id=1,
+    )
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene == {"id": 1, "name": "Basis"}
+
+
+def test_edge_to_missing_scene_falls_through_instead_of_looping_black():
+    """Regressie voor Important 6: resolve() volgt geen edge naar een
+    scene die niet (meer) bestaat -- de spec zegt expliciet dat zo'n
+    edge gewoon niet matcht en doorvalt, i.p.v. er blindelings naartoe
+    te gaan en (None, True) terug te geven (permanente zwart-beeld-lus:
+    elk volgend frame reset naar root en matcht dezelfde kapotte edge
+    opnieuw)."""
+    scenes = [{"id": 1, "name": "Basis"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 999, "trigger_type": "always",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is False
+
+
 def test_time_in_window_normal_range():
     assert _time_in_window("21:00", "20:00", "23:00") is True
     assert _time_in_window("19:00", "20:00", "23:00") is False

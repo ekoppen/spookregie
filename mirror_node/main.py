@@ -422,17 +422,27 @@ def main():
             now = time.time()
             now_hhmm = time.strftime("%H:%M")
 
+            # fired: eenmalige puls voor dit frame, NIET het aanhoudende
+            # "we zitten nog in de cooldown"-niveau (now < active_until).
+            # scene_graph.resolve() is stateful en volgt een edge alleen
+            # op het frame dat 'm matcht -- een niveau dat ACTIVE_SECONDS
+            # lang True blijft laat een motion-edge bij elke terugkeer op
+            # de bronscene opnieuw matchen, en ping-pongt de graaf
+            # oneindig door zolang de cooldown loopt (Kritiek 1).
+            fired = False
             if trigger.detect(gray) and now > active_until:
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
                 active_until = time.time() + ACTIVE_SECONDS
+                fired = True
 
             if test_trigger_requested.is_set():
                 test_trigger_requested.clear()
                 logger.info("mirror test-trigger")
                 active_until = time.time() + ACTIVE_SECONDS
+                fired = True
 
-            winning, transitioned = scene_graph.resolve(now < active_until, now_hhmm)
+            winning, transitioned = scene_graph.resolve(fired, now_hhmm)
             action = _render_action(winning, transitioned)
 
             if action == "scare_video":
