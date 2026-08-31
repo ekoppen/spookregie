@@ -44,10 +44,16 @@ class HaTriggerPoller:
                     continue
                 new_state = by_entity[entity_id]
                 old_state = self._last_states.get(entity_id)
-                if new_state in self._FIRED_STATES and old_state not in self._FIRED_STATES:
+                is_rising_edge = new_state in self._FIRED_STATES and old_state not in self._FIRED_STATES
+                # Laatst-bekende state VOOR de publishes bijwerken: als een
+                # publish een exception gooit, mag _last_states niet stale
+                # blijven staan op de oude waarde -- anders leest de
+                # volgende succesvolle tick een allang-aanhoudend 'on'
+                # opnieuw als stijgende flank en vuurt een valse puls.
+                self._last_states[entity_id] = new_state
+                if is_rising_edge:
                     self._bridge.publish_mirror_ha_trigger(entity_id)
                 self._bridge.publish_mirror_ha_sensor_state(entity_id, new_state)
-                self._last_states[entity_id] = new_state
         except Exception as exc:
             if self._logger is not None:
                 self._logger.error("HA-trigger-polling mislukt: %s", exc)
