@@ -2,8 +2,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import PlayerGraphCanvas from "./PlayerGraphCanvas";
+import PlayerGraphCanvas, { parseOutputConnectionEdgeIds } from "./PlayerGraphCanvas";
 import type { Player } from "../types";
+import type { Edge } from "@xyflow/react";
 
 vi.mock("../api/triggers", () => ({
   createTrigger: vi.fn(),
@@ -18,7 +19,10 @@ vi.mock("../api/players", () => ({
 vi.mock("../api/sources", () => ({ updateSource: vi.fn() }));
 vi.mock("../api/outputs", () => ({ updateOutput: vi.fn() }));
 vi.mock("../api/branches", () => ({ createPlayerBranch: vi.fn() }));
-vi.mock("../api/outputConnections", () => ({ createOutputConnection: vi.fn() }));
+vi.mock("../api/outputConnections", () => ({
+  createOutputConnection: vi.fn(),
+  deleteOutputConnection: vi.fn(),
+}));
 
 const PLAYER: Player = {
   id: 1,
@@ -106,5 +110,25 @@ describe("PlayerGraphCanvas -- branch-dots", () => {
 
     expect(await screen.findByText("Uitgang 1")).toBeInTheDocument();
     expect(await screen.findByText("Extra")).toBeInTheDocument();
+  });
+});
+
+describe("parseOutputConnectionEdgeIds -- herkenning van output-connection-edges", () => {
+  it("haalt alleen de id's van oc-edges eruit, andere edge-typen genegeerd", () => {
+    const edges = [
+      { id: "oc-9" },
+      { id: "source-in-1" },
+      { id: "branch-in-3" },
+      { id: "out-3" },
+      { id: "oc-12" },
+    ] as Edge[];
+
+    expect(parseOutputConnectionEdgeIds(edges)).toEqual([9, 12]);
+  });
+
+  it("geeft een lege lijst terug als er geen oc-edges bij zitten", () => {
+    const edges = [{ id: "source-in-1" }, { id: "out-3" }] as Edge[];
+
+    expect(parseOutputConnectionEdgeIds(edges)).toEqual([]);
   });
 });

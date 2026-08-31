@@ -19,7 +19,7 @@ import { updatePlayer, updatePlayerPosition } from "../api/players";
 import { updateSource } from "../api/sources";
 import { updateOutput } from "../api/outputs";
 import { createPlayerBranch } from "../api/branches";
-import { createOutputConnection } from "../api/outputConnections";
+import { createOutputConnection, deleteOutputConnection } from "../api/outputConnections";
 import TriggerPopover from "./TriggerPopover";
 import type { Player, Source, PlayerBranch, Trigger, Output, OutputConnection } from "../types";
 import "./PlayerGraphCanvas.css";
@@ -67,6 +67,17 @@ type SourceNode = Node<SourceNodeData, "source">;
 type OutputNode = Node<OutputNodeData, "output">;
 type TriggerNode = Node<TriggerNodeData, "trigger">;
 type FlowNode = PlayerNode | SourceNode | OutputNode | TriggerNode;
+
+// Geëxporteerd als pure functie (i.p.v. inline in de canvas-event-handler)
+// zodat de id-herkenning zelf getest kan worden zonder een volledige
+// ReactFlow-render nodig te hebben (edges/handles krijgen in jsdom nooit
+// afmetingen, dus renderen niet -- zie PlayerGraphCanvas.test.tsx).
+export function parseOutputConnectionEdgeIds(edges: Edge[]): number[] {
+  return edges
+    .filter((edge) => edge.id.startsWith("oc-"))
+    .map((edge) => parseInt(edge.id.replace("oc-", ""), 10))
+    .filter((id) => !Number.isNaN(id));
+}
 
 function triggerKindLabel(trigger: Trigger): string {
   if (trigger.kind === "always") return "Altijd";
@@ -596,6 +607,23 @@ export default function PlayerGraphCanvas({
     [players, triggers, onGraphChanged],
   );
 
+  const handleEdgesDelete = useCallback(
+    async (edges: Edge[]) => {
+      // onEdgesChange (hieronder) update alleen React Flow's lokale state --
+      // een edge verwijderd via de canvas verdwijnt dan visueel tot de
+      // volgende refreshGraph()/onGraphChanged(), waarna 'ie terugkomt
+      // omdat de backend-rij nooit verwijderd is. Alleen output-
+      // connection-edges (id-prefix "oc-") hebben een eigen delete-route;
+      // andere edge-typen (source-in-/branch-in-/out-) worden elders al
+      // via hun eigen create/update-routes beheerd.
+      const outputConnectionIds = parseOutputConnectionEdgeIds(edges);
+      if (outputConnectionIds.length === 0) return;
+      await Promise.all(outputConnectionIds.map((id) => deleteOutputConnection(id)));
+      onGraphChanged();
+    },
+    [onGraphChanged],
+  );
+
   const handleNodeDragStop = useCallback(
     async (_event: unknown, node: FlowNode) => {
       if (node.id.startsWith("player-")) {
@@ -636,6 +664,7 @@ export default function PlayerGraphCanvas({
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onEdgesDelete={handleEdgesDelete}
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
         fitView
