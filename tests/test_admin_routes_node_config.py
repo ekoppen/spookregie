@@ -57,10 +57,8 @@ def test_node_config_reflects_saved_prefix(tmp_path):
 def test_node_config_includes_camera_source(tmp_path):
     client, app = _client(tmp_path)
     client.post("/api/login", json={"password": "testwachtwoord"})
-    client.put("/api/settings", json={
-        "mqtt_host": "pi-broker", "mqtt_port": 1883,
-        "mirror_camera_source": "rtsp://cam.local/stream1",
-    })
+    output = client.get("/api/outputs").json()[0]
+    client.put(f"/api/outputs/{output['id']}", json={"name": output["name"], "camera_source": "rtsp://cam.local/stream1"})
 
     response = client.get("/api/node-config")
 
