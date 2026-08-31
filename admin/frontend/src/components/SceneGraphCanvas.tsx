@@ -475,13 +475,22 @@ export default function SceneGraphCanvas({ scenes, triggers, onSceneClick, onGra
     [triggers, onGraphChanged],
   );
 
-  const handleNodeDragStop = useCallback(async (_event: unknown, node: FlowNode) => {
-    if (node.id.startsWith("scene-")) {
-      await updateScenePosition(parseInt(node.id.replace("scene-", ""), 10), node.position.x, node.position.y);
-    } else {
-      await updateTriggerPosition(parseInt(node.id.replace("trigger-", ""), 10), node.position.x, node.position.y);
-    }
-  }, []);
+  const handleNodeDragStop = useCallback(
+    async (_event: unknown, node: FlowNode) => {
+      if (node.id.startsWith("scene-")) {
+        await updateScenePosition(parseInt(node.id.replace("scene-", ""), 10), node.position.x, node.position.y);
+      } else {
+        await updateTriggerPosition(parseInt(node.id.replace("trigger-", ""), 10), node.position.x, node.position.y);
+      }
+      // Zonder dit blijven scenes/triggers in de parent op de PRE-drag
+      // canvas_x/canvas_y staan -- elke andere save in dit bestand bouwt
+      // z'n PUT-payload door het bestaande scene/trigger-object te
+      // spreiden, dus de eerstvolgende hernoem/kleur/kind-save zou de
+      // net-gesleepte positie stilletjes weer terugzetten.
+      onGraphChanged();
+    },
+    [onGraphChanged],
+  );
 
   return (
     <div className="scene-graph-canvas">
