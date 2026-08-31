@@ -198,3 +198,67 @@ def test_fresh_graph_era_scenes_survive_restart_without_edges(tmp_path):
     assert root == [(2,)]  # ongewijzigd -- niet teruggezet naar de eerst-sorterende scene
     edge_count = conn2.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
     assert edge_count == 0  # geen gefabriceerde edges
+
+
+def test_outputs_table_created(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "outputs" in tables
+
+
+def test_default_output_created_from_mirror_camera_source(tmp_path):
+    path = str(tmp_path / "test.db")
+    conn = init_db(path)
+    conn.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url, mirror_camera_source) "
+        "VALUES (1, 'broker', 1883, 'http://ha', 'rtsp://cam.local/stream')"
+    )
+    conn.commit()
+    conn.close()
+
+    conn2 = init_db(path)
+
+    rows = conn2.execute("SELECT name, camera_source FROM outputs").fetchall()
+    assert rows == [("Spiegel", "rtsp://cam.local/stream")]
+
+
+def test_default_output_migration_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    count = conn.execute("SELECT COUNT(*) FROM outputs").fetchone()[0]
+    assert count == 1
+
+
+def test_existing_scenes_get_output_id_from_migration(tmp_path):
+    path = str(tmp_path / "test.db")
+    conn = init_db(path)
+    conn.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, is_root) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 1)"
+    )
+    conn.commit()
+    conn.close()
+
+    conn2 = init_db(path)
+
+    output_id = conn2.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+    scene_output_id = conn2.execute("SELECT output_id FROM scenes WHERE id = 1").fetchone()[0]
+    assert scene_output_id == output_id
+
+
+def test_scenes_color_column_defaults_to_null(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    conn.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode) VALUES (1, 'X', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
+    )
+    conn.commit()
+
+    color = conn.execute("SELECT color FROM scenes WHERE id = 1").fetchone()[0]
+    assert color is None

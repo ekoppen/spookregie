@@ -60,6 +60,13 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS outputs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            camera_source TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -94,8 +101,11 @@ def init_db(path):
     _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "scenes", "canvas_x", "REAL NOT NULL DEFAULT 0")
     _ensure_column(conn, "scenes", "canvas_y", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "scenes", "output_id", "INTEGER")
+    _ensure_column(conn, "scenes", "color", "TEXT")
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
+    _migrate_outputs(conn)
     conn.commit()
     return conn
 
@@ -186,3 +196,32 @@ def _migrate_scenes_to_graph(conn):
                 (scene_id, root_id),
             )
     conn.execute("PRAGMA user_version = 1")
+
+
+def _migrate_outputs(conn):
+    """Zorgt dat er minstens één output bestaat, gevuld vanuit de huidige
+    mirror_camera_source-instelling bij de allereerste run na deze
+    upgrade, en koppelt scenes zonder output_id eraan. Idempotent: doet
+    niets zodra er al een output is."""
+    existing = conn.execute("SELECT COUNT(*) FROM outputs").fetchone()[0]
+    if existing == 0:
+        # No outputs yet, create one from app_settings
+        row = conn.execute("SELECT mirror_camera_source FROM app_settings WHERE id = 1").fetchone()
+        camera_source = row[0] if row else ""
+        cursor = conn.execute(
+            "INSERT INTO outputs (name, camera_source) VALUES ('Spiegel', ?)", (camera_source,)
+        )
+        output_id = cursor.lastrowid
+    else:
+        # Outputs already exist, get the first one
+        output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+        # If the output has empty camera_source and app_settings now has a value, update it
+        row = conn.execute("SELECT mirror_camera_source FROM app_settings WHERE id = 1").fetchone()
+        if row and row[0]:
+            conn.execute(
+                "UPDATE outputs SET camera_source = ? WHERE id = ? AND camera_source = ''",
+                (row[0], output_id),
+            )
+
+    # Always link scenes to the output
+    conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))
