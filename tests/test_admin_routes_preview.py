@@ -51,6 +51,24 @@ def test_preview_frame_returns_jpeg_for_the_default_output(tmp_path):
     mock_cap.release.assert_called_once()
 
 
+def test_preview_frame_falls_back_to_default_output_when_output_id_is_null(tmp_path):
+    """Regression voor Finding 5: een net-geopende, nog-niet-opgeslagen
+    wizard stuurt output_id: null (EMPTY_DRAFT) -- dat moet net als een
+    weggelaten output_id op de enige/eerste output terugvallen i.p.v. 400."""
+    client = _client(tmp_path)
+    fake_frame = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with patch("admin.app.routers.preview.open_camera") as mock_open_camera:
+        mock_cap = MagicMock()
+        mock_cap.read.return_value = (True, fake_frame)
+        mock_open_camera.return_value = mock_cap
+
+        response = client.post("/api/scenes/preview-frame", json={**_DRAFT, "output_id": None})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+
+
 def test_preview_frame_rejects_unknown_output_id(tmp_path):
     client = _client(tmp_path)
 
