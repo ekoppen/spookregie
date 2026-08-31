@@ -385,16 +385,22 @@ def test_play_scare_video_sequence_repeat_once_plays_exactly_two_clips(monkeypat
 
 
 def test_play_scare_video_sequence_repeat_while_loops_until_sensor_drops(monkeypatch):
+    # synced_scare_videos moet gevuld zijn, anders breekt de busy-spin-guard
+    # (Kritiek 3a) de loop meteen af -- ongeacht sensor-state.
+    mirror_main.synced_scare_videos = {"h1": {"video": "v.mp4", "audio": None}}
     play_calls = []
     monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
     states = iter(["on", "on", "off"])  # 1 verplichte keer + 2x nog 'on' + stop op 'off'
     mirror_main._ha_entity_states["binary_sensor.tuin"] = "on"
     monkeypatch.setattr(mirror_main, "_ha_entity_state", lambda entity_id: next(states, "off"))
 
-    winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": "binary_sensor.tuin"}
-    mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+    try:
+        winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": "binary_sensor.tuin"}
+        mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
 
-    assert len(play_calls) == 3  # 1 gegarandeerde keer + 2 herhalingen zolang 'on'
+        assert len(play_calls) == 3  # 1 gegarandeerde keer + 2 herhalingen zolang 'on'
+    finally:
+        mirror_main.synced_scare_videos = {}
 
 
 def test_play_scare_video_sequence_repeat_while_without_entity_id_plays_once(monkeypatch):
@@ -405,6 +411,55 @@ def test_play_scare_video_sequence_repeat_while_without_entity_id_plays_once(mon
     mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
 
     assert len(play_calls) == 1
+
+
+def test_play_scare_video_sequence_repeat_while_breaks_when_nothing_synced(monkeypatch):
+    # Kritiek 3a: geen gesynct scare-video mag de loop niet laten busy-
+    # spinnen (elke boot ~10s, of nul enabled scare-videos).
+    mirror_main.synced_scare_videos = {}
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+    monkeypatch.setattr(mirror_main, "_ha_entity_state", lambda entity_id: "on")
+
+    winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": "binary_sensor.tuin"}
+    mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+
+    assert len(play_calls) == 1  # alleen de gegarandeerde eerste keer, dan break
+
+
+def test_play_scare_video_sequence_repeat_while_stops_on_sleeping(monkeypatch):
+    # Kritiek 3b: system/sleep (noodstop) moet een lopende repeat_while
+    # -loop kunnen onderbreken.
+    mirror_main.synced_scare_videos = {"h1": {"video": "v.mp4", "audio": None}}
+    play_calls = []
+    monkeypatch.setattr(mirror_main, "_handle_trigger", lambda s, l: play_calls.append(1) or mirror_main.ACTIVE_SECONDS)
+    monkeypatch.setattr(mirror_main, "_ha_entity_state", lambda entity_id: "on")
+    mirror_main.sleeping.set()
+
+    try:
+        winning = {"playback_mode": "repeat_while", "repeat_while_ha_entity_id": "binary_sensor.tuin"}
+        mirror_main._play_scare_video_sequence(winning, "streamer", _FakeLogger())
+
+        assert len(play_calls) == 1  # alleen de gegarandeerde eerste keer, dan stop
+    finally:
+        mirror_main.sleeping.clear()
+        mirror_main.synced_scare_videos = {}
+
+
+def test_ha_entity_state_expires_after_stale_threshold(monkeypatch):
+    # Kritiek 3c: een level-state die niet meer ververst wordt (broker/
+    # backend weg) mag geen repeat_while-loop voor altijd laten doorlopen.
+    mirror_main._ha_entity_states.clear()
+    fake_now = [1000.0]
+    monkeypatch.setattr(mirror_main.time, "time", lambda: fake_now[0])
+    mirror_main._apply_ha_sensor_state_message(
+        json.dumps({"entity_id": "binary_sensor.tuin", "state": "on"}), _FakeLogger()
+    )
+    assert mirror_main._ha_entity_state("binary_sensor.tuin") == "on"
+
+    fake_now[0] += mirror_main.HA_ENTITY_STATE_STALE_SECONDS + 1
+    assert mirror_main._ha_entity_state("binary_sensor.tuin") is None
+    mirror_main._ha_entity_states.clear()
 
 
 def test_apply_ha_sensor_state_message_updates_state():

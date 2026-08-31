@@ -48,6 +48,13 @@ MQTT_TOPIC_PREFIX_ENV = os.environ.get("MQTT_TOPIC_PREFIX", "")
 MIRROR_CAMERA_SOURCE_ENV = os.environ.get("MIRROR_CAMERA_SOURCE", "")
 CAMERA_INDEX = int(os.environ.get("MIRROR_CAMERA_INDEX", "0"))
 ACTIVE_SECONDS = float(os.environ.get("MIRROR_ACTIVE_SECONDS", "6"))
+# Losstaande constante (geen shared import voor één drempelwaarde) --
+# admin/app/ha_trigger_poller.py pollt elke 5s (check_interval default).
+# Een level-state ouder dan ~3x die tick-interval is niet meer vers: de
+# backend/broker-verbinding is waarschijnlijk weg, dus behandel 'm als
+# 'off' (fail-safe) i.p.v. een repeat_while-loop voor altijd te laten
+# doorlopen (Kritiek 3c).
+HA_ENTITY_STATE_STALE_SECONDS = 15.0
 # Default schrijfbaar voor een gewone gebruiker die het script direct start;
 # systemd zet LOG_DIR expliciet op /var/log/halloween.
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
@@ -198,12 +205,22 @@ def _apply_ha_sensor_state_message(payload, logger):
         logger.error("ha-sensor-state-bericht zonder geldige entity_id/state, genegeerd: %r", data)
         return
     with _ha_entity_states_lock:
-        _ha_entity_states[entity_id] = state
+        _ha_entity_states[entity_id] = (state, time.time())
 
 
 def _ha_entity_state(entity_id):
+    """Geeft de laatst-bekende state terug, of None als er nog niets
+    binnenkwam OF de laatste update ouder is dan HA_ENTITY_STATE_STALE_SECONDS
+    (fail-safe: een gestopte MQTT-/backendverbinding mag een repeat_while
+    -loop niet voor altijd laten doorlopen op een verouderde 'on')."""
     with _ha_entity_states_lock:
-        return _ha_entity_states.get(entity_id)
+        entry = _ha_entity_states.get(entity_id)
+    if entry is None:
+        return None
+    state, ts = entry
+    if time.time() - ts > HA_ENTITY_STATE_STALE_SECONDS:
+        return None
+    return state
 
 
 def make_on_message(logger, topics):
@@ -389,7 +406,14 @@ def _play_scare_video_sequence(winning, streamer, logger):
     if mode == "repeat_while":
         entity_id = winning.get("repeat_while_ha_entity_id")
         result = _handle_trigger(streamer, logger)
-        while entity_id and _ha_entity_state(entity_id) in ("on", "detected"):
+        while entity_id and not sleeping.is_set() and _ha_entity_state(entity_id) in ("on", "detected"):
+            if not synced_scare_videos:
+                # Geen enkele scare-video gesynct (elke boot, ~10s venster
+                # voordat de achtergrond-sync klaar is, of nul ingeschakelde
+                # video's): _handle_trigger doet dan niets en keert meteen
+                # terug zonder sleep/I/O -- zonder deze check pint deze loop
+                # één CPU-core op 100% en bevriest de hele renderloop.
+                break
             result = _handle_trigger(streamer, logger)
         return result
     plays = 2 if mode == "repeat_once" else 1
