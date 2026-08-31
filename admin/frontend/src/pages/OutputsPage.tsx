@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listOutputs, createOutput, updateOutput, deleteOutput } from "../api/outputs";
+import { ApiError } from "../api/client";
 import type { Output } from "../types";
 import "./OutputsPage.css";
 
@@ -77,8 +78,8 @@ export default function OutputsPage() {
     try {
       await deleteOutput(id);
       refresh();
-    } catch {
-      setError("Verwijderen is mislukt — heeft deze output nog scenes?");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Verwijderen is mislukt.");
     } finally {
       setSaving(false);
     }
