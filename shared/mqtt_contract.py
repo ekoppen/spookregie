@@ -19,6 +19,12 @@ class Topics:
         return self._p("mirror/triggered")
 
     @property
+    def mirror_output(self) -> str:
+        """Admin-side routing-awareness (welke player/output nu actief is)
+        -- geen fysieke trigger, geen consumers zoals scare_node/WLED."""
+        return self._p("mirror/output")
+
+    @property
     def system_sleep(self) -> str:
         return self._p("system/sleep")
 

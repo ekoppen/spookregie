@@ -609,7 +609,7 @@ def main():
                 and winning["id"] != _last_published_output_player_id
             ):
                 client.publish(
-                    topics.mirror_triggered, json.dumps({"player_id": winning["id"], "output_id": _current_output_id})
+                    topics.mirror_output, json.dumps({"player_id": winning["id"], "output_id": _current_output_id})
                 )
                 _last_published_output_player_id = winning["id"]
 
