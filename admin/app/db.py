@@ -49,6 +49,17 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS scene_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_scene_id INTEGER NOT NULL,
+            to_scene_id INTEGER,
+            trigger_type TEXT,
+            trigger_from TEXT,
+            trigger_until TEXT,
+            priority INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -80,7 +91,11 @@ def init_db(path):
     _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
     _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")
     _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
+    _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "scenes", "canvas_x", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "scenes", "canvas_y", "REAL NOT NULL DEFAULT 0")
     _migrate_mirror_config_to_scenes(conn)
+    _migrate_scenes_to_graph(conn)
     conn.commit()
     return conn
 
@@ -120,3 +135,42 @@ def _migrate_mirror_config_to_scenes(conn):
            VALUES ('Basis', 0, 1, 'camera', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'always')""",
         row,
     )
+
+
+def _migrate_scenes_to_graph(conn):
+    """Migreert de oude, platte prioriteit+trigger-scenes naar de
+    graaf: de 'always'-scene met de laagste order_index wordt root
+    (of, als die er niet is, de scene met de laagste order_index);
+    elke andere scene met een niet-lege trigger_type krijgt een edge
+    vanaf de root met die trigger; elke scare_video-scene krijgt ook
+    een edge terug naar de root ('altijd'). Idempotent: doet niets
+    zodra er al edges bestaan, of als er geen scenes zijn."""
+    existing_edges = conn.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
+    if existing_edges > 0:
+        return
+    rows = conn.execute(
+        "SELECT id, source_mode, trigger_type, trigger_from, trigger_until, order_index "
+        "FROM scenes ORDER BY order_index"
+    ).fetchall()
+    if not rows:
+        return
+    always_rows = [r for r in rows if r[2] == "always"]
+    root_id = always_rows[0][0] if always_rows else rows[0][0]
+    conn.execute("UPDATE scenes SET is_root = 0")
+    conn.execute("UPDATE scenes SET is_root = 1 WHERE id = ?", (root_id,))
+    for scene_id, source_mode, trigger_type, trigger_from, trigger_until, order_index in rows:
+        if scene_id == root_id or not trigger_type:
+            continue
+        conn.execute(
+            """INSERT INTO scene_edges
+                 (from_scene_id, to_scene_id, trigger_type, trigger_from, trigger_until, priority)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (root_id, scene_id, trigger_type, trigger_from, trigger_until, order_index),
+        )
+        if source_mode == "scare_video":
+            conn.execute(
+                """INSERT INTO scene_edges
+                     (from_scene_id, to_scene_id, trigger_type, trigger_from, trigger_until, priority)
+                   VALUES (?, ?, 'always', NULL, NULL, 0)""",
+                (scene_id, root_id),
+            )
