@@ -68,6 +68,30 @@
   color-scheme: dark;
 }
 
+.trigger-popover__ha {
+  margin-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trigger-popover__ha select {
+  width: 100%;
+  padding: 0.4rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+}
+
+.trigger-popover__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--ash);
+}
+
 .trigger-popover__actions {
   display: flex;
   justify-content: flex-end;

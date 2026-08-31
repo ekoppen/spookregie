@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateTrigger, deleteTrigger } from "../api/triggers";
-import type { Trigger } from "../types";
+import { getHaStates } from "../api/ha";
+import type { Trigger, HaState } from "../types";
 import "./TriggerPopover.css";
 
 interface Props {
@@ -15,8 +16,23 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
   const [until, setUntil] = useState(trigger.schedule_until ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [haEntityId, setHaEntityId] = useState(trigger.ha_entity_id ?? "");
+  const [haStates, setHaStates] = useState<HaState[]>([]);
+  const [haLoadError, setHaLoadError] = useState(false);
+  const [showAllDomains, setShowAllDomains] = useState(false);
+
+  useEffect(() => {
+    if (kind !== "ha_sensor") return;
+    getHaStates()
+      .then(setHaStates)
+      .catch(() => setHaLoadError(true));
+  }, [kind]);
 
   async function handleSave() {
+    if (kind === "ha_sensor" && !haEntityId) {
+      setError("Kies een HA-entiteit.");
+      return;
+    }
     setSaving(true);
     try {
       await updateTrigger(trigger.id, {
@@ -25,7 +41,7 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
         kind,
         schedule_from: kind === "schedule" ? from : null,
         schedule_until: kind === "schedule" ? until : null,
-        ha_entity_id: trigger.ha_entity_id,
+        ha_entity_id: kind === "ha_sensor" ? haEntityId : null,
         priority: trigger.priority,
         canvas_x: trigger.canvas_x,
         canvas_y: trigger.canvas_y,
@@ -91,6 +107,41 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
             />
             Tijdschema
           </label>
+          <label className="trigger-popover__radio">
+            <input
+              type="radio"
+              name="trigger-kind"
+              checked={kind === "ha_sensor"}
+              onChange={() => setKind("ha_sensor")}
+            />
+            Home Assistant-sensor
+          </label>
+          {kind === "ha_sensor" && (
+            <div className="trigger-popover__ha">
+              {haLoadError && <p className="trigger-popover__error">HA-entiteiten konden niet geladen worden.</p>}
+              <label>
+                <span>Entiteit</span>
+                <select value={haEntityId} onChange={(e) => setHaEntityId(e.target.value)}>
+                  <option value="">— kies een entiteit —</option>
+                  {haStates
+                    .filter((s) => showAllDomains || s.entity_id.startsWith("binary_sensor."))
+                    .map((s) => (
+                      <option key={s.entity_id} value={s.entity_id}>
+                        {s.entity_id} ({s.state})
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="trigger-popover__checkbox">
+                <input
+                  type="checkbox"
+                  checked={showAllDomains}
+                  onChange={(e) => setShowAllDomains(e.target.checked)}
+                />
+                Toon alle entiteiten (niet alleen binary_sensor)
+              </label>
+            </div>
+          )}
           {kind === "schedule" && (
             <div className="trigger-popover__schedule">
               <label>
