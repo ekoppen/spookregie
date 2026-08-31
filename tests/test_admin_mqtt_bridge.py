@@ -176,7 +176,7 @@ def test_on_connect_extra_failure_does_not_crash_on_connect(monkeypatch):
 
 def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, monkeypatch):
     """Simuleert een broker-(her)verbinding via _on_connect en verifieert dat
-    de retained config/mirror/scenes en config/mirror/scare-video topics
+    de retained config/mirror/graph en config/mirror/scare-video topics
     opnieuw gepubliceerd worden vanuit de echte DB-inhoud -- dit is de fix
     voor een mirror-node die na een herstart zwart blijft omdat er nooit een
     retained bericht op die topics heeft gestaan."""
@@ -195,7 +195,7 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
         "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
         "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
         "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-        "trigger_type": "always", "trigger_from": None, "trigger_until": None,
+        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
     }
     created = client.post("/api/scenes", json=scene_payload).json()
     client.put("/api/mirror/scare-video-config", json={"enabled_hashes": ["a" * 64]})
@@ -211,7 +211,7 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
         topic: (json.loads(payload), retain)
         for topic, payload, retain in app.state.bridge._client.published
     }
-    assert published["config/mirror/scenes"] == ([created], True)
+    assert published["config/mirror/graph"] == ({"scenes": [created], "edges": [], "root_scene_id": None}, True)
     assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)
 
 
