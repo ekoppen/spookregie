@@ -8,6 +8,7 @@ const links = [
   { to: "/ha", label: "Home Assistant", end: false },
   { to: "/logs", label: "Logs", end: false },
   { to: "/outputs", label: "Outputs", end: false },
+  { to: "/sources", label: "Sources", end: false },
   { to: "/settings", label: "Instellingen", end: false },
 ];
 

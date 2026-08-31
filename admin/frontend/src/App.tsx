@@ -9,6 +9,7 @@ import HaPage from "./pages/HaPage";
 import LogsPage from "./pages/LogsPage";
 import SettingsPage from "./pages/SettingsPage";
 import OutputsPage from "./pages/OutputsPage";
+import SourcesPage from "./pages/SourcesPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, checking } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/outputs" element={<OutputsPage />} />
+          <Route path="/sources" element={<SourcesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
