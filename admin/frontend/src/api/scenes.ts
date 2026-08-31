@@ -1,7 +1,7 @@
 import { apiFetch } from "./client";
 import type { Scene } from "../types";
 
-export type SceneDraft = Omit<Scene, "id" | "order_index">;
+export type SceneDraft = Omit<Scene, "id">;
 
 export function listScenes(): Promise<Scene[]> {
   return apiFetch<Scene[]>("/api/scenes");
@@ -23,8 +23,11 @@ export function deleteScene(id: number): Promise<void> {
   return apiFetch(`/api/scenes/${id}`, { method: "DELETE" });
 }
 
-export function reorderScenes(order: number[]): Promise<void> {
-  return apiFetch("/api/scenes/order", { method: "PUT", body: JSON.stringify({ order }) });
+export function updateScenePosition(id: number, canvas_x: number, canvas_y: number): Promise<void> {
+  return apiFetch(`/api/scenes/${id}/position`, {
+    method: "PUT",
+    body: JSON.stringify({ canvas_x, canvas_y }),
+  });
 }
 
 export function previewScene(id: number, scene: SceneDraft): Promise<void> {

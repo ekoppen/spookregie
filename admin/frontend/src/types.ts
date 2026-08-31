@@ -1,7 +1,6 @@
 export interface Scene {
   id: number;
   name: string;
-  order_index: number;
   enabled: boolean;
   source_mode: "camera" | "scare_video";
   effect: "xray" | "thermal" | "contour" | "posterize";
@@ -12,9 +11,19 @@ export interface Scene {
   canvas_size: [number, number] | null;
   source_scale: number;
   source_position: [number, number];
-  trigger_type: "always" | "motion" | "schedule";
+  is_root: boolean;
+  canvas_x: number;
+  canvas_y: number;
+}
+
+export interface SceneEdge {
+  id: number;
+  from_scene_id: number;
+  to_scene_id: number | null;
+  trigger_type: "always" | "motion" | "schedule" | null;
   trigger_from: string | null;
   trigger_until: string | null;
+  priority: number;
 }
 
 export interface ScareConfig {
