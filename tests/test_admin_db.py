@@ -368,6 +368,37 @@ def test_triggers_new_columns_have_sensible_defaults(tmp_path):
     assert row == (None, None, None)
 
 
+def test_reciprocal_triggers_get_distinct_canvas_positions(tmp_path):
+    """Regression voor Finding 6: een scare_video-scene krijgt van
+    _migrate_scenes_to_graph altijd zowel een A->B- als een B->A-trigger.
+    Beide zaten voorheen op exact hetzelfde (symmetrische) midpoint --
+    één knoop verdween volledig achter de andere op de canvas."""
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(2, 'Scare', 1, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'scare_video', 'motion')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- de upgrade zelf
+
+    rows = conn.execute(
+        "SELECT from_scene_id, to_scene_id, canvas_y FROM triggers ORDER BY id"
+    ).fetchall()
+    assert len(rows) == 2
+    canvas_ys = [r[2] for r in rows]
+    assert canvas_ys[0] != canvas_ys[1]
+
+
 def test_triggers_migration_is_idempotent(tmp_path):
     path = str(tmp_path / "test.db")
     init_db(path)

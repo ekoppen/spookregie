@@ -256,6 +256,12 @@ def _migrate_scene_edges_to_triggers(conn):
     _ensure_column(conn, "triggers", "color", "TEXT")
     # Zinvolle startpositie: het midden tussen bron- en (indien gezet)
     # doelscene, anders bron-positie + een vaste offset naar rechtsonder.
+    # Een A->B- en B->A-trigger tussen dezelfde twee scenes (elke
+    # scare_video-scene krijgt van _migrate_scenes_to_graph altijd
+    # allebei) berekenen anders exact hetzelfde midpoint en landen
+    # boven op elkaar -- de + (id % 4) * 40-term geeft elke trigger een
+    # eigen, deterministische offset zodat ze zichtbaar uit elkaar
+    # liggen, zonder de formule voor het gewone geval te verstoren.
     conn.execute(
         """UPDATE triggers SET
              canvas_x = COALESCE((
@@ -264,10 +270,10 @@ def _migrate_scene_edges_to_triggers(conn):
                WHERE s1.id = triggers.from_scene_id
              ), 0),
              canvas_y = COALESCE((
-               SELECT (s1.canvas_y + COALESCE(s2.canvas_y, s1.canvas_y)) / 2 + 60
+               SELECT (s1.canvas_y + COALESCE(s2.canvas_y, s1.canvas_y)) / 2
                FROM scenes s1 LEFT JOIN scenes s2 ON s2.id = triggers.to_scene_id
                WHERE s1.id = triggers.from_scene_id
-             ), 0)
+             ), 0) + 60 + (triggers.id % 4) * 40
         """
     )
     conn.execute("PRAGMA user_version = 2")
