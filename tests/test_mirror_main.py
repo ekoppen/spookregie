@@ -159,6 +159,29 @@ def test_apply_graph_message_syncs_overlay_for_each_player(monkeypatch):
     assert synced_hashes == [["a" * 64], ["b" * 64]]
 
 
+def test_apply_graph_message_syncs_static_image_sources(monkeypatch):
+    # Belangrijk 5a: static_image-sources hebben geen syncmechanisme --
+    # _apply_graph_message moet ze net als overlays op de achtergrond
+    # ophalen, camera_stream-sources overslaan (geen media om te syncen).
+    started = []
+    monkeypatch.setattr(
+        mirror_main.threading, "Thread",
+        lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
+    )
+    sources = [
+        {"id": 1, "kind": "static_image", "value": "a" * 64},
+        {"id": 2, "kind": "camera_stream", "value": "rtsp://cam"},
+        {"id": 3, "kind": "static_image", "value": "b" * 64},
+    ]
+    payload = {"players": [], "branches": [], "triggers": [], "root_player_id": None, "sources": sources}
+
+    mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
+
+    sync_media_calls = [kw for kw in started if kw["target"] is mirror_main.sync_media]
+    assert len(sync_media_calls) == 1
+    assert sync_media_calls[0]["args"][2] == ["a" * 64, "b" * 64]
+
+
 def test_apply_scene_preview_message_sets_preview_and_syncs_overlay(monkeypatch):
     started = []
     monkeypatch.setattr(
@@ -515,3 +538,40 @@ def test_resolve_frame_source_caches_static_image(monkeypatch):
     assert img1 == "decoded-image"
     assert img2 == "decoded-image"
     assert len(read_calls) == 1  # niet opnieuw gedecodeerd, id ongewijzigd
+
+
+def test_resolve_frame_source_reopens_when_only_value_changes(monkeypatch):
+    # Belangrijk 4: id/kind ongewijzigd maar de stream-URL (value) is
+    # bewerkt -- moet wél opnieuw geopend worden, anders blijft de oude
+    # capture voor altijd open na het bewerken van een camera-URL.
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: f"cap-{value}")
+    released = []
+    state = mirror_main._SourceState()
+    state.capture = type("FakeCap", (), {"release": lambda self: released.append(1)})()
+    state.source_id = 5
+    state.kind = "camera_stream"
+    state.value = "rtsp://old"
+
+    cap = mirror_main._ensure_source(state, {"id": 5, "kind": "camera_stream", "value": "rtsp://new"}, _FakeLogger())
+
+    assert released == [1]
+    assert cap == "cap-rtsp://new"
+    assert state.value == "rtsp://new"
+
+
+def test_resolve_frame_source_static_image_failure_is_not_cached(monkeypatch):
+    # Belangrijk 5b: een mislukte static_image-resolutie (bestand nog niet
+    # gesynct) mag niet als "opgelost" gecachet worden -- anders blijft de
+    # mirror voor altijd blanco zelfs nadat het bestand alsnog gesynct is.
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: False)
+    state = mirror_main._SourceState()
+
+    img1 = mirror_main._ensure_source(state, {"id": 8, "kind": "static_image", "value": "b" * 64}, _FakeLogger())
+    assert img1 is None
+    assert state.source_id is None  # niet gecached als "al opgelost"
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.cv2, "imread", lambda path, *a: "decoded-image")
+    img2 = mirror_main._ensure_source(state, {"id": 8, "kind": "static_image", "value": "b" * 64}, _FakeLogger())
+
+    assert img2 == "decoded-image"  # retry lukt zodra het bestand er wel is

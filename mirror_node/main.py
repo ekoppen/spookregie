@@ -107,6 +107,29 @@ def _sync_overlay_in_background(config):
     ).start()
 
 
+def _sync_sources_in_background(sources):
+    """Haalt static_image-sourcebestanden op de achtergrond op -- zelfde
+    patroon/reden als _sync_overlay_in_background: sync_media kan ~10s
+    blokkeren en mag de MQTT-callbackthread niet ophouden. sync_media zelf
+    slaat een hash over die al lokaal in MEDIA_CACHE_DIR staat.
+    camera_stream-sources hebben geen media om te syncen."""
+    hashes = [
+        source.get("value")
+        for source in sources
+        if isinstance(source, dict)
+        and source.get("kind") == "static_image"
+        and isinstance(source.get("value"), str)
+        and source.get("value")
+    ]
+    if not hashes:
+        return
+    threading.Thread(
+        target=sync_media,
+        args=(BACKEND_URL, MEDIA_CACHE_DIR, hashes),
+        daemon=True,
+    ).start()
+
+
 def _sync_scare_videos_in_background(enabled_hashes):
     """Haalt de ingeschakelde scare-video's (en hun optionele geluid) op de
     achtergrond op -- zelfde reden als _sync_overlay_in_background:
@@ -161,6 +184,7 @@ def _apply_graph_message(payload, logger):
     _current_output_connections = graph.get("output_connections", [])
     _current_branches = branches
     _current_sources = graph.get("sources", [])
+    _sync_sources_in_background(_current_sources)
     for player in players:
         if isinstance(player, dict):
             _sync_overlay_in_background(player)
@@ -284,6 +308,7 @@ class _SourceState:
     def __init__(self):
         self.source_id = None
         self.kind = None
+        self.value = None
         self.capture = None
         self.image = None
 
@@ -291,29 +316,43 @@ class _SourceState:
 def _ensure_source(state, source, logger):
     """Geeft het huidige frame-beeld (cv2 capture voor camera_stream, een
     gedecodeerd beeld voor static_image) terug voor `source`, en heropent/
-    herdecodeert alleen als de source_id daadwerkelijk gewijzigd is sinds
-    de vorige aanroep."""
+    herdecodeert alleen als id, kind ÉN value ongewijzigd zijn sinds de
+    vorige aanroep -- een bewerkte stream-URL of een nieuwe static_image-
+    hash op dezelfde source moet wel opnieuw opgepakt worden."""
     if source is None:
         return None
-    if state.source_id == source.get("id") and state.kind == source.get("kind"):
+    if (
+        state.source_id == source.get("id")
+        and state.kind == source.get("kind")
+        and state.value == source.get("value")
+    ):
         return state.capture if state.kind == "camera_stream" else state.image
     if state.capture is not None:
         state.capture.release()
         state.capture = None
     state.image = None
-    state.source_id = source.get("id")
-    state.kind = source.get("kind")
-    if state.kind == "static_image":
-        value = source.get("value", "")
+    kind = source.get("kind")
+    value = source.get("value", "")
+    if kind == "static_image":
         if not _HASH_RE.match(value):
             logger.error("Ongeldige static_image-hash op source: %s", value)
             return None
         image_path = os.path.join(MEDIA_CACHE_DIR, value)
         if not os.path.exists(image_path):
+            # Nog niet gesynct of ongeldig -- state NIET bijwerken, zodat
+            # de volgende _ensure_source-aanroep dit als onopgelost blijft
+            # zien en blijft retryen i.p.v. deze mislukking permanent te
+            # cachen als "al opgelost" (Belangrijk 5b).
             return None
-        state.image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        if image is None:
+            logger.error("static_image kon niet gedecodeerd worden: %s", value)
+            return None
+        state.source_id, state.kind, state.value = source.get("id"), kind, value
+        state.image = image
         return state.image
-    state.capture = open_camera(source.get("value", ""), CAMERA_INDEX)
+    state.source_id, state.kind, state.value = source.get("id"), kind, value
+    state.capture = open_camera(value, CAMERA_INDEX)
     return state.capture
 
 
