@@ -7,7 +7,7 @@ from mirror_node.camera import open_camera
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
 from admin.app.media import get_media_path
-from admin.app.routers.scenes import _resolve_output_id
+from admin.app.routers.players import _resolve_source_id
 
 router = APIRouter()
 
@@ -16,13 +16,13 @@ def _render_preview_frame(draft, db, media_dir):
     """Blocking body van preview_frame_route -- draait in een threadpool
     (via run_in_threadpool) zodat een tragere/haperende camera niet de
     hele event loop, en dus elke andere admin-request, blokkeert."""
-    output_id = _resolve_output_id(db, draft.get("output_id"))
-    output_row = db.execute(
-        "SELECT camera_source FROM outputs WHERE id = ?", (output_id,)
+    source_id = _resolve_source_id(db, draft.get("source_id"))
+    source_row = db.execute(
+        "SELECT value FROM sources WHERE id = ?", (source_id,)
     ).fetchone()
-    if output_row is None:
-        raise HTTPException(status_code=400, detail="output_id verwijst naar een onbestaande output")
-    camera_source = output_row[0]
+    if source_row is None:
+        raise HTTPException(status_code=400, detail="source_id verwijst naar een onbestaande source")
+    camera_source = source_row[0]
 
     cap = open_camera(camera_source)
     try:

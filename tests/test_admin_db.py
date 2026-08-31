@@ -54,46 +54,64 @@ def test_scenes_table_created(tmp_path):
         row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
 
-    assert "scenes" in tables
+    assert "players" in tables
+
+
+_LEGACY_MIRROR_CONFIG_DDL = """CREATE TABLE mirror_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    effect TEXT NOT NULL DEFAULT 'xray',
+    params TEXT NOT NULL DEFAULT '{}',
+    overlay_hash TEXT,
+    scale REAL NOT NULL DEFAULT 1.0,
+    position TEXT NOT NULL DEFAULT '[0.5, 0.5]'
+)"""
 
 
 def test_existing_mirror_config_migrates_to_one_scene(tmp_path):
+    # Simuleert een echte pre-scenes-deployment: de mirror_config-rij staat
+    # al in het databasebestand vóórdat init_db() ooit onder de nieuwe code
+    # draait (zelfde patroon als de legacy-scenes-tests hieronder) -- niet
+    # ertussenin ingevoegd, want die migratie is inmiddels (net als
+    # scenes->graaf en scene_edges->triggers) een eenmalig upgrade-pad dat
+    # stopt zodra de scenes-tabel al hernoemd is naar players.
     path = str(tmp_path / "test.db")
-    conn = init_db(path)
-    conn.execute(
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_MIRROR_CONFIG_DDL)
+    raw.execute(
         "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
         "VALUES (1, 'thermal', '{\"intensity\": 0.5}', NULL, 1.5, '[0.2, 0.3]')"
     )
-    conn.commit()
-    conn.close()
+    raw.commit()
+    raw.close()
 
-    conn2 = init_db(path)  # tweede init_db-run simuleert een herstart na upgrade
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- de migratie zelf
 
-    scenes = conn2.execute("SELECT name, trigger_type, effect, scale FROM scenes").fetchall()
+    scenes = conn.execute("SELECT name, trigger_type, effect, scale FROM players").fetchall()
     assert scenes == [("Basis", "always", "thermal", 1.5)]
 
 
 def test_scene_migration_is_idempotent(tmp_path):
     path = str(tmp_path / "test.db")
-    conn = init_db(path)
-    conn.execute(
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_MIRROR_CONFIG_DDL)
+    raw.execute(
         "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
         "VALUES (1, 'xray', '{}', NULL, 1.0, '[0.5, 0.5]')"
     )
-    conn.commit()
-    conn.close()
+    raw.commit()
+    raw.close()
     init_db(path)  # eerste migratie
 
-    conn3 = init_db(path)  # nogmaals -- mag niet nog een scene toevoegen
+    conn2 = init_db(path)  # nogmaals -- mag niet nog een scene toevoegen
 
-    count = conn3.execute("SELECT COUNT(*) FROM scenes").fetchone()[0]
+    count = conn2.execute("SELECT COUNT(*) FROM players").fetchone()[0]
     assert count == 1
 
 
 def test_scene_migration_does_nothing_without_existing_mirror_config(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))  # verse DB, geen mirror_config-rij
 
-    count = conn.execute("SELECT COUNT(*) FROM scenes").fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
     assert count == 0
 
 
@@ -121,7 +139,7 @@ def test_existing_scenes_migrate_to_star_graph(tmp_path):
 
     conn = init_db(path)  # eerste keer onder de nieuwe code -- de upgrade zelf
 
-    root = conn.execute("SELECT id FROM scenes WHERE is_root = 1").fetchall()
+    root = conn.execute("SELECT id FROM players WHERE is_root = 1").fetchall()
     assert root == [(1,)]
     edges = conn.execute(
         "SELECT from_scene_id, to_scene_id, kind FROM triggers ORDER BY from_scene_id"
@@ -168,14 +186,14 @@ def test_fresh_graph_era_scenes_survive_restart_without_edges(tmp_path):
     als legacy-data gezien worden. Dat zou is_root herschrijven naar
     'welke scene sorteert als eerste' en fabricage-edges aanmaken."""
     path = str(tmp_path / "test.db")
-    conn = init_db(path)  # verse DB, nul scenes -- user_version wordt hier al op 1 gezet
+    conn = init_db(path)  # verse DB, nul scenes -- user_version wordt hier al op 3 gezet
     conn.execute(
-        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
         "position, source_mode, trigger_type, is_root) VALUES "
         "(1, 'Kamer A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always', 0)"
     )
     conn.execute(
-        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
         "position, source_mode, trigger_type, is_root) VALUES "
         "(2, 'Kamer B', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always', 1)"
     )
@@ -184,7 +202,7 @@ def test_fresh_graph_era_scenes_survive_restart_without_edges(tmp_path):
 
     conn2 = init_db(path)  # herstart, zoals een systemd-restart van de admin-app
 
-    root = conn2.execute("SELECT id FROM scenes WHERE is_root = 1").fetchall()
+    root = conn2.execute("SELECT id FROM players WHERE is_root = 1").fetchall()
     assert root == [(2,)]  # ongewijzigd -- niet teruggezet naar de eerst-sorterende scene
     edge_count = conn2.execute("SELECT COUNT(*) FROM triggers").fetchone()[0]
     assert edge_count == 0  # geen gefabriceerde edges
@@ -265,32 +283,36 @@ def test_default_output_migration_is_idempotent(tmp_path):
 
 
 def test_existing_scenes_get_output_id_from_migration(tmp_path):
+    # Zelfde reden als hierboven: output_id-koppeling is een eenmalig
+    # upgrade-pad op de scenes-tabel, dus de legacy-rij moet er al staan
+    # vóórdat init_db() ooit onder de nieuwe code draait.
     path = str(tmp_path / "test.db")
-    conn = init_db(path)
-    conn.execute(
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
         "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
-        "position, source_mode, is_root) VALUES "
-        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 1)"
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
     )
-    conn.commit()
-    conn.close()
+    raw.commit()
+    raw.close()
 
-    conn2 = init_db(path)
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- de koppeling zelf
 
-    output_id = conn2.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
-    scene_output_id = conn2.execute("SELECT output_id FROM scenes WHERE id = 1").fetchone()[0]
+    output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+    scene_output_id = conn.execute("SELECT output_id FROM players WHERE id = 1").fetchone()[0]
     assert scene_output_id == output_id
 
 
 def test_scenes_color_column_defaults_to_null(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     conn.execute(
-        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
         "position, source_mode) VALUES (1, 'X', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
     )
     conn.commit()
 
-    color = conn.execute("SELECT color FROM scenes WHERE id = 1").fetchone()[0]
+    color = conn.execute("SELECT color FROM players WHERE id = 1").fetchone()[0]
     assert color is None
 
 
@@ -354,7 +376,7 @@ def test_existing_scene_edges_data_survives_rename(tmp_path):
 def test_triggers_new_columns_have_sensible_defaults(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     conn.execute(
-        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
         "position, source_mode) VALUES (1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
     )
     conn.execute(
@@ -471,3 +493,95 @@ def test_blanked_source_value_is_not_reverted_on_restart(tmp_path):
 
     rows = conn2.execute("SELECT value FROM sources").fetchall()
     assert rows == [("",)]
+
+
+def test_players_table_replaces_scenes(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "players" in tables
+    assert "scenes" not in tables
+
+
+def test_existing_scenes_data_survives_rename_to_players(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- de rename zelf
+
+    row = conn.execute("SELECT name FROM players WHERE id = 1").fetchone()
+    assert row == ("Basis",)
+
+
+def test_players_get_new_playback_columns_with_sensible_defaults(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    conn.execute(
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode) VALUES (1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT playback_mode, repeat_while_ha_entity_id FROM players WHERE id = 1"
+    ).fetchone()
+    assert row == ("once", None)
+
+
+def test_existing_players_get_source_id_from_migration(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)
+
+    default_source_id = conn.execute("SELECT id FROM sources LIMIT 1").fetchone()[0]
+    player_source_id = conn.execute("SELECT source_id FROM players WHERE id = 1").fetchone()[0]
+    assert player_source_id == default_source_id
+
+
+def test_players_rename_is_idempotent_across_restarts(tmp_path):
+    """Regressie voor de kern-hazard van deze taak: init_db() draait
+    meerdere keren na de rename en mag niet crashen op 'no such table:
+    scenes' (de oude, ongeconditioneerde migraties die dat literal nog
+    noemen)."""
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)  # derde run -- als een van de oude scenes-migraties
+    # niet correct geguard is, gooit een van deze drie calls al een
+    # sqlite3.OperationalError
+
+    count = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+    assert count == 0  # geen crash, en (verse install) nog geen players
+
+
+def test_scenes_table_does_not_reappear_after_a_restart(tmp_path):
+    """Regressie voor een extra spookgevaar naast de kern-hazard: de
+    onvoorwaardelijke CREATE TABLE IF NOT EXISTS scenes bovenaan init_db()
+    zou zonder guard bij elke herstart ná de rename een lege 'scenes'-tabel
+    terugzetten (IF NOT EXISTS blokkeert alleen een tabel die na de rename
+    nog exact zo heet, en die bestaat niet meer)."""
+    path = str(tmp_path / "test.db")
+    init_db(path)
+
+    conn = init_db(path)  # herstart
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "scenes" not in tables

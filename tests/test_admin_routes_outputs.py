@@ -98,12 +98,12 @@ def test_delete_output_without_scenes(tmp_path):
 def test_delete_output_rejected_when_it_has_a_scene(tmp_path):
     client, bridge = _client(tmp_path)
     default_output = client.get("/api/outputs").json()[0]
-    client.post("/api/scenes", json={
+    client.post("/api/players", json={
         "name": "X", "enabled": True, "source_mode": "camera", "effect": "xray",
         "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
         "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
         "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
-        "output_id": default_output["id"], "color": None,
+        "source_id": None, "playback_mode": "once", "repeat_while_ha_entity_id": None, "color": None,
     })
 
     response = client.delete(f"/api/outputs/{default_output['id']}")

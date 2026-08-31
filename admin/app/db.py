@@ -3,6 +3,15 @@ import sqlite3
 
 def init_db(path):
     conn = sqlite3.connect(path, check_same_thread=False)
+    # ponytail: 'players' bestaat pas na de allereerste (of hernoemde)
+    # migratie -- vóór die tijd heet de tabel nog 'scenes'. Zonder deze
+    # guard zou de onvoorwaardelijke CREATE TABLE IF NOT EXISTS scenes
+    # hieronder bij elke herstart ná de hernoeming een lege spooktabel
+    # 'scenes' terugzetten (IF NOT EXISTS blokkeert alleen een tabel die
+    # exact zo heet, en die bestaat na de rename niet meer).
+    _players_already_exists = "players" in {
+        row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
     conn.execute(
         """CREATE TABLE IF NOT EXISTS media (
             hash TEXT PRIMARY KEY,
@@ -27,27 +36,28 @@ def init_db(path):
             position TEXT NOT NULL DEFAULT '[0.5, 0.5]'
         )"""
     )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS scenes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            order_index INTEGER NOT NULL,
-            enabled INTEGER NOT NULL DEFAULT 1,
-            source_mode TEXT NOT NULL DEFAULT 'camera',
-            effect TEXT NOT NULL DEFAULT 'xray',
-            params TEXT NOT NULL DEFAULT '{}',
-            overlay_hash TEXT,
-            scale REAL NOT NULL DEFAULT 1.0,
-            position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
-            canvas_width INTEGER,
-            canvas_height INTEGER,
-            source_scale REAL NOT NULL DEFAULT 1.0,
-            source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
-            trigger_type TEXT NOT NULL DEFAULT 'always',
-            trigger_from TEXT,
-            trigger_until TEXT
-        )"""
-    )
+    if not _players_already_exists:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS scenes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                order_index INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                source_mode TEXT NOT NULL DEFAULT 'camera',
+                effect TEXT NOT NULL DEFAULT 'xray',
+                params TEXT NOT NULL DEFAULT '{}',
+                overlay_hash TEXT,
+                scale REAL NOT NULL DEFAULT 1.0,
+                position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+                canvas_width INTEGER,
+                canvas_height INTEGER,
+                source_scale REAL NOT NULL DEFAULT 1.0,
+                source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+                trigger_type TEXT NOT NULL DEFAULT 'always',
+                trigger_from TEXT,
+                trigger_until TEXT
+            )"""
+        )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS outputs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,16 +107,19 @@ def init_db(path):
     _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
     _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")
     _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
-    _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")
-    _ensure_column(conn, "scenes", "canvas_x", "REAL NOT NULL DEFAULT 0")
-    _ensure_column(conn, "scenes", "canvas_y", "REAL NOT NULL DEFAULT 0")
-    _ensure_column(conn, "scenes", "output_id", "INTEGER")
-    _ensure_column(conn, "scenes", "color", "TEXT")
+    _tables_before_players_rename = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "scenes" in _tables_before_players_rename:
+        _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "scenes", "canvas_x", "REAL NOT NULL DEFAULT 0")
+        _ensure_column(conn, "scenes", "canvas_y", "REAL NOT NULL DEFAULT 0")
+        _ensure_column(conn, "scenes", "output_id", "INTEGER")
+        _ensure_column(conn, "scenes", "color", "TEXT")
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
     _migrate_outputs(conn)
     _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
+    _migrate_scenes_to_players(conn)
     conn.commit()
     return conn
 
@@ -128,6 +141,9 @@ def _migrate_mirror_config_to_scenes(conn):
     hetzelfde beeld blijft tonen. Idempotent: doet niets zodra er al
     minstens één scene bestaat, en niets als er nooit een
     mirror_config-rij was (verse installatie)."""
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "scenes" not in tables:
+        return  # al hernoemd naar players in een vorige run -- niets te doen
     existing = conn.execute("SELECT COUNT(*) FROM scenes").fetchone()[0]
     if existing > 0:
         return
@@ -230,7 +246,9 @@ def _migrate_outputs(conn):
         output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
 
     # Always link scenes to the output
-    conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "scenes" in tables:
+        conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))
 
 
 def _migrate_sources(conn):
@@ -307,3 +325,51 @@ def _migrate_scene_edges_to_triggers(conn):
         """
     )
     conn.execute("PRAGMA user_version = 2")
+
+
+def _migrate_scenes_to_players(conn):
+    """Hernoemt scenes naar players en voegt de nieuwe afspeel-kolommen toe
+    (source_id, playback_mode, repeat_while_ha_entity_id). Moet de LAATSTE
+    scenes-migratie in init_db() zijn -- elke migratie ervóór verwacht de
+    tabel nog 'scenes' te heten. Idempotent via PRAGMA user_version (>=3
+    betekent 'deze migratie is al gedaan', zelfde patroon als de
+    scene_edges->triggers-migratie op versie 2)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 3:
+        return
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "scenes" in tables:
+        conn.execute("ALTER TABLE scenes RENAME TO players")
+    else:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS players (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                order_index INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                source_mode TEXT NOT NULL DEFAULT 'camera',
+                effect TEXT NOT NULL DEFAULT 'xray',
+                params TEXT NOT NULL DEFAULT '{}',
+                overlay_hash TEXT,
+                scale REAL NOT NULL DEFAULT 1.0,
+                position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+                canvas_width INTEGER,
+                canvas_height INTEGER,
+                source_scale REAL NOT NULL DEFAULT 1.0,
+                source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+                trigger_type TEXT NOT NULL DEFAULT 'always',
+                trigger_from TEXT,
+                trigger_until TEXT,
+                is_root INTEGER NOT NULL DEFAULT 0,
+                canvas_x REAL NOT NULL DEFAULT 0,
+                canvas_y REAL NOT NULL DEFAULT 0,
+                output_id INTEGER,
+                color TEXT
+            )"""
+        )
+    _ensure_column(conn, "players", "source_id", "INTEGER")
+    _ensure_column(conn, "players", "playback_mode", "TEXT NOT NULL DEFAULT 'once'")
+    _ensure_column(conn, "players", "repeat_while_ha_entity_id", "TEXT")
+    default_source = conn.execute("SELECT id FROM sources ORDER BY id LIMIT 1").fetchone()
+    if default_source is not None:
+        conn.execute("UPDATE players SET source_id = ? WHERE source_id IS NULL", (default_source[0],))
+    conn.execute("PRAGMA user_version = 3")

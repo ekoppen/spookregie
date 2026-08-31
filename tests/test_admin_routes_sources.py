@@ -120,6 +120,22 @@ def test_delete_source_without_players(tmp_path):
     assert created["id"] not in remaining_ids
 
 
+def test_delete_source_rejected_when_it_has_a_player(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+    client.post("/api/players", json={
+        "name": "X", "enabled": True, "source_mode": "camera", "effect": "xray",
+        "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
+        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "color": None,
+        "source_id": default_source["id"], "playback_mode": "once", "repeat_while_ha_entity_id": None,
+    })
+
+    response = client.delete(f"/api/sources/{default_source['id']}")
+
+    assert response.status_code == 400
+
+
 def test_source_routes_require_auth(tmp_path):
     settings = Settings(
         admin_password="testwachtwoord",

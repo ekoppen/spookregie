@@ -207,9 +207,10 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
         "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
         "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
         "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
+        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "source_id": None,
     }
-    created = client.post("/api/scenes", json=scene_payload).json()
+    default_output_id = client.get("/api/outputs").json()[0]["id"]
+    created = client.post("/api/players", json=scene_payload).json()
     client.put("/api/mirror/scare-video-config", json={"enabled_hashes": ["a" * 64]})
 
     # Wis wat de CRUD-routes hierboven al publiceerden -- we willen alleen
@@ -225,7 +226,7 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
     }
     # Eerste (en enige) scene wordt automatisch root (Minor 12).
     assert published["config/mirror/graph"] == (
-        {"scenes": [created], "triggers": [], "root_scene_id": created["id"], "output_id": created["output_id"]},
+        {"scenes": [created], "triggers": [], "root_scene_id": created["id"], "output_id": default_output_id},
         True,
     )
     assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)

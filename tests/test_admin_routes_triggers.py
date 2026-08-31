@@ -40,13 +40,14 @@ _SCENE_PAYLOAD = {
     "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
     "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
     "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-    "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "output_id": None, "color": None,
+    "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
+    "source_id": None, "playback_mode": "once", "repeat_while_ha_entity_id": None, "color": None,
 }
 
 
 def _two_scenes(client):
-    a = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "A"}).json()
-    b = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "B"}).json()
+    a = client.post("/api/players", json={**_SCENE_PAYLOAD, "name": "A"}).json()
+    b = client.post("/api/players", json={**_SCENE_PAYLOAD, "name": "B"}).json()
     return a, b
 
 
@@ -185,7 +186,7 @@ def test_update_trigger_position_returns_404_for_unknown_id(tmp_path):
 def test_every_write_publishes_full_graph_with_triggers_key(tmp_path):
     client, bridge = _client(tmp_path)
     a, b = _two_scenes(client)
-    client.put(f"/api/scenes/{a['id']}", json={**_SCENE_PAYLOAD, "name": "A", "is_root": True})
+    client.put(f"/api/players/{a['id']}", json={**_SCENE_PAYLOAD, "name": "A", "is_root": True})
     bridge.calls.clear()
 
     trigger = client.post("/api/triggers", json={

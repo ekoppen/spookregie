@@ -81,6 +81,9 @@ def delete_source_route(source_id: int, request: Request):
     existing = db.execute("SELECT id FROM sources WHERE id = ?", (source_id,)).fetchone()
     if existing is None:
         raise HTTPException(status_code=404, detail="Source niet gevonden")
+    has_players = db.execute("SELECT 1 FROM players WHERE source_id = ? LIMIT 1", (source_id,)).fetchone()
+    if has_players is not None:
+        raise HTTPException(status_code=400, detail="Source heeft nog players -- verplaats of verwijder die eerst")
     db.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     db.commit()
     return {"ok": True}

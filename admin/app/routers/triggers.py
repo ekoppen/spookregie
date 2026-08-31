@@ -67,7 +67,7 @@ async def create_trigger_route(request: Request):
     db = request.app.state.db
     if not isinstance(from_scene_id, int):
         raise HTTPException(status_code=400, detail="from_scene_id is verplicht")
-    exists = db.execute("SELECT id FROM scenes WHERE id = ?", (from_scene_id,)).fetchone()
+    exists = db.execute("SELECT id FROM players WHERE id = ?", (from_scene_id,)).fetchone()
     if exists is None:
         raise HTTPException(status_code=400, detail="from_scene_id verwijst naar een onbestaande scene")
     fields = {k: body.get(k, v) for k, v in _DEFAULT_TRIGGER.items()}
@@ -97,7 +97,7 @@ async def update_trigger_route(trigger_id: int, request: Request):
     fields = {k: body.get(k, v) for k, v in _DEFAULT_TRIGGER.items()}
     _validate_kind(fields)
     if fields["to_scene_id"] is not None:
-        target = db.execute("SELECT id FROM scenes WHERE id = ?", (fields["to_scene_id"],)).fetchone()
+        target = db.execute("SELECT id FROM players WHERE id = ?", (fields["to_scene_id"],)).fetchone()
         if target is None:
             raise HTTPException(status_code=400, detail="to_scene_id verwijst naar een onbestaande scene")
     db.execute(

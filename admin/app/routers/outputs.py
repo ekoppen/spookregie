@@ -64,7 +64,7 @@ def delete_output_route(output_id: int, request: Request):
     existing = db.execute("SELECT id FROM outputs WHERE id = ?", (output_id,)).fetchone()
     if existing is None:
         raise HTTPException(status_code=404, detail="Output niet gevonden")
-    has_scenes = db.execute("SELECT 1 FROM scenes WHERE output_id = ? LIMIT 1", (output_id,)).fetchone()
+    has_scenes = db.execute("SELECT 1 FROM players WHERE output_id = ? LIMIT 1", (output_id,)).fetchone()
     if has_scenes is not None:
         raise HTTPException(status_code=400, detail="Output heeft nog scenes -- verplaats of verwijder die eerst")
     db.execute("DELETE FROM outputs WHERE id = ?", (output_id,))
