@@ -1,0 +1,101 @@
+.scene-graph-canvas {
+  position: relative;
+  height: 520px;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.scene-graph-canvas__add {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 5;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  background: var(--ember);
+  border: none;
+  color: var(--void);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.scene-node {
+  position: relative;
+  min-width: 180px;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  color: var(--bone);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.scene-node[data-root="true"] {
+  border-color: var(--signal);
+}
+
+.scene-node__header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.scene-node__root {
+  background: transparent;
+  border: none;
+  color: var(--signal);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0;
+}
+
+.scene-node__name {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scene-node__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 1.5rem;
+}
+
+.scene-node__chip {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  color: var(--ash);
+  cursor: pointer;
+}
+
+.scene-node__outputs {
+  position: relative;
+  min-height: 24px;
+}
+
+.scene-node__output {
+  position: absolute;
+  right: 0.5rem;
+  font-size: 0.65rem;
+  color: var(--ash);
+  transform: translateY(-50%);
+}
+
+.scene-node__add-output {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  background: transparent;
+  border: 1px dashed var(--panel-edge);
+  border-radius: 6px;
+  color: var(--ash);
+  cursor: pointer;
+}
