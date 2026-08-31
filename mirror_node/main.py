@@ -34,7 +34,7 @@ from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.camera import open_camera
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
-from mirror_node.scenes import SceneGraph
+from mirror_node.players import PlayerGraph
 from mirror_node.stream import MJPEGStreamer
 
 NODE_NAME = "mirror"
@@ -62,7 +62,7 @@ sleeping = threading.Event()
 # Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
 # hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
 test_trigger_requested = threading.Event()
-scene_graph = SceneGraph()
+scene_graph = PlayerGraph()
 synced_scare_videos = {}
 _fired_ha_entities_lock = threading.Lock()
 _fired_ha_entities = set()
@@ -136,7 +136,12 @@ def _apply_graph_message(payload, logger):
     if not isinstance(scenes, list) or not isinstance(triggers, list):
         logger.error("Graaf-config heeft geen geldige scenes/triggers-lijst, genegeerd: %r", graph)
         return
-    scene_graph.set_graph(scenes, triggers, root_scene_id)
+    # ponytail: branches komen pas met de nieuwe graaf-payload (Task 11);
+    # tot dan een lege lijst, wat identiek gedrag geeft aan de oude
+    # 3-parameter aanroep zolang triggers ook geen from_branch_id gebruiken
+    # die naar een echte branch moet resolven.
+    branches = graph.get("branches", [])
+    scene_graph.set_graph(scenes, branches, triggers, root_scene_id)
     for scene in scenes:
         if isinstance(scene, dict):
             _sync_overlay_in_background(scene)
