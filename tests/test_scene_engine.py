@@ -1,90 +1,160 @@
-from mirror_node.scenes import SceneEngine, _time_in_window
+from mirror_node.scenes import SceneGraph, _time_in_window
 
 
-def test_always_scene_wins_without_conditions():
-    engine = SceneEngine()
-    scene = {"id": 1, "trigger_type": "always"}
-    engine.set_scenes([scene])
-
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") == scene
+def _graph(scenes, edges, root_id, **kwargs):
+    g = SceneGraph(**kwargs)
+    g.set_graph(scenes, edges, root_id)
+    return g
 
 
-def test_motion_scene_only_wins_when_motion_active():
-    engine = SceneEngine()
-    scene = {"id": 1, "trigger_type": "motion"}
-    engine.set_scenes([scene])
+def test_resolves_to_root_with_no_edges():
+    g = _graph([{"id": 1, "name": "Basis"}], [], root_id=1)
 
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") is None
-    assert engine.resolve(motion_active=True, now_hhmm="12:00") == scene
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
 
-
-def test_schedule_scene_matches_within_window():
-    engine = SceneEngine()
-    scene = {"id": 1, "trigger_type": "schedule", "trigger_from": "20:00", "trigger_until": "23:00"}
-    engine.set_scenes([scene])
-
-    assert engine.resolve(motion_active=False, now_hhmm="21:00") == scene
-    assert engine.resolve(motion_active=False, now_hhmm="19:00") is None
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is False
 
 
-def test_schedule_scene_handles_midnight_wraparound():
-    engine = SceneEngine()
-    scene = {"id": 1, "trigger_type": "schedule", "trigger_from": "22:00", "trigger_until": "02:00"}
-    engine.set_scenes([scene])
+def test_transitions_on_matching_motion_edge():
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0}
+    ]
+    g = _graph(scenes, edges, root_id=1)
 
-    assert engine.resolve(motion_active=False, now_hhmm="23:30") == scene
-    assert engine.resolve(motion_active=False, now_hhmm="01:00") == scene
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") is None
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
 
-
-def test_priority_order_first_match_wins():
-    engine = SceneEngine()
-    motion_scene = {"id": 1, "trigger_type": "motion"}
-    always_scene = {"id": 2, "trigger_type": "always"}
-    engine.set_scenes([motion_scene, always_scene])
-
-    result = engine.resolve(motion_active=True, now_hhmm="12:00")
-
-    assert result == motion_scene
+    assert scene == {"id": 2, "name": "Scare"}
+    assert transitioned is True
 
 
-def test_disabled_scene_is_skipped():
-    engine = SceneEngine()
-    disabled = {"id": 1, "trigger_type": "always", "enabled": False}
-    enabled = {"id": 2, "trigger_type": "always", "enabled": True}
-    engine.set_scenes([disabled, enabled])
+def test_no_transition_without_motion():
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0}
+    ]
+    g = _graph(scenes, edges, root_id=1)
 
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") == enabled
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
 
-
-def test_no_scene_matches_returns_none():
-    engine = SceneEngine()
-    engine.set_scenes(
-        [{"id": 1, "trigger_type": "schedule", "trigger_from": "20:00", "trigger_until": "21:00"}]
-    )
-
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") is None
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is False
 
 
-def test_preview_overrides_normal_resolution():
+def test_only_current_nodes_own_edges_are_checked():
+    """Root heeft een motion-edge naar Scare; Scare heeft er zelf geen
+    -- eenmaal bij Scare aangekomen, matcht een volgende beweging niets
+    meer (Scare's eigen edge-lijst is leeg)."""
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0}
+    ]
+    g = _graph(scenes, edges, root_id=1)
+    g.resolve(motion_active=True, now_hhmm="12:00")  # naar Scare
+
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
+
+    assert scene == {"id": 2, "name": "Scare"}
+    assert transitioned is False
+
+
+def test_return_edge_brings_state_back_on_next_resolve():
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+        {"from_scene_id": 2, "to_scene_id": 1, "trigger_type": "always",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+    g.resolve(motion_active=True, now_hhmm="12:00")  # naar Scare
+
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")  # altijd-edge terug
+
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is True
+
+
+def test_non_live_edges_are_ignored():
+    """Een edge zonder to_scene_id (lege output) of zonder trigger_type
+    (nog niet ingesteld) telt niet mee."""
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": None, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": None,
+         "trigger_from": None, "trigger_until": None, "priority": 1},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
+
+    assert scene == {"id": 1, "name": "Basis"}
+    assert transitioned is False
+
+
+def test_priority_order_first_matching_edge_wins():
+    scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "A"}, {"id": 3, "name": "B"}]
+    edges = [
+        {"from_scene_id": 1, "to_scene_id": 3, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 1},
+        {"from_scene_id": 1, "to_scene_id": 2, "trigger_type": "motion",
+         "trigger_from": None, "trigger_until": None, "priority": 0},
+    ]
+    g = _graph(scenes, edges, root_id=1)
+
+    scene, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
+
+    assert scene == {"id": 2, "name": "A"}
+
+
+def test_unknown_current_scene_resets_to_root():
+    g = _graph([{"id": 1, "name": "Basis"}], [], root_id=1)
+    g._current_id = 999  # gesimuleerd: vorige graaf had een scene die nu weg is
+
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene == {"id": 1, "name": "Basis"}
+
+
+def test_no_root_and_no_scenes_returns_none():
+    g = SceneGraph()
+    g.set_graph([], [], root_scene_id=None)
+
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene is None
+    assert transitioned is False
+
+
+def test_preview_overrides_graph_evaluation():
     clock = {"t": 0.0}
-    engine = SceneEngine(preview_timeout=30, clock=lambda: clock["t"])
-    engine.set_scenes([{"id": 1, "trigger_type": "always"}])
-    preview = {"id": 99, "trigger_type": "always"}
-    engine.set_preview(preview)
+    g = SceneGraph(preview_timeout=30, clock=lambda: clock["t"])
+    g.set_graph([{"id": 1, "name": "Basis"}], [], root_scene_id=1)
+    preview = {"id": 99, "name": "Preview"}
+    g.set_preview(preview)
 
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") == preview
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene == preview
+    assert transitioned is False
 
 
 def test_preview_expires_after_timeout():
     clock = {"t": 0.0}
-    engine = SceneEngine(preview_timeout=30, clock=lambda: clock["t"])
-    normal = {"id": 1, "trigger_type": "always"}
-    engine.set_scenes([normal])
-    engine.set_preview({"id": 99, "trigger_type": "always"})
+    g = SceneGraph(preview_timeout=30, clock=lambda: clock["t"])
+    root = {"id": 1, "name": "Basis"}
+    g.set_graph([root], [], root_scene_id=1)
+    g.set_preview({"id": 99, "name": "Preview"})
     clock["t"] = 31.0
 
-    assert engine.resolve(motion_active=False, now_hhmm="12:00") == normal
+    scene, transitioned = g.resolve(motion_active=False, now_hhmm="12:00")
+
+    assert scene == root
 
 
 def test_time_in_window_normal_range():
