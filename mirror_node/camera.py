@@ -1,3 +1,8 @@
+import os
+os.environ.setdefault(
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;5000000"
+)
+
 import cv2
 
 
