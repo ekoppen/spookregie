@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter()
 
-_OUTPUT_COLUMNS = "id, name, camera_source"
+_OUTPUT_COLUMNS = "id, name, camera_source, canvas_x, canvas_y"
 
 
 def _row_to_output(row):
-    return {"id": row[0], "name": row[1], "camera_source": row[2]}
+    return {"id": row[0], "name": row[1], "camera_source": row[2], "canvas_x": row[3], "canvas_y": row[4]}
 
 
 def _list_outputs(db):
@@ -36,8 +36,10 @@ async def create_output_route(request: Request):
     if not name:
         raise HTTPException(status_code=400, detail="name mag niet leeg zijn")
     camera_source = str(body.get("camera_source", ""))
+    canvas_x = float(body.get("canvas_x", 0.0))
+    canvas_y = float(body.get("canvas_y", 0.0))
     db = request.app.state.db
-    cursor = db.execute("INSERT INTO outputs (name, camera_source) VALUES (?, ?)", (name, camera_source))
+    cursor = db.execute("INSERT INTO outputs (name, camera_source, canvas_x, canvas_y) VALUES (?, ?, ?, ?)", (name, camera_source, canvas_x, canvas_y))
     db.commit()
     return get_output_route(cursor.lastrowid, request)
 
@@ -53,7 +55,9 @@ async def update_output_route(output_id: int, request: Request):
     if not name:
         raise HTTPException(status_code=400, detail="name mag niet leeg zijn")
     camera_source = str(body.get("camera_source", ""))
-    db.execute("UPDATE outputs SET name = ?, camera_source = ? WHERE id = ?", (name, camera_source, output_id))
+    canvas_x = float(body.get("canvas_x", 0.0))
+    canvas_y = float(body.get("canvas_y", 0.0))
+    db.execute("UPDATE outputs SET name = ?, camera_source = ?, canvas_x = ?, canvas_y = ? WHERE id = ?", (name, camera_source, canvas_x, canvas_y, output_id))
     db.commit()
     return get_output_route(output_id, request)
 

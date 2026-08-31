@@ -673,3 +673,33 @@ def test_triggers_branch_rename_is_idempotent(tmp_path):
     conn = init_db(path)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
     assert "from_branch_id" in cols
+
+
+def test_outputs_get_canvas_position_columns(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(outputs)")}
+
+    assert "canvas_x" in cols
+    assert "canvas_y" in cols
+
+
+def test_migrated_output_gets_a_visible_canvas_position(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    row = conn.execute("SELECT canvas_x, canvas_y FROM outputs LIMIT 1").fetchone()
+    assert row == (300.0, 0.0)
+
+
+def test_output_canvas_position_seed_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    conn = init_db(path)
+    output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+    conn.execute("UPDATE outputs SET canvas_x = 999.0 WHERE id = ?", (output_id,))
+    conn.commit()
+    conn.close()
+
+    conn2 = init_db(path)  # herstart -- mag de handmatig versleepte positie niet resetten
+
+    row = conn2.execute("SELECT canvas_x FROM outputs WHERE id = ?", (output_id,)).fetchone()
+    assert row == (999.0,)

@@ -114,6 +114,8 @@ def init_db(path):
     _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
     _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")
     _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
+    _ensure_column(conn, "outputs", "canvas_x", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "outputs", "canvas_y", "REAL NOT NULL DEFAULT 0")
     _tables_before_players_rename = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "scenes" in _tables_before_players_rename:
         _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")
@@ -124,6 +126,7 @@ def init_db(path):
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
     _migrate_outputs(conn)
+    _migrate_output_canvas_position(conn)
     _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
     _migrate_scenes_to_players(conn)
@@ -416,3 +419,15 @@ def _migrate_triggers_to_branches(conn):
             ")"
         )
     conn.execute("PRAGMA user_version = 5")
+
+
+def _migrate_output_canvas_position(conn):
+    """Zet éénmalig een zichtbare canvas-positie op elke output die er nog
+    geen heeft (rechts naast waar de players staan) -- zonder dit blijft
+    een gemigreerde output op (0, 0) staan, precies bovenop de eerste
+    player. PRAGMA-gated (>=6) zodat een handmatig versleepte positie
+    nooit teruggezet wordt op een latere restart."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 6:
+        return
+    conn.execute("UPDATE outputs SET canvas_x = 300.0 WHERE canvas_x = 0 AND canvas_y = 0")
+    conn.execute("PRAGMA user_version = 6")

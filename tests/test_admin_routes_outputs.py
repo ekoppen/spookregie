@@ -114,3 +114,15 @@ def test_output_routes_require_auth(tmp_path):
     client = TestClient(app)
 
     assert client.get("/api/outputs").status_code == 401
+
+
+def test_output_canvas_position_round_trips(tmp_path):
+    client, bridge = _client(tmp_path)
+    created = client.post("/api/outputs", json={
+        "name": "A", "camera_source": "", "canvas_x": 12.5, "canvas_y": -3.0,
+    }).json()
+
+    assert created["canvas_x"] == 12.5
+    assert created["canvas_y"] == -3.0
+    fetched = client.get(f"/api/outputs/{created['id']}").json()
+    assert fetched["canvas_x"] == 12.5
