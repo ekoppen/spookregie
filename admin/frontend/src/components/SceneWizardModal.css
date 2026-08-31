@@ -49,6 +49,17 @@
   cursor: pointer;
 }
 
+.scene-modal__preview-toggle {
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  color: var(--bone);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
 .scene-modal__steps {
   display: flex;
   gap: 0.5rem;
