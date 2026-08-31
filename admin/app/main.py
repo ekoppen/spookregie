@@ -32,6 +32,7 @@ from admin.app.routers import mirror_process as mirror_process_router
 from admin.app.routers import mirror_scare_video as mirror_scare_video_router
 from admin.app.routers import triggers as triggers_router
 from admin.app.routers import outputs as outputs_router
+from admin.app.routers import output_connections as output_connections_router
 from admin.app.routers import sources as sources_router
 from admin.app.routers import preview as preview_router
 from admin.app.routers.mirror_scare_video import read_enabled_hashes
@@ -137,6 +138,7 @@ def create_app(settings=None):
     app.include_router(mirror_process_router.router)
     app.include_router(mirror_scare_video_router.router)
     app.include_router(outputs_router.router)
+    app.include_router(output_connections_router.router)
     app.include_router(sources_router.router)
     app.include_router(preview_router.router)
 

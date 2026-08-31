@@ -95,12 +95,22 @@ def test_delete_output_without_scenes(tmp_path):
     assert created["id"] not in remaining_ids
 
 
-# test_delete_output_rejected_when_it_has_a_scene lived here: it exercised
-# outputs.py's players-based delete-guard (SELECT ... FROM players WHERE
-# output_id = ?), which can no longer be triggered through the API now
-# that output_id is dead weight on players (superseded by branch-based
-# routing). Task 6 replaces this with an output_connections-based guard
-# and its own test.
+def test_delete_output_rejected_when_it_has_a_connection(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
+    player = client.post("/api/players", json={
+        "name": "X", "enabled": True, "source_mode": "camera", "effect": "xray",
+        "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
+        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "color": None,
+        "source_id": None, "playback_mode": "once", "repeat_while_ha_entity_id": None,
+    }).json()
+    branch = client.get(f"/api/players/{player['id']}/branches").json()[0]
+    client.post("/api/output-connections", json={"output_id": default_output["id"], "from_branch_id": branch["id"]})
+
+    response = client.delete(f"/api/outputs/{default_output['id']}")
+
+    assert response.status_code == 400
 
 
 def test_output_routes_require_auth(tmp_path):

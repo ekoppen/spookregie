@@ -83,6 +83,13 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS output_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            output_id INTEGER NOT NULL,
+            from_branch_id INTEGER NOT NULL
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'
@@ -132,6 +139,7 @@ def init_db(path):
     _migrate_player_branches(conn)
     _migrate_triggers_to_branches(conn)
     _migrate_output_canvas_position(conn)
+    _migrate_output_connections(conn)
     conn.commit()
     return conn
 
@@ -431,3 +439,22 @@ def _migrate_output_canvas_position(conn):
         return
     conn.execute("UPDATE outputs SET canvas_x = 300.0 WHERE canvas_x = 0 AND canvas_y = 0")
     conn.execute("PRAGMA user_version = 6")
+
+
+def _migrate_output_connections(conn):
+    """Koppelt elke bestaande player's default-branch rechtstreeks aan de
+    (ene, bestaande) output, zodat alles na de upgrade gewoon op het
+    scherm blijft verschijnen zonder dat de gebruiker de graaf opnieuw
+    hoeft te bedraden. Idempotent via PRAGMA user_version (>=7)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 7:
+        return
+    output_row = conn.execute("SELECT id FROM outputs ORDER BY id LIMIT 1").fetchone()
+    if output_row is not None:
+        output_id = output_row[0]
+        branch_rows = conn.execute("SELECT id FROM player_branches").fetchall()
+        for (branch_id,) in branch_rows:
+            conn.execute(
+                "INSERT INTO output_connections (output_id, from_branch_id) VALUES (?, ?)",
+                (output_id, branch_id),
+            )
+    conn.execute("PRAGMA user_version = 7")

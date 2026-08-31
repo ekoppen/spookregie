@@ -703,3 +703,41 @@ def test_output_canvas_position_seed_is_idempotent(tmp_path):
 
     row = conn2.execute("SELECT canvas_x FROM outputs WHERE id = ?", (output_id,)).fetchone()
     assert row == (999.0,)
+
+
+def test_output_connections_table_created(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "output_connections" in tables
+
+
+def test_existing_players_default_branch_gets_wired_to_the_output(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code
+
+    output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+    branch_id = conn.execute("SELECT id FROM player_branches WHERE player_id = 1").fetchone()[0]
+    row = conn.execute("SELECT output_id, from_branch_id FROM output_connections").fetchone()
+    assert row == (output_id, branch_id)
+
+
+def test_output_connections_migration_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    count = conn.execute("SELECT COUNT(*) FROM output_connections").fetchone()[0]
+    assert count == 0  # verse install, geen players -> geen connections

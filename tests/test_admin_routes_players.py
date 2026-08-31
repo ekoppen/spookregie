@@ -386,3 +386,15 @@ def test_delete_branch_rejected_when_it_has_a_trigger(tmp_path):
     response = client.delete(f"/api/branches/{branch['id']}")
 
     assert response.status_code == 400
+
+
+def test_delete_branch_rejected_when_it_has_an_output_connection(tmp_path):
+    client, bridge = _client(tmp_path)
+    output = client.post("/api/outputs", json={"name": "X", "camera_source": "", "canvas_x": 0, "canvas_y": 0}).json()
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+    branch = client.get(f"/api/players/{player['id']}/branches").json()[0]
+    client.post("/api/output-connections", json={"output_id": output["id"], "from_branch_id": branch["id"]})
+
+    response = client.delete(f"/api/branches/{branch['id']}")
+
+    assert response.status_code == 400

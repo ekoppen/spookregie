@@ -222,6 +222,11 @@ def delete_player_route(player_id: int, request: Request):
         "schedule_from = NULL, schedule_until = NULL, ha_entity_id = NULL WHERE to_player_id = ?",
         (player_id,),
     )
+    db.execute(
+        "DELETE FROM output_connections WHERE from_branch_id IN "
+        "(SELECT id FROM player_branches WHERE player_id = ?)",
+        (player_id,),
+    )
     db.execute("DELETE FROM player_branches WHERE player_id = ?", (player_id,))
     db.commit()
     publish_graph(db, request.app.state.bridge)
@@ -277,6 +282,11 @@ def delete_player_branch_route(branch_id: int, request: Request):
     has_trigger = db.execute("SELECT 1 FROM triggers WHERE from_branch_id = ? LIMIT 1", (branch_id,)).fetchone()
     if has_trigger is not None:
         raise HTTPException(status_code=400, detail="Aftakking heeft nog een trigger -- verwijder die eerst")
+    has_output_connection = db.execute(
+        "SELECT 1 FROM output_connections WHERE from_branch_id = ? LIMIT 1", (branch_id,)
+    ).fetchone()
+    if has_output_connection is not None:
+        raise HTTPException(status_code=400, detail="Aftakking heeft nog een output-verbinding -- verwijder die eerst")
     db.execute("DELETE FROM player_branches WHERE id = ?", (branch_id,))
     db.commit()
     return {"ok": True}
