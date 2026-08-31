@@ -41,6 +41,8 @@ const EMPTY_DRAFT: SceneDraft = {
   is_root: false,
   canvas_x: 0,
   canvas_y: 0,
+  output_id: null,
+  color: null,
 };
 
 interface Props {
