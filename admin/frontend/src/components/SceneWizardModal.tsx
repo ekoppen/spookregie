@@ -38,28 +38,28 @@ const EMPTY_DRAFT: SceneDraft = {
   canvas_size: null,
   source_scale: 1.0,
   source_position: [0.5, 0.5],
-  trigger_type: "always",
-  trigger_from: null,
-  trigger_until: null,
+  is_root: false,
+  canvas_x: 0,
+  canvas_y: 0,
 };
 
 interface Props {
   sceneId: number | null;
+  initialStep?: Step;
   onClose: () => void;
   onSaved: () => void;
 }
 
-type Step = "input" | "animation" | "output" | "trigger";
+type Step = "input" | "animation" | "output";
 const STEP_LABEL: Record<Step, string> = {
   input: "Input",
   animation: "Animatie",
   output: "Output",
-  trigger: "Trigger",
 };
 
-export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
+export default function SceneWizardModal({ sceneId, initialStep, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<SceneDraft>(EMPTY_DRAFT);
-  const [step, setStep] = useState<Step>("input");
+  const [step, setStep] = useState<Step>(initialStep ?? "input");
   const [cameraSource, setCameraSource] = useState("");
   const [canvasWidthDraft, setCanvasWidthDraft] = useState("");
   const [canvasHeightDraft, setCanvasHeightDraft] = useState("");
@@ -150,8 +150,7 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
     }
   }
 
-  const steps: Step[] =
-    draft.source_mode === "camera" ? ["input", "animation", "output", "trigger"] : ["input", "trigger"];
+  const steps: Step[] = draft.source_mode === "camera" ? ["input", "animation", "output"] : ["input"];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -300,58 +299,6 @@ export default function SceneWizardModal({ sceneId, onClose, onSaved }: Props) {
                 </p>
               )}
             </>
-          )}
-
-          {step === "trigger" && (
-            <div className="scene-modal__field-group">
-              <label className="scene-modal__radio">
-                <input
-                  type="radio"
-                  name="trigger_type"
-                  checked={draft.trigger_type === "always"}
-                  onChange={() => update({ trigger_type: "always", trigger_from: null, trigger_until: null })}
-                />
-                Altijd (basis-scene)
-              </label>
-              <label className="scene-modal__radio">
-                <input
-                  type="radio"
-                  name="trigger_type"
-                  checked={draft.trigger_type === "motion"}
-                  onChange={() => update({ trigger_type: "motion", trigger_from: null, trigger_until: null })}
-                />
-                Beweging
-              </label>
-              <label className="scene-modal__radio">
-                <input
-                  type="radio"
-                  name="trigger_type"
-                  checked={draft.trigger_type === "schedule"}
-                  onChange={() => update({ trigger_type: "schedule" })}
-                />
-                Tijdschema
-              </label>
-              {draft.trigger_type === "schedule" && (
-                <div className="scene-modal__field-group">
-                  <label className="scene-modal__field">
-                    <span>Van</span>
-                    <input
-                      type="time"
-                      value={draft.trigger_from ?? ""}
-                      onChange={(e) => update({ trigger_from: e.target.value })}
-                    />
-                  </label>
-                  <label className="scene-modal__field">
-                    <span>Tot</span>
-                    <input
-                      type="time"
-                      value={draft.trigger_until ?? ""}
-                      onChange={(e) => update({ trigger_until: e.target.value })}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
           )}
         </div>
 
