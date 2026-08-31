@@ -36,8 +36,8 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
     setSaving(true);
     try {
       await updateTrigger(trigger.id, {
-        from_scene_id: trigger.from_scene_id,
-        to_scene_id: trigger.to_scene_id,
+        from_branch_id: trigger.from_branch_id,
+        to_player_id: trigger.to_player_id,
         kind,
         schedule_from: kind === "schedule" ? from : null,
         schedule_until: kind === "schedule" ? until : null,

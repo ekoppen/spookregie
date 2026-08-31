@@ -1,15 +1,29 @@
 import { useEffect, useState, useCallback } from "react";
 import { getNodes } from "../api/nodes";
 import { getSchedule, putSchedule, emergencyStop, wake } from "../api/schedule";
-import { listScenes } from "../api/scenes";
+import { listPlayers } from "../api/players";
+import { listSources } from "../api/sources";
+import { listAllBranches } from "../api/branches";
 import { listTriggers } from "../api/triggers";
+import { listOutputs } from "../api/outputs";
+import { listOutputConnections } from "../api/outputConnections";
 import { testMirror } from "../api/mirror";
 import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
 import { useWebSocket } from "../hooks/useWebSocket";
 import NodeStatusCard from "../components/NodeStatusCard";
-import SceneWizardModal from "../components/SceneWizardModal";
-import SceneGraphCanvas from "../components/SceneGraphCanvas";
-import type { NodeStatusMap, Schedule, Scene, Trigger, WsMessage } from "../types";
+import PlayerWizardModal from "../components/PlayerWizardModal";
+import PlayerGraphCanvas from "../components/PlayerGraphCanvas";
+import type {
+  NodeStatusMap,
+  Schedule,
+  Player,
+  Source,
+  PlayerBranch,
+  Trigger,
+  Output,
+  OutputConnection,
+  WsMessage,
+} from "../types";
 import "./DashboardPage.css";
 
 export default function DashboardPage() {
@@ -20,23 +34,39 @@ export default function DashboardPage() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [waking, setWaking] = useState(false);
-  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [branches, setBranches] = useState<PlayerBranch[]>([]);
   const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [outputs, setOutputs] = useState<Output[]>([]);
+  const [outputConnections, setOutputConnections] = useState<OutputConnection[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardSceneId, setWizardSceneId] = useState<number | null>(null);
+  const [wizardPlayerId, setWizardPlayerId] = useState<number | null>(null);
   const [wizardInitialStep, setWizardInitialStep] = useState<"input" | "animation" | "output">("input");
   const [running, setRunning] = useState(false);
   const [processBusy, setProcessBusy] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [testing, setTesting] = useState(false);
 
-  function refreshScenes() {
-    listScenes()
-      .then(setScenes)
-      .catch(() => setError("Scenes konden niet worden geladen."));
+  function refreshGraph() {
+    listPlayers()
+      .then(setPlayers)
+      .catch(() => setError("Players konden niet worden geladen."));
+    listSources()
+      .then(setSources)
+      .catch(() => setError("Sources konden niet worden geladen."));
+    listAllBranches()
+      .then(setBranches)
+      .catch(() => setError("Aftakkingen konden niet worden geladen."));
     listTriggers()
       .then(setTriggers)
       .catch(() => setError("Triggers konden niet worden geladen."));
+    listOutputs()
+      .then(setOutputs)
+      .catch(() => setError("Outputs konden niet worden geladen."));
+    listOutputConnections()
+      .then(setOutputConnections)
+      .catch(() => setError("Output-verbindingen konden niet worden geladen."));
   }
 
   useEffect(() => {
@@ -46,7 +76,7 @@ export default function DashboardPage() {
     getSchedule()
       .then(setSchedule)
       .catch(() => setError("Tijdvenster kon niet worden geladen."));
-    refreshScenes();
+    refreshGraph();
     getMirrorProcessStatus()
       .then((result) => setRunning(result.running))
       .catch(() => {
@@ -116,7 +146,7 @@ export default function DashboardPage() {
   }
 
   function openWizard(id: number | null, step: "input" | "animation" | "output" = "input") {
-    setWizardSceneId(id);
+    setWizardPlayerId(id);
     setWizardInitialStep(step);
     setWizardOpen(true);
   }
@@ -187,13 +217,17 @@ export default function DashboardPage() {
       )}
 
       <section className="dash-panel">
-        <p className="dash-panel__eyebrow">Scenes</p>
-        <SceneGraphCanvas
-          scenes={scenes}
+        <p className="dash-panel__eyebrow">Players</p>
+        <PlayerGraphCanvas
+          players={players}
+          sources={sources}
+          branches={branches}
           triggers={triggers}
-          onSceneClick={(id, step) => openWizard(id, step)}
-          onGraphChanged={refreshScenes}
-          onAddScene={() => openWizard(null)}
+          outputs={outputs}
+          outputConnections={outputConnections}
+          onPlayerClick={(id, step) => openWizard(id, step)}
+          onGraphChanged={refreshGraph}
+          onAddPlayer={() => openWizard(null)}
         />
       </section>
 
@@ -219,11 +253,11 @@ export default function DashboardPage() {
       </section>
 
       {wizardOpen && (
-        <SceneWizardModal
-          sceneId={wizardSceneId}
+        <PlayerWizardModal
+          playerId={wizardPlayerId}
           initialStep={wizardInitialStep}
           onClose={() => setWizardOpen(false)}
-          onSaved={refreshScenes}
+          onSaved={refreshGraph}
         />
       )}
 

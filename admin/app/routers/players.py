@@ -233,6 +233,12 @@ def delete_player_route(player_id: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/api/branches")
+def list_all_branches_route(request: Request):
+    rows = request.app.state.db.execute(f"SELECT {_BRANCH_COLUMNS} FROM player_branches ORDER BY id").fetchall()
+    return [_row_to_branch(r) for r in rows]
+
+
 @router.get("/api/players/{player_id:int}/branches")
 def list_player_branches_route(player_id: int, request: Request):
     db = request.app.state.db

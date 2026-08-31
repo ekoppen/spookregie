@@ -1,6 +1,10 @@
 import { apiFetch } from "./client";
 import type { PlayerBranch } from "../types";
 
+export function listAllBranches(): Promise<PlayerBranch[]> {
+  return apiFetch<PlayerBranch[]>("/api/branches");
+}
+
 export function listPlayerBranches(playerId: number): Promise<PlayerBranch[]> {
   return apiFetch<PlayerBranch[]>(`/api/players/${playerId}/branches`);
 }

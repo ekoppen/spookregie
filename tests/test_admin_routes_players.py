@@ -425,3 +425,15 @@ def test_delete_branch_rejected_when_it_has_an_output_connection(tmp_path):
     response = client.delete(f"/api/branches/{branch['id']}")
 
     assert response.status_code == 400
+
+
+def test_list_all_branches_across_players(tmp_path):
+    client, bridge = _client(tmp_path)
+    a = client.post("/api/players", json={**_PLAYER_PAYLOAD, "name": "A"}).json()
+    b = client.post("/api/players", json={**_PLAYER_PAYLOAD, "name": "B"}).json()
+
+    response = client.get("/api/branches")
+
+    assert response.status_code == 200
+    player_ids = {branch["player_id"] for branch in response.json()}
+    assert player_ids == {a["id"], b["id"]}
