@@ -23,6 +23,8 @@ import EdgeTriggerPopover from "./EdgeTriggerPopover";
 import type { Scene, SceneEdge } from "../types";
 import "./SceneGraphCanvas.css";
 
+const NODE_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#95a5a6"];
+
 interface Props {
   scenes: Scene[];
   edges: SceneEdge[];
@@ -37,6 +39,8 @@ type SceneNodeData = {
   onSceneClick: Props["onSceneClick"];
   onAddOutput: (fromSceneId: number) => void;
   onMakeRoot: (sceneId: number) => void;
+  onRename: (sceneId: number, name: string) => void;
+  onSetColor: (sceneId: number, color: string) => void;
   [key: string]: unknown;
 };
 
@@ -52,17 +56,87 @@ function triggerLabel(edge: SceneEdge): string {
 }
 
 function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
-  const { scene, outputs, onSceneClick, onAddOutput, onMakeRoot } = data;
+  const { scene, outputs, onSceneClick, onAddOutput, onMakeRoot, onRename, onSetColor } = data;
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(scene.name);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
+  function commitRename() {
+    setEditingName(false);
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== scene.name) {
+      onRename(scene.id, trimmed);
+    } else {
+      setNameDraft(scene.name);
+    }
+  }
+
   return (
-    <div className="scene-node" data-root={scene.is_root}>
+    <div
+      className="scene-node"
+      data-root={scene.is_root}
+      style={scene.color ? { borderColor: scene.color } : undefined}
+    >
       <Handle type="target" position={Position.Left} />
       <div className="scene-node__header">
-        <button type="button" className="scene-node__root nodrag" onClick={() => onMakeRoot(scene.id)} title="Maak root">
+        <button
+          type="button"
+          className="scene-node__root nodrag"
+          onClick={() => onMakeRoot(scene.id)}
+          title="Maak root"
+        >
           {scene.is_root ? "★" : "☆"}
         </button>
-        <span className="scene-node__name nodrag" onClick={() => onSceneClick(scene.id, "input")}>
-          {scene.name}
-        </span>
+        {editingName ? (
+          <input
+            className="scene-node__name-input nodrag"
+            autoFocus
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") {
+                setNameDraft(scene.name);
+                setEditingName(false);
+              }
+            }}
+          />
+        ) : (
+          <span
+            className="scene-node__name nodrag"
+            onClick={() => onSceneClick(scene.id, "input")}
+            onDoubleClick={() => setEditingName(true)}
+            title="Klik voor instellingen, dubbelklik om te hernoemen"
+          >
+            {scene.name}
+          </span>
+        )}
+        <button
+          type="button"
+          className="scene-node__color-swatch nodrag"
+          style={{ backgroundColor: scene.color ?? "transparent" }}
+          onClick={() => setColorPickerOpen((open) => !open)}
+          title="Kleur"
+          aria-label="Kleur kiezen"
+        />
+        {colorPickerOpen && (
+          <div className="scene-node__color-palette nodrag">
+            {NODE_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="scene-node__color-option"
+                style={{ backgroundColor: c }}
+                onClick={() => {
+                  onSetColor(scene.id, c);
+                  setColorPickerOpen(false);
+                }}
+                aria-label={`Kies kleur ${c}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
       <div className="scene-node__chips">
         <span className="scene-node__chip nodrag" onClick={() => onSceneClick(scene.id, "input")}>
@@ -124,6 +198,28 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
     [scenes, onGraphChanged],
   );
 
+  const handleRename = useCallback(
+    async (sceneId: number, name: string) => {
+      const scene = scenes.find((s) => s.id === sceneId);
+      if (!scene) return;
+      const { id: _id, ...draft } = scene;
+      await updateScene(sceneId, { ...draft, name });
+      onGraphChanged();
+    },
+    [scenes, onGraphChanged],
+  );
+
+  const handleSetColor = useCallback(
+    async (sceneId: number, color: string) => {
+      const scene = scenes.find((s) => s.id === sceneId);
+      if (!scene) return;
+      const { id: _id, ...draft } = scene;
+      await updateScene(sceneId, { ...draft, color });
+      onGraphChanged();
+    },
+    [scenes, onGraphChanged],
+  );
+
   const flowNodes: SceneNode[] = useMemo(
     () =>
       scenes.map((scene) => ({
@@ -136,9 +232,11 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
           onSceneClick,
           onAddOutput: handleAddOutput,
           onMakeRoot: handleMakeRoot,
+          onRename: handleRename,
+          onSetColor: handleSetColor,
         },
       })),
-    [scenes, edges, onSceneClick, handleAddOutput, handleMakeRoot],
+    [scenes, edges, onSceneClick, handleAddOutput, handleMakeRoot, handleRename, handleSetColor],
   );
 
   const flowEdges: Edge[] = useMemo(

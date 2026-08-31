@@ -40,6 +40,7 @@
 }
 
 .scene-node__header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -58,6 +59,52 @@
 .scene-node__name {
   font-weight: 700;
   cursor: pointer;
+}
+
+.scene-node__name-input {
+  font-weight: 700;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  color: var(--bone);
+  padding: 0.1rem 0.3rem;
+  font-size: inherit;
+  font-family: inherit;
+  width: 100%;
+}
+
+.scene-node__color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-edge);
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.scene-node__color-palette {
+  position: absolute;
+  top: 2.2rem;
+  right: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 0.4rem;
+  z-index: 10;
+}
+
+.scene-node__color-option {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-edge);
+  cursor: pointer;
+  padding: 0;
 }
 
 .scene-node__chips {
