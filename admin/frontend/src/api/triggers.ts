@@ -8,7 +8,7 @@ export function listTriggers(): Promise<Trigger[]> {
 }
 
 export function createTrigger(
-  trigger: Partial<TriggerDraft> & { from_scene_id: number },
+  trigger: Partial<TriggerDraft> & { from_branch_id: number },
 ): Promise<Trigger> {
   return apiFetch<Trigger>("/api/triggers", { method: "POST", body: JSON.stringify(trigger) });
 }
