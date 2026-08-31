@@ -128,6 +128,7 @@ def init_db(path):
     _migrate_scene_edges_to_triggers(conn)
     _migrate_scenes_to_players(conn)
     _migrate_player_branches(conn)
+    _migrate_triggers_to_branches(conn)
     conn.commit()
     return conn
 
@@ -395,3 +396,23 @@ def _migrate_player_branches(conn):
     for (player_id,) in rows:
         conn.execute("INSERT INTO player_branches (player_id, name) VALUES (?, 'Uitgang 1')", (player_id,))
     conn.execute("PRAGMA user_version = 4")
+
+
+def _migrate_triggers_to_branches(conn):
+    """Hernoemt triggers.from_scene_id/to_scene_id naar from_branch_id/
+    to_player_id, en vult from_branch_id met de (op dit punt in de
+    migratieketen gegarandeerd bestaande, precies-één) default-branch van
+    de player die de kolom vroeger rechtstreeks aanduidde. Idempotent via
+    PRAGMA user_version (>=5)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 5:
+        return
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+    if "from_scene_id" in cols:
+        conn.execute("ALTER TABLE triggers RENAME COLUMN from_scene_id TO from_branch_id")
+        conn.execute("ALTER TABLE triggers RENAME COLUMN to_scene_id TO to_player_id")
+        conn.execute(
+            "UPDATE triggers SET from_branch_id = ("
+            "  SELECT b.id FROM player_branches b WHERE b.player_id = triggers.from_branch_id LIMIT 1"
+            ")"
+        )
+    conn.execute("PRAGMA user_version = 5")

@@ -4,7 +4,7 @@ import time
 class SceneGraph:
     """Houdt de laatst via MQTT ontvangen graaf bij (scenes + live
     triggers) en de huidige-scene-toestand. Elke trigger is een eigen
-    knoop tussen twee scenes (from_scene_id -> to_scene_id), met een
+    knoop tussen twee scenes (from_branch_id -> to_player_id), met een
     kind (always/motion/schedule/ha_sensor)."""
 
     def __init__(self, preview_timeout=30, clock=time.monotonic):
@@ -25,9 +25,9 @@ class SceneGraph:
         self._scenes = {s["id"]: s for s in scenes if s.get("enabled", True)}
         by_from = {}
         for t in triggers:
-            if t.get("to_scene_id") is None or t.get("kind") is None:
+            if t.get("to_player_id") is None or t.get("kind") is None:
                 continue  # niet-live: lege stub of ongeconfigureerde trigger
-            by_from.setdefault(t["from_scene_id"], []).append(t)
+            by_from.setdefault(t["from_branch_id"], []).append(t)
         for lst in by_from.values():
             lst.sort(key=lambda t: t["priority"])
         self._triggers = by_from
@@ -57,11 +57,11 @@ class SceneGraph:
         if self._current_id is None:
             return None, False
         for trigger in self._triggers.get(self._current_id, []):
-            if trigger["to_scene_id"] not in self._scenes:
+            if trigger["to_player_id"] not in self._scenes:
                 continue  # doel bestaat niet (of staat uit) -- val door naar de volgende trigger
             if _trigger_matches(trigger, motion_active, now_hhmm, fired_ha_entities):
-                if trigger["to_scene_id"] != self._current_id:
-                    self._current_id = trigger["to_scene_id"]
+                if trigger["to_player_id"] != self._current_id:
+                    self._current_id = trigger["to_player_id"]
                     return self._scenes.get(self._current_id), True
                 break
         return self._scenes.get(self._current_id), False

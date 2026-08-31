@@ -4,12 +4,12 @@ from admin.app.graph_publish import publish_graph
 router = APIRouter()
 
 _TRIGGER_COLUMNS = (
-    "id, from_scene_id, to_scene_id, kind, schedule_from, schedule_until, "
+    "id, from_branch_id, to_player_id, kind, schedule_from, schedule_until, "
     "ha_entity_id, priority, canvas_x, canvas_y, name, color"
 )
 
 _DEFAULT_TRIGGER = {
-    "to_scene_id": None,
+    "to_player_id": None,
     "kind": None,
     "schedule_from": None,
     "schedule_until": None,
@@ -27,8 +27,8 @@ _VALID_KINDS = {"always", "motion", "schedule", "ha_sensor"}
 def _row_to_trigger(row):
     return {
         "id": row[0],
-        "from_scene_id": row[1],
-        "to_scene_id": row[2],
+        "from_branch_id": row[1],
+        "to_player_id": row[2],
         "kind": row[3],
         "schedule_from": row[4],
         "schedule_until": row[5],
@@ -43,7 +43,7 @@ def _row_to_trigger(row):
 
 def _list_triggers(db):
     rows = db.execute(
-        f"SELECT {_TRIGGER_COLUMNS} FROM triggers ORDER BY from_scene_id, priority"
+        f"SELECT {_TRIGGER_COLUMNS} FROM triggers ORDER BY from_branch_id, priority"
     ).fetchall()
     return [_row_to_trigger(r) for r in rows]
 
@@ -63,21 +63,21 @@ def list_triggers_route(request: Request):
 @router.post("/api/triggers")
 async def create_trigger_route(request: Request):
     body = await request.json()
-    from_scene_id = body.get("from_scene_id")
+    from_branch_id = body.get("from_branch_id")
     db = request.app.state.db
-    if not isinstance(from_scene_id, int):
-        raise HTTPException(status_code=400, detail="from_scene_id is verplicht")
-    exists = db.execute("SELECT id FROM players WHERE id = ?", (from_scene_id,)).fetchone()
+    if not isinstance(from_branch_id, int):
+        raise HTTPException(status_code=400, detail="from_branch_id is verplicht")
+    exists = db.execute("SELECT id FROM player_branches WHERE id = ?", (from_branch_id,)).fetchone()
     if exists is None:
-        raise HTTPException(status_code=400, detail="from_scene_id verwijst naar een onbestaande scene")
+        raise HTTPException(status_code=400, detail="from_branch_id verwijst naar een onbestaande aftakking")
     fields = {k: body.get(k, v) for k, v in _DEFAULT_TRIGGER.items()}
     _validate_kind(fields)
     cursor = db.execute(
         """INSERT INTO triggers
-             (from_scene_id, to_scene_id, kind, schedule_from, schedule_until, ha_entity_id,
+             (from_branch_id, to_player_id, kind, schedule_from, schedule_until, ha_entity_id,
               priority, canvas_x, canvas_y, name, color)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (from_scene_id, fields["to_scene_id"], fields["kind"], fields["schedule_from"],
+        (from_branch_id, fields["to_player_id"], fields["kind"], fields["schedule_from"],
          fields["schedule_until"], fields["ha_entity_id"], fields["priority"],
          fields["canvas_x"], fields["canvas_y"], fields["name"], fields["color"]),
     )
@@ -96,14 +96,14 @@ async def update_trigger_route(trigger_id: int, request: Request):
     body = await request.json()
     fields = {k: body.get(k, v) for k, v in _DEFAULT_TRIGGER.items()}
     _validate_kind(fields)
-    if fields["to_scene_id"] is not None:
-        target = db.execute("SELECT id FROM players WHERE id = ?", (fields["to_scene_id"],)).fetchone()
+    if fields["to_player_id"] is not None:
+        target = db.execute("SELECT id FROM players WHERE id = ?", (fields["to_player_id"],)).fetchone()
         if target is None:
-            raise HTTPException(status_code=400, detail="to_scene_id verwijst naar een onbestaande scene")
+            raise HTTPException(status_code=400, detail="to_player_id verwijst naar een onbestaande player")
     db.execute(
-        """UPDATE triggers SET to_scene_id=?, kind=?, schedule_from=?, schedule_until=?,
+        """UPDATE triggers SET to_player_id=?, kind=?, schedule_from=?, schedule_until=?,
              ha_entity_id=?, priority=?, canvas_x=?, canvas_y=?, name=?, color=? WHERE id=?""",
-        (fields["to_scene_id"], fields["kind"], fields["schedule_from"], fields["schedule_until"],
+        (fields["to_player_id"], fields["kind"], fields["schedule_from"], fields["schedule_until"],
          fields["ha_entity_id"], fields["priority"], fields["canvas_x"], fields["canvas_y"],
          fields["name"], fields["color"], trigger_id),
     )

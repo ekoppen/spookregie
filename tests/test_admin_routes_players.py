@@ -232,12 +232,14 @@ def test_deleting_scene_clears_its_own_and_incoming_triggers(tmp_path):
     client, bridge = _client(tmp_path)
     a = client.post("/api/players", json={**_PLAYER_PAYLOAD, "name": "A"}).json()
     b = client.post("/api/players", json={**_PLAYER_PAYLOAD, "name": "B"}).json()
+    branch_a = client.get(f"/api/players/{a['id']}/branches").json()[0]["id"]
+    branch_b = client.get(f"/api/players/{b['id']}/branches").json()[0]["id"]
     client.post("/api/triggers", json={
-        "from_scene_id": a["id"], "to_scene_id": b["id"],
+        "from_branch_id": branch_a, "to_player_id": b["id"],
         "kind": "motion", "schedule_from": None, "schedule_until": None, "priority": 0,
     })
     client.post("/api/triggers", json={
-        "from_scene_id": b["id"], "to_scene_id": a["id"],
+        "from_branch_id": branch_b, "to_player_id": a["id"],
         "kind": "always", "schedule_from": None, "schedule_until": None, "priority": 0,
     })
 
@@ -245,8 +247,8 @@ def test_deleting_scene_clears_its_own_and_incoming_triggers(tmp_path):
 
     remaining = client.get("/api/triggers").json()
     assert len(remaining) == 1
-    assert remaining[0]["from_scene_id"] == b["id"]
-    assert remaining[0]["to_scene_id"] is None
+    assert remaining[0]["from_branch_id"] == branch_b
+    assert remaining[0]["to_player_id"] is None
     assert remaining[0]["kind"] is None
 
 
@@ -373,3 +375,14 @@ def test_deleting_player_removes_its_branches(tmp_path):
     ).fetchone()[0]
     raw.close()
     assert count == 0
+
+
+def test_delete_branch_rejected_when_it_has_a_trigger(tmp_path):
+    client, bridge = _client(tmp_path)
+    player = client.post("/api/players", json=_PLAYER_PAYLOAD).json()
+    branch = client.get(f"/api/players/{player['id']}/branches").json()[0]
+    client.post("/api/triggers", json={"from_branch_id": branch["id"]})
+
+    response = client.delete(f"/api/branches/{branch['id']}")
+
+    assert response.status_code == 400

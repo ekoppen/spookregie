@@ -212,13 +212,17 @@ def delete_player_route(player_id: int, request: Request):
     # opruimen: eigen uitgaande edges verdwijnen mee, inkomende edges
     # vallen terug op een lege output-stub i.p.v. een edge naar een
     # niet-bestaande scene te laten hangen.
-    db.execute("DELETE FROM player_branches WHERE player_id = ?", (player_id,))
-    db.execute("DELETE FROM triggers WHERE from_scene_id = ?", (player_id,))
     db.execute(
-        "UPDATE triggers SET to_scene_id = NULL, kind = NULL, "
-        "schedule_from = NULL, schedule_until = NULL, ha_entity_id = NULL WHERE to_scene_id = ?",
+        "DELETE FROM triggers WHERE from_branch_id IN "
+        "(SELECT id FROM player_branches WHERE player_id = ?)",
         (player_id,),
     )
+    db.execute(
+        "UPDATE triggers SET to_player_id = NULL, kind = NULL, "
+        "schedule_from = NULL, schedule_until = NULL, ha_entity_id = NULL WHERE to_player_id = ?",
+        (player_id,),
+    )
+    db.execute("DELETE FROM player_branches WHERE player_id = ?", (player_id,))
     db.commit()
     publish_graph(db, request.app.state.bridge)
     return {"ok": True}
@@ -267,10 +271,14 @@ async def update_player_branch_route(branch_id: int, request: Request):
 @router.delete("/api/branches/{branch_id:int}")
 def delete_player_branch_route(branch_id: int, request: Request):
     db = request.app.state.db
-    cursor = db.execute("DELETE FROM player_branches WHERE id = ?", (branch_id,))
-    db.commit()
-    if cursor.rowcount == 0:
+    existing = db.execute("SELECT id FROM player_branches WHERE id = ?", (branch_id,)).fetchone()
+    if existing is None:
         raise HTTPException(status_code=404, detail="Aftakking niet gevonden")
+    has_trigger = db.execute("SELECT 1 FROM triggers WHERE from_branch_id = ? LIMIT 1", (branch_id,)).fetchone()
+    if has_trigger is not None:
+        raise HTTPException(status_code=400, detail="Aftakking heeft nog een trigger -- verwijder die eerst")
+    db.execute("DELETE FROM player_branches WHERE id = ?", (branch_id,))
+    db.commit()
     return {"ok": True}
 
 

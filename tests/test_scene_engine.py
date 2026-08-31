@@ -19,7 +19,7 @@ def test_resolves_to_root_with_no_triggers():
 def test_transitions_on_matching_motion_trigger():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -33,7 +33,7 @@ def test_transitions_on_matching_motion_trigger():
 def test_no_transition_without_motion():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -47,7 +47,7 @@ def test_no_transition_without_motion():
 def test_only_current_nodes_own_triggers_are_checked():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -62,9 +62,9 @@ def test_only_current_nodes_own_triggers_are_checked():
 def test_return_trigger_brings_state_back_on_next_resolve():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
-        {"from_scene_id": 2, "to_scene_id": 1, "kind": "always",
+        {"from_branch_id": 2, "to_player_id": 1, "kind": "always",
          "schedule_from": None, "schedule_until": None, "priority": 0},
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -79,9 +79,9 @@ def test_return_trigger_brings_state_back_on_next_resolve():
 def test_non_live_triggers_are_ignored():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": None, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": None, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": None,
+        {"from_branch_id": 1, "to_player_id": 2, "kind": None,
          "schedule_from": None, "schedule_until": None, "priority": 1},
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -95,9 +95,9 @@ def test_non_live_triggers_are_ignored():
 def test_priority_order_first_matching_trigger_wins():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "A"}, {"id": 3, "name": "B"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 3, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 3, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 1},
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -129,7 +129,7 @@ def test_no_root_and_no_scenes_returns_none():
 def test_disabled_scene_is_never_resolved_to():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare", "enabled": False}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -143,9 +143,9 @@ def test_disabled_scene_is_never_resolved_to():
 def test_trigger_to_unknown_scene_is_skipped_not_followed():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "A"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 999, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 999, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "motion",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 1},
     ]
     g = _graph(scenes, triggers, root_id=1)
@@ -185,7 +185,7 @@ def test_preview_expires_after_timeout():
 def test_ha_sensor_trigger_matches_only_its_own_fired_entity():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "ha_sensor",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "ha_sensor",
          "schedule_from": None, "schedule_until": None, "ha_entity_id": "binary_sensor.tuin",
          "priority": 0}
     ]
@@ -209,7 +209,7 @@ def test_ha_sensor_trigger_matches_only_its_own_fired_entity():
 def test_ha_sensor_trigger_without_ha_entity_id_never_matches():
     scenes = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     triggers = [
-        {"from_scene_id": 1, "to_scene_id": 2, "kind": "ha_sensor",
+        {"from_branch_id": 1, "to_player_id": 2, "kind": "ha_sensor",
          "schedule_from": None, "schedule_until": None, "ha_entity_id": None, "priority": 0}
     ]
     g = _graph(scenes, triggers, root_id=1)

@@ -142,7 +142,7 @@ def test_existing_scenes_migrate_to_star_graph(tmp_path):
     root = conn.execute("SELECT id FROM players WHERE is_root = 1").fetchall()
     assert root == [(1,)]
     edges = conn.execute(
-        "SELECT from_scene_id, to_scene_id, kind FROM triggers ORDER BY from_scene_id"
+        "SELECT from_branch_id, to_player_id, kind FROM triggers ORDER BY from_branch_id"
     ).fetchall()
     assert edges == [(1, 2, "motion"), (2, 1, "always")]
 
@@ -368,7 +368,7 @@ def test_existing_scene_edges_data_survives_rename(tmp_path):
     conn = init_db(path)  # eerste keer onder de nieuwe code -- de rename zelf
 
     row = conn.execute(
-        "SELECT from_scene_id, to_scene_id, kind FROM triggers"
+        "SELECT from_branch_id, to_player_id, kind FROM triggers"
     ).fetchone()
     assert row == (1, 2, "motion")
 
@@ -380,7 +380,7 @@ def test_triggers_new_columns_have_sensible_defaults(tmp_path):
         "position, source_mode) VALUES (1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
     )
     conn.execute(
-        "INSERT INTO triggers (from_scene_id, priority) VALUES (1, 0)"
+        "INSERT INTO triggers (from_branch_id, priority) VALUES (1, 0)"
     )
     conn.commit()
 
@@ -414,7 +414,7 @@ def test_reciprocal_triggers_get_distinct_canvas_positions(tmp_path):
     conn = init_db(path)  # eerste keer onder de nieuwe code -- de upgrade zelf
 
     rows = conn.execute(
-        "SELECT from_scene_id, to_scene_id, canvas_y FROM triggers ORDER BY id"
+        "SELECT from_branch_id, to_player_id, canvas_y FROM triggers ORDER BY id"
     ).fetchall()
     assert len(rows) == 2
     canvas_ys = [r[2] for r in rows]
@@ -626,3 +626,50 @@ def test_player_branches_migration_is_idempotent(tmp_path):
     conn = init_db(path)
     count = conn.execute("SELECT COUNT(*) FROM player_branches").fetchone()[0]
     assert count == 0  # verse install, geen players -> geen branches
+
+
+def test_triggers_columns_renamed_to_branch_and_player(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+
+    assert "from_branch_id" in cols
+    assert "to_player_id" in cols
+    assert "from_scene_id" not in cols
+    assert "to_scene_id" not in cols
+
+
+def test_existing_trigger_from_scene_id_becomes_that_players_default_branch(tmp_path):
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(2, 'B', 1, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code
+
+    default_branch_id = conn.execute(
+        "SELECT id FROM player_branches WHERE player_id = 1"
+    ).fetchone()[0]
+    row = conn.execute("SELECT from_branch_id, to_player_id FROM triggers").fetchone()
+    assert row == (default_branch_id, 2)
+
+
+def test_triggers_branch_rename_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(triggers)")}
+    assert "from_branch_id" in cols
