@@ -98,16 +98,16 @@ def test_start_subscribes_with_configured_prefix(monkeypatch):
     ]
 
 
-def test_publish_mirror_scenes_uses_configured_prefix(monkeypatch):
+def test_publish_mirror_graph_uses_configured_prefix(monkeypatch):
     monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
 
     bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
 
-    bridge.publish_mirror_scenes([{"id": 1, "name": "Basis"}])
+    bridge.publish_mirror_graph({"scenes": [{"id": 1}], "edges": [], "root_scene_id": 1})
 
     topic, payload, retain = bridge._client.published[-1]
-    assert topic == "test/config/mirror/scenes"
-    assert json.loads(payload) == [{"id": 1, "name": "Basis"}]
+    assert topic == "test/config/mirror/graph"
+    assert json.loads(payload) == {"scenes": [{"id": 1}], "edges": [], "root_scene_id": 1}
     assert retain is True
 
 
