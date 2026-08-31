@@ -32,6 +32,7 @@ from admin.app.routers import mirror_process as mirror_process_router
 from admin.app.routers import mirror_scare_video as mirror_scare_video_router
 from admin.app.routers import triggers as triggers_router
 from admin.app.routers import outputs as outputs_router
+from admin.app.routers import preview as preview_router
 from admin.app.routers.mirror_scare_video import read_enabled_hashes
 from admin.app.routers.schedule import read_schedule
 from admin.app.graph_publish import publish_graph
@@ -135,6 +136,7 @@ def create_app(settings=None):
     app.include_router(mirror_process_router.router)
     app.include_router(mirror_scare_video_router.router)
     app.include_router(outputs_router.router)
+    app.include_router(preview_router.router)
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if os.path.isdir(frontend_dist):

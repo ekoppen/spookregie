@@ -31,6 +31,7 @@ from shared.topic_prefix import fetch_topic_prefix, fetch_mirror_camera_source
 from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
+from mirror_node.camera import open_camera
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
 from mirror_node.scenes import SceneGraph
@@ -251,18 +252,6 @@ def _render(frame, scene, logger):
     return result
 
 
-def _open_camera(source):
-    """Opent de camera-bron: leeg -> lokale index (CAMERA_INDEX), een
-    numerieke string -> die index, anders -> een netwerkstream via FFmpeg.
-    Camera-merk-agnostisch: elke bron die OpenCV/FFmpeg begrijpt werkt."""
-    if not source:
-        return cv2.VideoCapture(CAMERA_INDEX)
-    try:
-        return cv2.VideoCapture(int(source))
-    except ValueError:
-        return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
-
-
 def _play_scare_video(video_path, audio_path, streamer, logger):
     """Speelt één scare-video (+ optioneel geluid) volledig af, blokkerend
     -- vervangt het live camerabeeld voor de duur van de clip. Een falende
@@ -327,7 +316,7 @@ def selfcheck():
     """Pakt één frame, draait het door het standaard xray-effect en
     laat/bewaart het resultaat. Heeft geen MQTT nodig."""
     camera_source = fetch_mirror_camera_source(BACKEND_URL, fallback=MIRROR_CAMERA_SOURCE_ENV)
-    cap = _open_camera(camera_source)
+    cap = open_camera(camera_source, CAMERA_INDEX)
     ok, frame = cap.read()
     cap.release()
     if not ok:
@@ -401,7 +390,7 @@ def main():
     streamer.start()
     logger.info("MJPEG-stream op poort %s (/stream)", STREAM_PORT)
 
-    cap = _open_camera(camera_source)
+    cap = open_camera(camera_source, CAMERA_INDEX)
     if not cap.isOpened():
         logger.error("Kon camera-bron niet openen: %s", _redact_source(camera_source))
         return
@@ -425,7 +414,7 @@ def main():
                 if consecutive_failures >= MAX_FAILURES_BEFORE_REOPEN:
                     logger.warning("Camera blijft falen, heropen de verbinding")
                     cap.release()
-                    cap = _open_camera(camera_source)
+                    cap = open_camera(camera_source, CAMERA_INDEX)
                     consecutive_failures = 0
                 time.sleep(0.5)
                 continue
