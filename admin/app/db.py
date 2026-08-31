@@ -126,12 +126,12 @@ def init_db(path):
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
     _migrate_outputs(conn)
-    _migrate_output_canvas_position(conn)
     _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
     _migrate_scenes_to_players(conn)
     _migrate_player_branches(conn)
     _migrate_triggers_to_branches(conn)
+    _migrate_output_canvas_position(conn)
     conn.commit()
     return conn
 
