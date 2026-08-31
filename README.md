@@ -11,12 +11,13 @@ die als enige `system/sleep` publiceert. Elke node blijft zelfstandig werken als
 MQTT/HA wegvalt. Volledig ontwerp: `docs/superpowers/specs/`.
 
 Het spiegel-effect wordt geprogrammeerd als een **scenegraaf** vanaf
-het Dashboard van de beheerpagina: scenes zijn knopen, elk met eigen
-uitgaande verbindingen (outputs) naar andere scenes, elk met een eigen
-trigger (beweging / tijdschema / altijd). De mirror-node onthoudt
-welke scene nu actief is en volgt alleen de outputs van díe scene —
-een verbinding sleep je tussen twee scenes, de trigger stel je in door
-op de lijn te klikken.
+het Dashboard van de beheerpagina: scenes zijn knopen, en triggers zijn
+zélf ook zichtbare, sleepbare knopen ertussen (beweging / tijdschema /
+HA-sensor / altijd) — geen eigenschap van een verbindingslijn. De
+mirror-node onthoudt welke scene nu actief is en volgt alleen de
+triggers van díe scene naar de volgende. Een trigger maak je door een
+scene's "+ output"-knop te gebruiken en 'm vast te koppelen aan een
+doelscene; instellen doe je door op de trigger-knoop te klikken.
 
 ## Layout
 
@@ -76,7 +77,7 @@ Alleen mirror-node:
 | Variabele | Default | Betekenis |
 |---|---|---|
 | `MIRROR_CAMERA_INDEX` | `0` | OpenCV camera-index |
-| `MIRROR_CAMERA_SOURCE` | *(leeg)* | Terugval als de backend bij opstarten onbereikbaar is voor `GET /api/node-config` — normaal gesproken bepaalt de Instellingen-pagina dit centraal. Leeg = gebruik `MIRROR_CAMERA_INDEX`; een RTSP/HTTP-URL gebruikt in plaats daarvan een netwerkcamera (elk merk met een standaard stream). |
+| `MIRROR_CAMERA_SOURCE` | *(leeg)* | Terugval als de backend bij opstarten onbereikbaar is voor `GET /api/node-config` — normaal gesproken bepaalt de Outputs-pagina dit, per output (niet meer centraal via Instellingen). Leeg = gebruik `MIRROR_CAMERA_INDEX`; een RTSP/HTTP-URL gebruikt in plaats daarvan een netwerkcamera (elk merk met een standaard stream). |
 | `MIRROR_ACTIVE_SECONDS` | `6` | Hoe lang het effect na een trigger aanblijft |
 | `MIRROR_MEDIA_CACHE_DIR` | `./media_cache` | Schrijfbare map voor opgehaalde overlays; systemd zet dit op `/var/lib/halloween/media_cache` |
 | `MIRROR_STREAM_PORT` | `8091` | Poort van de MJPEG-live-preview (`/stream`) |
@@ -195,8 +196,9 @@ Alle namen komen uit `shared/mqtt_contract.py`:
 | `system/sleep` | backend → nodes | `on` / `off` (retained) |
 | `log/<node>` | nodes → | JSON-logregels |
 | `status/<node>` | nodes → | `online` / `offline` (retained, last-will) |
-| `config/mirror/graph` | backend → mirror | JSON `{scenes, edges, root_scene_id}` (retained) |
+| `config/mirror/graph` | backend → mirror | JSON `{output_id, scenes, triggers, root_scene_id}` (retained) |
 | `control/mirror/scene-preview` | backend → mirror | JSON scene-object (niet retained, live-editing) |
+| `control/mirror/ha-trigger` | backend → mirror | JSON `{"entity_id": ...}` — eenmalige puls zodra een gekoppelde HA-sensor een stijgende flank maakt (niet retained) |
 
 HA-kant (broker, automations, dashboard-sensoren): zie
 [`home_assistant/README.md`](home_assistant/README.md).
