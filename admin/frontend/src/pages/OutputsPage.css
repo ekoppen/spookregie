@@ -1,0 +1,79 @@
+.outputs-page {
+  padding: 1.5rem 2rem;
+  color: var(--bone);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.outputs-header {
+  margin-bottom: 1.5rem;
+}
+
+.outputs-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ash);
+  margin: 0 0 0.3rem;
+}
+
+.outputs-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ember);
+}
+
+.outputs-heading {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.outputs-error {
+  color: var(--alarm);
+  margin-bottom: 1rem;
+}
+
+.outputs-notice {
+  color: var(--signal);
+  margin-bottom: 1rem;
+}
+
+.outputs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.outputs-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.outputs-row--new {
+  grid-template-columns: 1fr 2fr auto;
+  border-top: 1px dashed var(--panel-edge);
+  padding-top: 0.75rem;
+}
+
+.outputs-field__input {
+  padding: 0.5rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+}
+
+.outputs-field__label {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--ash);
+}

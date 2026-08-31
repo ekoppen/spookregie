@@ -7,6 +7,7 @@ const links = [
   { to: "/scare", label: "Scare", end: false },
   { to: "/ha", label: "Home Assistant", end: false },
   { to: "/logs", label: "Logs", end: false },
+  { to: "/outputs", label: "Outputs", end: false },
   { to: "/settings", label: "Instellingen", end: false },
 ];
 
