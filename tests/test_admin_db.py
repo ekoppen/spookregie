@@ -97,16 +97,6 @@ def test_scene_migration_does_nothing_without_existing_mirror_config(tmp_path):
     assert count == 0
 
 
-def test_scene_edges_table_created(tmp_path):
-    conn = init_db(str(tmp_path / "test.db"))
-
-    tables = {
-        row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    }
-
-    assert "scene_edges" in tables
-
-
 def test_existing_scenes_migrate_to_star_graph(tmp_path):
     """Simuleert een echte pre-graaf-deployment: de legacy scene-rijen
     staan al in het databasebestand vóórdat init_db() ooit onder de
@@ -134,7 +124,7 @@ def test_existing_scenes_migrate_to_star_graph(tmp_path):
     root = conn.execute("SELECT id FROM scenes WHERE is_root = 1").fetchall()
     assert root == [(1,)]
     edges = conn.execute(
-        "SELECT from_scene_id, to_scene_id, trigger_type FROM scene_edges ORDER BY from_scene_id"
+        "SELECT from_scene_id, to_scene_id, kind FROM triggers ORDER BY from_scene_id"
     ).fetchall()
     assert edges == [(1, 2, "motion"), (2, 1, "always")]
 
@@ -159,14 +149,14 @@ def test_graph_migration_is_idempotent(tmp_path):
 
     conn2 = init_db(path)  # herstart -- mag geen extra edges toevoegen
 
-    count = conn2.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
+    count = conn2.execute("SELECT COUNT(*) FROM triggers").fetchone()[0]
     assert count == 2  # motion-edge + terugkeer-edge, niet verdubbeld
 
 
 def test_graph_migration_does_nothing_without_scenes(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
 
-    count = conn.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM triggers").fetchone()[0]
     assert count == 0
 
 
@@ -196,7 +186,7 @@ def test_fresh_graph_era_scenes_survive_restart_without_edges(tmp_path):
 
     root = conn2.execute("SELECT id FROM scenes WHERE is_root = 1").fetchall()
     assert root == [(2,)]  # ongewijzigd -- niet teruggezet naar de eerst-sorterende scene
-    edge_count = conn2.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
+    edge_count = conn2.execute("SELECT COUNT(*) FROM triggers").fetchone()[0]
     assert edge_count == 0  # geen gefabriceerde edges
 
 
@@ -262,3 +252,87 @@ def test_scenes_color_column_defaults_to_null(tmp_path):
 
     color = conn.execute("SELECT color FROM scenes WHERE id = 1").fetchone()[0]
     assert color is None
+
+
+def test_triggers_table_replaces_scene_edges(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    assert "triggers" in tables
+    assert "scene_edges" not in tables
+
+
+def test_existing_scene_edges_data_survives_rename(tmp_path):
+    """Simuleert een echte pre-triggers-rename deployment: de legacy
+    scene_edges-rij staat al in het databasebestand vóórdat init_db()
+    ooit onder de nieuwe code draait (zelfde patroon als
+    test_existing_scenes_migrate_to_star_graph hierboven) -- niet via
+    init_db() zelf ingevoegd, want een verse (0-scenes) init_db()-call
+    rondt de user_version 0->2-keten in één keer af en zou scene_edges
+    dus alweer naar triggers hebben hernoemd vóórdat de test kan
+    invoegen."""
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(_LEGACY_SCENES_DDL)
+    raw.execute(
+        """CREATE TABLE scene_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_scene_id INTEGER NOT NULL,
+            to_scene_id INTEGER,
+            trigger_type TEXT,
+            trigger_from TEXT,
+            trigger_until TEXT,
+            priority INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode, trigger_type) VALUES "
+        "(2, 'B', 1, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always')"
+    )
+    raw.execute(
+        "INSERT INTO scene_edges (from_scene_id, to_scene_id, trigger_type, priority) "
+        "VALUES (1, 2, 'motion', 0)"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # eerste keer onder de nieuwe code -- de rename zelf
+
+    row = conn.execute(
+        "SELECT from_scene_id, to_scene_id, kind FROM triggers"
+    ).fetchone()
+    assert row == (1, 2, "motion")
+
+
+def test_triggers_new_columns_have_sensible_defaults(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    conn.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode) VALUES (1, 'A', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
+    )
+    conn.execute(
+        "INSERT INTO triggers (from_scene_id, priority) VALUES (1, 0)"
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT ha_entity_id, name, color FROM triggers"
+    ).fetchone()
+    assert row == (None, None, None)
+
+
+def test_triggers_migration_is_idempotent(tmp_path):
+    path = str(tmp_path / "test.db")
+    init_db(path)
+    init_db(path)
+
+    conn = init_db(path)
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "triggers" in tables

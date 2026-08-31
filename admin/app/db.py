@@ -49,17 +49,6 @@ def init_db(path):
         )"""
     )
     conn.execute(
-        """CREATE TABLE IF NOT EXISTS scene_edges (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_scene_id INTEGER NOT NULL,
-            to_scene_id INTEGER,
-            trigger_type TEXT,
-            trigger_from TEXT,
-            trigger_until TEXT,
-            priority INTEGER NOT NULL DEFAULT 0
-        )"""
-    )
-    conn.execute(
         """CREATE TABLE IF NOT EXISTS outputs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -106,6 +95,7 @@ def init_db(path):
     _migrate_mirror_config_to_scenes(conn)
     _migrate_scenes_to_graph(conn)
     _migrate_outputs(conn)
+    _migrate_scene_edges_to_triggers(conn)
     conn.commit()
     return conn
 
@@ -161,6 +151,17 @@ def _migrate_scenes_to_graph(conn):
     opnieuw als legacy-data gezien worden en is_root/edges herschrijven)."""
     if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
         return
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS scene_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_scene_id INTEGER NOT NULL,
+            to_scene_id INTEGER,
+            trigger_type TEXT,
+            trigger_from TEXT,
+            trigger_until TEXT,
+            priority INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
     if conn.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0] > 0:
         # Upgrade-pad: al eerder gemigreerd onder de oude edge-count-gate
         # (vóór deze fix). Alleen de marker zetten -- de body opnieuw
@@ -225,3 +226,54 @@ def _migrate_outputs(conn):
 
     # Always link scenes to the output
     conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))
+
+
+def _migrate_scene_edges_to_triggers(conn):
+    """Hernoemt scene_edges naar triggers (trigger_type->kind,
+    trigger_from->schedule_from, trigger_until->schedule_until) en voegt
+    de nieuwe trigger-als-knoop-kolommen toe (ha_entity_id, canvas_x/y,
+    name, color). Idempotent via PRAGMA user_version (>=2 betekent 'deze
+    migratie is al gedaan' -- zelfde patroon als de scenes-naar-graaf-
+    migratie op versie 1, één stap verder)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 2:
+        return
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "scene_edges" in tables:
+        conn.execute("ALTER TABLE scene_edges RENAME TO triggers")
+        conn.execute("ALTER TABLE triggers RENAME COLUMN trigger_type TO kind")
+        conn.execute("ALTER TABLE triggers RENAME COLUMN trigger_from TO schedule_from")
+        conn.execute("ALTER TABLE triggers RENAME COLUMN trigger_until TO schedule_until")
+    else:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_scene_id INTEGER NOT NULL,
+                to_scene_id INTEGER,
+                kind TEXT,
+                schedule_from TEXT,
+                schedule_until TEXT,
+                priority INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+    _ensure_column(conn, "triggers", "ha_entity_id", "TEXT")
+    _ensure_column(conn, "triggers", "canvas_x", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "triggers", "canvas_y", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "triggers", "name", "TEXT")
+    _ensure_column(conn, "triggers", "color", "TEXT")
+    # Zinvolle startpositie: het midden tussen bron- en (indien gezet)
+    # doelscene, anders bron-positie + een vaste offset naar rechtsonder.
+    conn.execute(
+        """UPDATE triggers SET
+             canvas_x = COALESCE((
+               SELECT (s1.canvas_x + COALESCE(s2.canvas_x, s1.canvas_x + 150)) / 2
+               FROM scenes s1 LEFT JOIN scenes s2 ON s2.id = triggers.to_scene_id
+               WHERE s1.id = triggers.from_scene_id
+             ), 0),
+             canvas_y = COALESCE((
+               SELECT (s1.canvas_y + COALESCE(s2.canvas_y, s1.canvas_y)) / 2 + 60
+               FROM scenes s1 LEFT JOIN scenes s2 ON s2.id = triggers.to_scene_id
+               WHERE s1.id = triggers.from_scene_id
+             ), 0)
+        """
+    )
+    conn.execute("PRAGMA user_version = 2")
