@@ -13,6 +13,9 @@ class _FakeBridge:
     def publish_mirror_ha_trigger(self, entity_id):
         self.fired.append(entity_id)
 
+    def publish_mirror_ha_sensor_state(self, entity_id, state):
+        pass
+
 
 def test_rising_edge_fires_a_pulse(monkeypatch):
     import admin.app.ha_trigger_poller as poller_module
@@ -138,3 +141,58 @@ def test_detected_state_also_counts_as_fired(monkeypatch):
     poller._tick()
 
     assert bridge.fired == ["binary_sensor.deur"]
+
+
+class _FakeBridgeWithState(_FakeBridge):
+    def __init__(self):
+        super().__init__()
+        self.states = []
+
+    def publish_mirror_ha_sensor_state(self, entity_id, state):
+        self.states.append((entity_id, state))
+
+
+def test_every_tick_publishes_current_state_for_every_watched_entity(monkeypatch):
+    import admin.app.ha_trigger_poller as poller_module
+    monkeypatch.setattr(
+        poller_module, "get_states",
+        lambda url, token: [{"entity_id": "binary_sensor.tuin", "state": "off"}],
+    )
+    bridge = _FakeBridgeWithState()
+    poller = HaTriggerPoller(bridge, lambda: _FakeSettings(), lambda: ["binary_sensor.tuin"], check_interval=999)
+
+    poller._tick()
+    poller._tick()
+
+    assert bridge.states == [("binary_sensor.tuin", "off"), ("binary_sensor.tuin", "off")]
+
+
+def test_state_publish_happens_even_without_a_rising_edge(monkeypatch):
+    """Onderscheid met de puls: state wordt ELKE tick gepubliceerd, ook
+    als er niets verandert -- repeat_while moet weten dat de sensor nog
+    steeds 'on' is, niet alleen het moment waarop hij dat werd."""
+    import admin.app.ha_trigger_poller as poller_module
+    monkeypatch.setattr(
+        poller_module, "get_states",
+        lambda url, token: [{"entity_id": "binary_sensor.tuin", "state": "on"}],
+    )
+    bridge = _FakeBridgeWithState()
+    poller = HaTriggerPoller(bridge, lambda: _FakeSettings(), lambda: ["binary_sensor.tuin"], check_interval=999)
+
+    poller._tick()
+    poller._tick()
+    poller._tick()
+
+    assert bridge.fired == ["binary_sensor.tuin"]  # puls: alleen de eerste keer
+    assert bridge.states == [("binary_sensor.tuin", "on")] * 3  # state: elke keer
+
+
+def test_state_not_published_for_entity_absent_from_ha_response(monkeypatch):
+    import admin.app.ha_trigger_poller as poller_module
+    monkeypatch.setattr(poller_module, "get_states", lambda url, token: [])
+    bridge = _FakeBridgeWithState()
+    poller = HaTriggerPoller(bridge, lambda: _FakeSettings(), lambda: ["binary_sensor.tuin"], check_interval=999)
+
+    poller._tick()
+
+    assert bridge.states == []

@@ -119,6 +119,16 @@ class MqttBridge:
     def publish_mirror_ha_trigger(self, entity_id):
         self._client.publish(self._topics.control_mirror_ha_trigger, json.dumps({"entity_id": entity_id}))
 
+    def publish_mirror_ha_sensor_state(self, entity_id, state):
+        # Niet-retained, net als publish_mirror_ha_trigger -- de poller
+        # publiceert dit elke check_interval opnieuw, dus een gemiste
+        # boodschap na een reconnect wordt vanzelf binnen één interval
+        # ingehaald; geen retained state nodig die op een gegeven moment
+        # stil kan gaan liegen (bv. als de poller crasht).
+        self._client.publish(
+            self._topics.control_mirror_ha_sensor_state, json.dumps({"entity_id": entity_id, "state": state})
+        )
+
     def publish_mirror_scare_video_config(self, enabled_hashes):
         self._client.publish(
             self._topics.config_mirror_scare_video,

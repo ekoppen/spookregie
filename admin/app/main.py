@@ -67,10 +67,14 @@ def _get_schedule_from_db(conn):
 
 def _get_watched_ha_entities_from_db(conn):
     def get_watched():
-        rows = conn.execute(
+        trigger_rows = conn.execute(
             "SELECT DISTINCT ha_entity_id FROM triggers WHERE kind = 'ha_sensor' AND ha_entity_id IS NOT NULL"
         ).fetchall()
-        return [r[0] for r in rows]
+        repeat_while_rows = conn.execute(
+            "SELECT DISTINCT repeat_while_ha_entity_id FROM players "
+            "WHERE playback_mode = 'repeat_while' AND repeat_while_ha_entity_id IS NOT NULL"
+        ).fetchall()
+        return list({r[0] for r in trigger_rows} | {r[0] for r in repeat_while_rows})
     return get_watched
 
 

@@ -46,6 +46,7 @@ class HaTriggerPoller:
                 old_state = self._last_states.get(entity_id)
                 if new_state in self._FIRED_STATES and old_state not in self._FIRED_STATES:
                     self._bridge.publish_mirror_ha_trigger(entity_id)
+                self._bridge.publish_mirror_ha_sensor_state(entity_id, new_state)
                 self._last_states[entity_id] = new_state
         except Exception as exc:
             if self._logger is not None:

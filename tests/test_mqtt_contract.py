@@ -74,3 +74,13 @@ def test_trigger_payload_is_json_with_timestamp():
     payload = json.loads(trigger_payload())
     assert "ts" in payload
     assert isinstance(payload["ts"], float)
+
+
+def test_control_mirror_ha_sensor_state_topic():
+    topics = Topics()
+    assert topics.control_mirror_ha_sensor_state == "control/mirror/ha-sensor-state"
+
+
+def test_control_mirror_ha_sensor_state_topic_respects_prefix():
+    topics = Topics(prefix="halloween")
+    assert topics.control_mirror_ha_sensor_state == "halloween/control/mirror/ha-sensor-state"
