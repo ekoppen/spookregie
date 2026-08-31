@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -60,6 +60,7 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(scene.name);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const clickTimerRef = useRef<number | null>(null);
 
   function commitRename() {
     setEditingName(false);
@@ -70,6 +71,32 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
       setNameDraft(scene.name);
     }
   }
+
+  // ponytail: dblclick fires click+click+dblclick per DOM spec; delay the
+  // single-click action so dblclick can cancel it before it opens the wizard.
+  function handleNameClick() {
+    if (clickTimerRef.current !== null) return;
+    clickTimerRef.current = window.setTimeout(() => {
+      onSceneClick(scene.id, "input");
+      clickTimerRef.current = null;
+    }, 250);
+  }
+
+  function handleNameDoubleClick() {
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    setEditingName(true);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -105,8 +132,8 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
         ) : (
           <span
             className="scene-node__name nodrag"
-            onClick={() => onSceneClick(scene.id, "input")}
-            onDoubleClick={() => setEditingName(true)}
+            onClick={handleNameClick}
+            onDoubleClick={handleNameDoubleClick}
             title="Klik voor instellingen, dubbelklik om te hernoemen"
           >
             {scene.name}
