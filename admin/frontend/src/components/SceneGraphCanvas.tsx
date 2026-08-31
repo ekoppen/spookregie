@@ -57,23 +57,23 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
     <div className="scene-node" data-root={scene.is_root}>
       <Handle type="target" position={Position.Left} />
       <div className="scene-node__header">
-        <button type="button" className="scene-node__root" onClick={() => onMakeRoot(scene.id)} title="Maak root">
+        <button type="button" className="scene-node__root nodrag" onClick={() => onMakeRoot(scene.id)} title="Maak root">
           {scene.is_root ? "★" : "☆"}
         </button>
-        <span className="scene-node__name" onClick={() => onSceneClick(scene.id, "input")}>
+        <span className="scene-node__name nodrag" onClick={() => onSceneClick(scene.id, "input")}>
           {scene.name}
         </span>
       </div>
       <div className="scene-node__chips">
-        <span className="scene-node__chip" onClick={() => onSceneClick(scene.id, "input")}>
+        <span className="scene-node__chip nodrag" onClick={() => onSceneClick(scene.id, "input")}>
           {scene.source_mode === "camera" ? "Camera" : "Scare-video"}
         </span>
         {scene.source_mode === "camera" && (
           <>
-            <span className="scene-node__chip" onClick={() => onSceneClick(scene.id, "animation")}>
+            <span className="scene-node__chip nodrag" onClick={() => onSceneClick(scene.id, "animation")}>
               {scene.effect}
             </span>
-            <span className="scene-node__chip" onClick={() => onSceneClick(scene.id, "output")}>
+            <span className="scene-node__chip nodrag" onClick={() => onSceneClick(scene.id, "output")}>
               Weergave
             </span>
           </>
@@ -93,7 +93,7 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
           </div>
         ))}
       </div>
-      <button type="button" className="scene-node__add-output" onClick={() => onAddOutput(scene.id)}>
+      <button type="button" className="scene-node__add-output nodrag" onClick={() => onAddOutput(scene.id)}>
         + output
       </button>
     </div>
