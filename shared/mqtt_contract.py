@@ -23,8 +23,8 @@ class Topics:
         return self._p("system/sleep")
 
     @property
-    def config_mirror_scenes(self) -> str:
-        return self._p("config/mirror/scenes")
+    def config_mirror_graph(self) -> str:
+        return self._p("config/mirror/graph")
 
     @property
     def control_mirror_scene_preview(self) -> str:

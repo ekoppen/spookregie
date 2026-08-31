@@ -6,7 +6,7 @@ def test_topics_without_prefix_match_bare_names():
     topics = Topics()
     assert topics.mirror_triggered == "mirror/triggered"
     assert topics.system_sleep == "system/sleep"
-    assert topics.config_mirror_scenes == "config/mirror/scenes"
+    assert topics.config_mirror_graph == "config/mirror/graph"
     assert topics.control_mirror_scene_preview == "control/mirror/scene-preview"
     assert topics.control_mirror_test == "control/mirror/test-trigger"
     assert topics.status_wildcard == "status/+"
