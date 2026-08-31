@@ -203,10 +203,12 @@ def _migrate_outputs(conn):
     """Zorgt dat er minstens één output bestaat, gevuld vanuit de huidige
     mirror_camera_source-instelling bij de allereerste run na deze
     upgrade, en koppelt scenes zonder output_id eraan. Idempotent: doet
-    niets zodra er al een output is."""
+    niets zodra er al een output is -- met opzet geen 'camera_source nog
+    leeg? opnieuw vullen vanuit app_settings'-pad op elke run, want dat
+    zou een bewust leeggemaakte (uitgeschakelde) output bij elke herstart
+    stilletjes terugzetten."""
     existing = conn.execute("SELECT COUNT(*) FROM outputs").fetchone()[0]
     if existing == 0:
-        # No outputs yet, create one from app_settings
         row = conn.execute("SELECT mirror_camera_source FROM app_settings WHERE id = 1").fetchone()
         camera_source = row[0] if row else ""
         cursor = conn.execute(
@@ -214,15 +216,7 @@ def _migrate_outputs(conn):
         )
         output_id = cursor.lastrowid
     else:
-        # Outputs already exist, get the first one
         output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
-        # If the output has empty camera_source and app_settings now has a value, update it
-        row = conn.execute("SELECT mirror_camera_source FROM app_settings WHERE id = 1").fetchone()
-        if row and row[0]:
-            conn.execute(
-                "UPDATE outputs SET camera_source = ? WHERE id = ? AND camera_source = ''",
-                (row[0], output_id),
-            )
 
     # Always link scenes to the output
     conn.execute("UPDATE scenes SET output_id = ? WHERE output_id IS NULL", (output_id,))

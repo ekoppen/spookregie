@@ -199,19 +199,59 @@ def test_outputs_table_created(tmp_path):
 
 
 def test_default_output_created_from_mirror_camera_source(tmp_path):
+    # Zaadt app_settings (incl. mirror_camera_source) vóórdat init_db ooit
+    # draait -- de realistische upgrade-situatie: een bestaande deploy die
+    # de instelling al had ingevuld vóórdat de outputs-tabel bestond.
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    raw.execute(
+        """CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT '',
+            mqtt_topic_prefix TEXT NOT NULL DEFAULT '',
+            mirror_camera_source TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    raw.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url, mirror_camera_source) "
+        "VALUES (1, 'broker', 1883, 'http://ha', 'rtsp://cam.local/stream')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)
+
+    rows = conn.execute("SELECT name, camera_source FROM outputs").fetchall()
+    assert rows == [("Spiegel", "rtsp://cam.local/stream")]
+
+
+def test_blanked_output_camera_source_is_not_reverted_on_restart(tmp_path):
+    """Regression voor Finding 2: een gebruiker die de camera_source van
+    een output bewust leegmaakt (bv. om 'm uit te schakelen) mag die niet
+    op de volgende backend-restart teruggezet krijgen vanuit
+    app_settings.mirror_camera_source."""
     path = str(tmp_path / "test.db")
     conn = init_db(path)
     conn.execute(
         "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url, mirror_camera_source) "
         "VALUES (1, 'broker', 1883, 'http://ha', 'rtsp://cam.local/stream')"
     )
+    output_id = conn.execute("SELECT id FROM outputs LIMIT 1").fetchone()[0]
+    conn.execute("UPDATE outputs SET camera_source = 'rtsp://cam.local/stream' WHERE id = ?", (output_id,))
+    conn.execute("UPDATE outputs SET camera_source = '' WHERE id = ?", (output_id,))
     conn.commit()
     conn.close()
 
-    conn2 = init_db(path)
+    conn2 = init_db(path)  # restart
 
-    rows = conn2.execute("SELECT name, camera_source FROM outputs").fetchall()
-    assert rows == [("Spiegel", "rtsp://cam.local/stream")]
+    rows = conn2.execute("SELECT camera_source FROM outputs").fetchall()
+    assert rows == [("",)]
 
 
 def test_default_output_migration_is_idempotent(tmp_path):
