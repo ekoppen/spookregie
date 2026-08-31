@@ -1,4 +1,4 @@
-.scene-graph-canvas {
+.player-graph-canvas {
   position: relative;
   height: 520px;
   background: var(--void);
@@ -7,7 +7,7 @@
   overflow: hidden;
 }
 
-.scene-graph-canvas__add {
+.player-graph-canvas__add {
   position: absolute;
   bottom: 1rem;
   right: 1rem;
@@ -24,7 +24,7 @@
   cursor: pointer;
 }
 
-.scene-node {
+.player-node {
   position: relative;
   min-width: 180px;
   padding: 0.75rem;
@@ -35,11 +35,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.scene-node[data-root="true"] {
+.player-node[data-root="true"] {
   border-color: var(--signal);
 }
 
-.scene-node__header {
+.player-node__header {
   position: relative;
   display: flex;
   align-items: center;
@@ -47,7 +47,7 @@
   margin-bottom: 0.5rem;
 }
 
-.scene-node__root {
+.player-node__root {
   background: transparent;
   border: none;
   color: var(--signal);
@@ -56,12 +56,12 @@
   padding: 0;
 }
 
-.scene-node__name {
+.player-node__name {
   font-weight: 700;
   cursor: pointer;
 }
 
-.scene-node__name-input {
+.player-node__name-input {
   font-weight: 700;
   background: var(--void);
   border: 1px solid var(--panel-edge);
@@ -73,7 +73,7 @@
   width: 100%;
 }
 
-.scene-node__color-swatch {
+.player-node__color-swatch {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -84,7 +84,7 @@
   flex-shrink: 0;
 }
 
-.scene-node__color-palette {
+.player-node__color-palette {
   position: absolute;
   top: 2.2rem;
   right: 0.5rem;
@@ -98,7 +98,7 @@
   z-index: 10;
 }
 
-.scene-node__color-option {
+.player-node__color-option {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -107,14 +107,14 @@
   padding: 0;
 }
 
-.scene-node__chips {
+.player-node__chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
   margin-bottom: 1.5rem;
 }
 
-.scene-node__chip {
+.player-node__chip {
   padding: 0.2rem 0.5rem;
   font-size: 0.7rem;
   border: 1px solid var(--panel-edge);
@@ -123,7 +123,7 @@
   cursor: pointer;
 }
 
-.scene-node__add-output {
+.player-node__add-output {
   margin-top: 0.5rem;
   padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
@@ -208,4 +208,51 @@
   border: 1px solid var(--panel-edge);
   cursor: pointer;
   padding: 0;
+}
+
+.player-node__branch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.player-node__branch-name {
+  color: var(--ash);
+}
+
+.player-node__branch-add {
+  border: none;
+  background: transparent;
+  color: var(--ash);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.source-node,
+.output-node {
+  position: relative;
+  min-width: 120px;
+  padding: 0.5rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  color: var(--bone);
+  font-size: 0.75rem;
+}
+
+.source-node__header,
+.output-node__header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.source-node__icon,
+.output-node__icon {
+  font-size: 0.9rem;
 }
