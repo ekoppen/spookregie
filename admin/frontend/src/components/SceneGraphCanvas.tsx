@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -89,7 +89,6 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
               type="source"
               position={Position.Right}
               id={`output-${edge.id}`}
-              style={{ top: `${40 + i * 24}px` }}
             />
           </div>
         ))}
@@ -159,14 +158,20 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes);
-  const [rfEdges, , onEdgesChange] = useEdgesState(flowEdges);
+  const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges);
 
   // Houdt de React Flow-state in sync zodra scenes/edges van de server
-  // opnieuw binnenkomen (na een CRUD-actie elders) -- useNodesState houdt
-  // verder zijn eigen interne sleep-state bij tussen renders.
-  useMemo(() => {
+  // opnieuw binnenkomen (na een CRUD-actie elders) -- useNodesState/
+  // useEdgesState gebruiken hun argument alleen als initiele waarde
+  // (zoals useState), en houden verder hun eigen interne sleep-state bij
+  // tussen renders.
+  useEffect(() => {
     setNodes(flowNodes);
   }, [flowNodes, setNodes]);
+
+  useEffect(() => {
+    setRfEdges(flowEdges);
+  }, [flowEdges, setRfEdges]);
 
   const handleConnect = useCallback(
     async (connection: Connection) => {
