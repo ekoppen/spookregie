@@ -2,14 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import { getNodes } from "../api/nodes";
 import { getSchedule, putSchedule, emergencyStop, wake } from "../api/schedule";
 import { listScenes } from "../api/scenes";
-import { listSceneEdges } from "../api/sceneEdges";
+import { listTriggers } from "../api/triggers";
 import { testMirror } from "../api/mirror";
 import { startMirrorProcess, stopMirrorProcess, getMirrorProcessStatus } from "../api/mirrorProcess";
 import { useWebSocket } from "../hooks/useWebSocket";
 import NodeStatusCard from "../components/NodeStatusCard";
 import SceneWizardModal from "../components/SceneWizardModal";
 import SceneGraphCanvas from "../components/SceneGraphCanvas";
-import type { NodeStatusMap, Schedule, Scene, SceneEdge, WsMessage } from "../types";
+import type { NodeStatusMap, Schedule, Scene, Trigger, WsMessage } from "../types";
 import "./DashboardPage.css";
 
 export default function DashboardPage() {
@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const [stopping, setStopping] = useState(false);
   const [waking, setWaking] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
-  const [sceneEdges, setSceneEdges] = useState<SceneEdge[]>([]);
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSceneId, setWizardSceneId] = useState<number | null>(null);
   const [wizardInitialStep, setWizardInitialStep] = useState<"input" | "animation" | "output">("input");
@@ -34,9 +34,9 @@ export default function DashboardPage() {
     listScenes()
       .then(setScenes)
       .catch(() => setError("Scenes konden niet worden geladen."));
-    listSceneEdges()
-      .then(setSceneEdges)
-      .catch(() => setError("Verbindingen konden niet worden geladen."));
+    listTriggers()
+      .then(setTriggers)
+      .catch(() => setError("Triggers konden niet worden geladen."));
   }
 
   useEffect(() => {
@@ -190,7 +190,7 @@ export default function DashboardPage() {
         <p className="dash-panel__eyebrow">Scenes</p>
         <SceneGraphCanvas
           scenes={scenes}
-          edges={sceneEdges}
+          triggers={triggers}
           onSceneClick={(id, step) => openWizard(id, step)}
           onGraphChanged={refreshScenes}
           onAddScene={() => openWizard(null)}

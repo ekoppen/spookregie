@@ -18,16 +18,6 @@ export interface Scene {
   color: string | null;
 }
 
-export interface SceneEdge {
-  id: number;
-  from_scene_id: number;
-  to_scene_id: number | null;
-  trigger_type: "always" | "motion" | "schedule" | null;
-  trigger_from: string | null;
-  trigger_until: string | null;
-  priority: number;
-}
-
 export interface Trigger {
   id: number;
   from_scene_id: number;
