@@ -7,7 +7,7 @@ router = APIRouter()
 _SCENE_COLUMNS = (
     "id, name, enabled, source_mode, effect, params, overlay_hash, "
     "scale, position, canvas_width, canvas_height, source_scale, source_position, "
-    "is_root, canvas_x, canvas_y"
+    "is_root, canvas_x, canvas_y, output_id, color"
 )
 
 _DEFAULT_SCENE = {
@@ -25,6 +25,8 @@ _DEFAULT_SCENE = {
     "is_root": False,
     "canvas_x": 0.0,
     "canvas_y": 0.0,
+    "output_id": None,
+    "color": None,
 }
 
 
@@ -46,6 +48,8 @@ def _row_to_scene(row):
         "is_root": bool(row[13]),
         "canvas_x": row[14],
         "canvas_y": row[15],
+        "output_id": row[16],
+        "color": row[17],
     }
 
 
@@ -65,6 +69,18 @@ def _canvas_columns(fields):
 
 def _clear_other_roots(db, scene_id):
     db.execute("UPDATE scenes SET is_root = 0 WHERE id != ?", (scene_id,))
+
+
+def _resolve_output_id(db, output_id):
+    """Geeft output_id terug als 'ie gezet is, anders de eerste/enige
+    output. 400 als er helemaal geen output bestaat (kan alleen als de
+    Taak-2-migratie nooit gedraaid heeft, defensief)."""
+    if output_id is not None:
+        return output_id
+    default_output = db.execute("SELECT id FROM outputs ORDER BY id LIMIT 1").fetchone()
+    if default_output is None:
+        raise HTTPException(status_code=400, detail="Geen output beschikbaar, maak er eerst één aan")
+    return default_output[0]
 
 
 @router.get("/api/scenes")
@@ -94,22 +110,24 @@ async def create_scene_route(request: Request):
     if has_root is None:
         fields["is_root"] = True
     canvas_width, canvas_height = _canvas_columns(fields)
+    fields["output_id"] = _resolve_output_id(db, fields["output_id"])
     cursor = db.execute(
         # ponytail: order_index blijft NOT NULL in het schema (legacy
-        # migratiekolom, Taak 1) maar wordt door de graaf-app niet meer
-        # gebruikt -- vaste 0 om aan de constraint te voldoen zonder
-        # db.py aan te raken (buiten scope van deze taak).
+        # migratiekolom) maar wordt door de graaf-app niet meer gebruikt
+        # -- vaste 0 om aan de constraint te voldoen zonder db.py aan te
+        # raken (buiten scope van deze taak).
         """INSERT INTO scenes
              (name, order_index, enabled, source_mode, effect, params, overlay_hash,
               scale, position, canvas_width, canvas_height, source_scale, source_position,
-              is_root, canvas_x, canvas_y)
-           VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              is_root, canvas_x, canvas_y, output_id, color)
+           VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             fields["name"], int(fields["enabled"]), fields["source_mode"],
             fields["effect"], json.dumps(fields["params"]), fields["overlay_hash"],
             fields["scale"], json.dumps(fields["position"]), canvas_width, canvas_height,
             fields["source_scale"], json.dumps(fields["source_position"]),
             int(fields["is_root"]), fields["canvas_x"], fields["canvas_y"],
+            fields["output_id"], fields["color"],
         ),
     )
     if fields["is_root"]:
@@ -128,16 +146,17 @@ async def update_scene_route(scene_id: int, request: Request):
     body = await request.json()
     fields = _fields_from_body(body)
     canvas_width, canvas_height = _canvas_columns(fields)
+    fields["output_id"] = _resolve_output_id(db, fields["output_id"])
     db.execute(
         """UPDATE scenes SET name=?, enabled=?, source_mode=?, effect=?, params=?, overlay_hash=?,
              scale=?, position=?, canvas_width=?, canvas_height=?, source_scale=?, source_position=?,
-             is_root=?, canvas_x=?, canvas_y=? WHERE id=?""",
+             is_root=?, canvas_x=?, canvas_y=?, output_id=?, color=? WHERE id=?""",
         (
             fields["name"], int(fields["enabled"]), fields["source_mode"], fields["effect"],
             json.dumps(fields["params"]), fields["overlay_hash"], fields["scale"],
             json.dumps(fields["position"]), canvas_width, canvas_height, fields["source_scale"],
             json.dumps(fields["source_position"]), int(fields["is_root"]),
-            fields["canvas_x"], fields["canvas_y"], scene_id,
+            fields["canvas_x"], fields["canvas_y"], fields["output_id"], fields["color"], scene_id,
         ),
     )
     if fields["is_root"]:
@@ -177,10 +196,10 @@ def delete_scene_route(scene_id: int, request: Request):
     # opruimen: eigen uitgaande edges verdwijnen mee, inkomende edges
     # vallen terug op een lege output-stub i.p.v. een edge naar een
     # niet-bestaande scene te laten hangen.
-    db.execute("DELETE FROM scene_edges WHERE from_scene_id = ?", (scene_id,))
+    db.execute("DELETE FROM triggers WHERE from_scene_id = ?", (scene_id,))
     db.execute(
-        "UPDATE scene_edges SET to_scene_id = NULL, trigger_type = NULL, "
-        "trigger_from = NULL, trigger_until = NULL WHERE to_scene_id = ?",
+        "UPDATE triggers SET to_scene_id = NULL, kind = NULL, "
+        "schedule_from = NULL, schedule_until = NULL, ha_entity_id = NULL WHERE to_scene_id = ?",
         (scene_id,),
     )
     db.commit()

@@ -40,12 +40,13 @@ _SCENE_PAYLOAD = {
     "name": "Basis", "enabled": True, "source_mode": "camera", "effect": "xray",
     "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
     "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
-    "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0,
+    "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "output_id": None, "color": None,
 }
 
 
 def test_create_scene_persists_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
 
     response = client.post("/api/scenes", json=_SCENE_PAYLOAD)
 
@@ -55,7 +56,10 @@ def test_create_scene_persists_and_publishes(tmp_path):
     # Eerste scene ooit wordt automatisch root (Minor 12), ook al vroeg de
     # payload expliciet is_root: False.
     assert created["is_root"] is True
-    assert ("graph", {"scenes": [created], "edges": [], "root_scene_id": created["id"]}) in bridge.calls
+    assert (
+        "graph",
+        {"output_id": default_output["id"], "scenes": [created], "triggers": [], "root_scene_id": created["id"]},
+    ) in bridge.calls
 
     listed = client.get("/api/scenes").json()
     assert listed == [created]
@@ -85,6 +89,7 @@ def test_get_scene_returns_404_for_unknown_id(tmp_path):
 
 def test_update_scene_persists_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
     created = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
 
     response = client.put(f"/api/scenes/{created['id']}", json={**_SCENE_PAYLOAD, "name": "Bijgewerkt"})
@@ -92,7 +97,10 @@ def test_update_scene_persists_and_publishes(tmp_path):
     assert response.status_code == 200
     assert response.json()["name"] == "Bijgewerkt"
     assert client.get(f"/api/scenes/{created['id']}").json()["name"] == "Bijgewerkt"
-    assert ("graph", {"scenes": [response.json()], "edges": [], "root_scene_id": None}) in bridge.calls
+    assert (
+        "graph",
+        {"output_id": default_output["id"], "scenes": [response.json()], "triggers": [], "root_scene_id": None},
+    ) in bridge.calls
 
 
 def test_update_scene_returns_404_for_unknown_id(tmp_path):
@@ -105,13 +113,17 @@ def test_update_scene_returns_404_for_unknown_id(tmp_path):
 
 def test_delete_scene_removes_and_publishes(tmp_path):
     client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
     created = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
 
     response = client.delete(f"/api/scenes/{created['id']}")
 
     assert response.status_code == 200
     assert client.get("/api/scenes").json() == []
-    assert ("graph", {"scenes": [], "edges": [], "root_scene_id": None}) in bridge.calls
+    assert (
+        "graph",
+        {"output_id": default_output["id"], "scenes": [], "triggers": [], "root_scene_id": None},
+    ) in bridge.calls
 
 
 def test_delete_scene_returns_404_for_unknown_id(tmp_path):
@@ -234,3 +246,43 @@ def test_deleting_scene_clears_its_own_and_incoming_edges(tmp_path):
     assert remaining[0]["from_scene_id"] == b["id"]
     assert remaining[0]["to_scene_id"] is None
     assert remaining[0]["trigger_type"] is None
+
+
+def test_create_scene_without_output_id_uses_the_default_output(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
+
+    created = client.post("/api/scenes", json=_SCENE_PAYLOAD).json()
+
+    assert created["output_id"] == default_output["id"]
+
+
+def test_create_scene_with_explicit_output_id(tmp_path):
+    client, bridge = _client(tmp_path)
+    other_output = client.post("/api/outputs", json={"name": "Beamer", "camera_source": ""}).json()
+
+    created = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "output_id": other_output["id"]}).json()
+
+    assert created["output_id"] == other_output["id"]
+
+
+def test_scene_color_round_trips(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    created = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "color": "#ff8800"}).json()
+
+    assert created["color"] == "#ff8800"
+    fetched = client.get(f"/api/scenes/{created['id']}").json()
+    assert fetched["color"] == "#ff8800"
+
+
+def test_published_graph_includes_output_id(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_output = client.get("/api/outputs").json()[0]
+    bridge.calls.clear()
+
+    client.post("/api/scenes", json=_SCENE_PAYLOAD)
+
+    kind, graph = bridge.calls[-1]
+    assert kind == "graph"
+    assert graph["output_id"] == default_output["id"]
