@@ -116,6 +116,9 @@ class MqttBridge:
     def publish_mirror_test(self):
         self._client.publish(self._topics.control_mirror_test, "{}")
 
+    def publish_mirror_ha_trigger(self, entity_id):
+        self._client.publish(self._topics.control_mirror_ha_trigger, json.dumps({"entity_id": entity_id}))
+
     def publish_mirror_scare_video_config(self, enabled_hashes):
         self._client.publish(
             self._topics.config_mirror_scare_video,

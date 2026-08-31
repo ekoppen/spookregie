@@ -124,6 +124,18 @@ def test_publish_mirror_scene_preview_is_not_retained(monkeypatch):
     assert retain is False
 
 
+def test_publish_mirror_ha_trigger_is_not_retained(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
+
+    bridge.publish_mirror_ha_trigger("binary_sensor.tuin")
+
+    topic, payload, retain = bridge._client.published[-1]
+    assert topic == "test/control/mirror/ha-trigger"
+    assert json.loads(payload) == {"entity_id": "binary_sensor.tuin"}
+    assert retain is False
+
+
 def test_on_message_strips_prefix_before_tracker_and_broadcast(monkeypatch):
     monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
 

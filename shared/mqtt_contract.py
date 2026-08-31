@@ -35,6 +35,10 @@ class Topics:
         return self._p("control/mirror/test-trigger")
 
     @property
+    def control_mirror_ha_trigger(self) -> str:
+        return self._p("control/mirror/ha-trigger")
+
+    @property
     def status_wildcard(self) -> str:
         return self._p("status/+")
 

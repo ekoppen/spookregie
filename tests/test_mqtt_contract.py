@@ -9,6 +9,7 @@ def test_topics_without_prefix_match_bare_names():
     assert topics.config_mirror_graph == "config/mirror/graph"
     assert topics.control_mirror_scene_preview == "control/mirror/scene-preview"
     assert topics.control_mirror_test == "control/mirror/test-trigger"
+    assert topics.control_mirror_ha_trigger == "control/mirror/ha-trigger"
     assert topics.status_wildcard == "status/+"
     assert topics.log_wildcard == "log/+"
     assert topics.scare_triggered_wildcard == "scare/+/triggered"

@@ -15,6 +15,7 @@ from admin.app.mqtt_bridge import MqttBridge
 from admin.app.mirror_process import MirrorProcessManager
 from admin.app.runtime_settings import read_runtime_settings
 from admin.app.scheduler import Scheduler
+from admin.app.ha_trigger_poller import HaTriggerPoller
 from admin.app.websocket_hub import WebSocketHub
 from admin.app.routers import auth as auth_router
 from admin.app.routers import media as media_router
@@ -61,6 +62,15 @@ def _get_schedule_from_db(conn):
     return get_schedule
 
 
+def _get_watched_ha_entities_from_db(conn):
+    def get_watched():
+        rows = conn.execute(
+            "SELECT DISTINCT ha_entity_id FROM triggers WHERE kind = 'ha_sensor' AND ha_entity_id IS NOT NULL"
+        ).fetchall()
+        return [r[0] for r in rows]
+    return get_watched
+
+
 def create_app(settings=None):
     settings = settings or get_settings()
     app = FastAPI()
@@ -92,6 +102,10 @@ def create_app(settings=None):
     )
     app.state.scheduler = Scheduler(
         app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger
+    )
+    app.state.ha_trigger_poller = HaTriggerPoller(
+        app.state.bridge, lambda: app.state.runtime_settings,
+        _get_watched_ha_entities_from_db(app.state.db), logger=app.state.logger,
     )
 
     @app.middleware("http")
@@ -146,9 +160,11 @@ def create_app(settings=None):
         app.state.mirror_process._loop = asyncio.get_event_loop()
         app.state.bridge.start()
         app.state.scheduler.start()
+        app.state.ha_trigger_poller.start()
 
     @app.on_event("shutdown")
     def _shutdown():
+        app.state.ha_trigger_poller.stop()
         app.state.scheduler.stop()
         app.state.bridge.stop()
         app.state.mirror_process.stop()
