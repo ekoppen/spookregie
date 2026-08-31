@@ -1,4 +1,4 @@
-.edge-popover__backdrop {
+.trigger-popover__backdrop {
   position: fixed;
   inset: 0;
   background: rgba(11, 11, 15, 0.85);
@@ -9,7 +9,7 @@
   padding: 1.5rem;
 }
 
-.edge-popover {
+.trigger-popover {
   width: 100%;
   max-width: 360px;
   background: var(--panel);
@@ -21,37 +21,37 @@
   padding: 1.25rem;
 }
 
-.edge-popover__title {
+.trigger-popover__title {
   margin: 0 0 1rem;
   font-weight: 700;
 }
 
-.edge-popover__error {
+.trigger-popover__error {
   color: var(--alarm);
   font-size: 0.85rem;
   margin-bottom: 0.75rem;
 }
 
-.edge-popover__options {
+.trigger-popover__options {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
 
-.edge-popover__radio {
+.trigger-popover__radio {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
 }
 
-.edge-popover__schedule {
+.trigger-popover__schedule {
   display: flex;
   gap: 1rem;
   margin-left: 1.5rem;
 }
 
-.edge-popover__schedule label {
+.trigger-popover__schedule label {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -59,7 +59,7 @@
   color: var(--ash);
 }
 
-.edge-popover__schedule input {
+.trigger-popover__schedule input {
   padding: 0.5rem;
   background: var(--void);
   border: 1px solid var(--panel-edge);
@@ -68,14 +68,14 @@
   color-scheme: dark;
 }
 
-.edge-popover__actions {
+.trigger-popover__actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1.25rem;
 }
 
-.edge-popover__actions button {
+.trigger-popover__actions button {
   padding: 0.5rem 1rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -88,7 +88,7 @@
   color: var(--bone);
 }
 
-.edge-popover__actions button:last-child {
+.trigger-popover__actions button:last-child {
   background: var(--ember);
   border-color: var(--ember);
   color: var(--void);

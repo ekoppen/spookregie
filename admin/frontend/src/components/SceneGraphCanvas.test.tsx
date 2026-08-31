@@ -5,10 +5,11 @@ import userEvent from "@testing-library/user-event";
 import SceneGraphCanvas from "./SceneGraphCanvas";
 import type { Scene } from "../types";
 
-vi.mock("../api/sceneEdges", () => ({
-  createSceneEdge: vi.fn(),
-  updateSceneEdge: vi.fn(),
-  deleteSceneEdge: vi.fn(),
+vi.mock("../api/triggers", () => ({
+  createTrigger: vi.fn(),
+  updateTrigger: vi.fn(),
+  deleteTrigger: vi.fn(),
+  updateTriggerPosition: vi.fn(),
 }));
 vi.mock("../api/scenes", () => ({
   updateScene: vi.fn(),
@@ -41,7 +42,7 @@ describe("SceneGraphCanvas -- klikken op een stap-chip", () => {
     render(
       <SceneGraphCanvas
         scenes={[SCENE]}
-        edges={[]}
+        triggers={[]}
         onSceneClick={onSceneClick}
         onGraphChanged={vi.fn()}
         onAddScene={vi.fn()}
@@ -59,7 +60,7 @@ describe("SceneGraphCanvas -- klikken op een stap-chip", () => {
     render(
       <SceneGraphCanvas
         scenes={[SCENE]}
-        edges={[]}
+        triggers={[]}
         onSceneClick={onSceneClick}
         onGraphChanged={vi.fn()}
         onAddScene={vi.fn()}

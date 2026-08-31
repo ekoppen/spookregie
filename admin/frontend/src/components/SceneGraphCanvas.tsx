@@ -14,20 +14,17 @@ import {
   type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import {
-  createSceneEdge,
-  updateSceneEdge,
-} from "../api/sceneEdges";
+import { createTrigger, updateTrigger, updateTriggerPosition } from "../api/triggers";
 import { updateScene, updateScenePosition } from "../api/scenes";
-import EdgeTriggerPopover from "./EdgeTriggerPopover";
-import type { Scene, SceneEdge } from "../types";
+import TriggerPopover from "./TriggerPopover";
+import type { Scene, Trigger } from "../types";
 import "./SceneGraphCanvas.css";
 
 const NODE_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#95a5a6"];
 
 interface Props {
   scenes: Scene[];
-  edges: SceneEdge[];
+  triggers: Trigger[];
   onSceneClick: (sceneId: number, step: "input" | "animation" | "output") => void;
   onGraphChanged: () => void;
   onAddScene: () => void;
@@ -35,7 +32,6 @@ interface Props {
 
 type SceneNodeData = {
   scene: Scene;
-  outputs: SceneEdge[];
   onSceneClick: Props["onSceneClick"];
   onAddOutput: (fromSceneId: number) => void;
   onMakeRoot: (sceneId: number) => void;
@@ -44,19 +40,30 @@ type SceneNodeData = {
   [key: string]: unknown;
 };
 
-// @xyflow/react's Node<T> constrains T to Record<string, unknown>; the
-// index signature above satisfies that constraint for our data payload.
-type SceneNode = Node<SceneNodeData, "scene">;
+type TriggerNodeData = {
+  trigger: Trigger;
+  onTriggerClick: (triggerId: number) => void;
+  onRename: (triggerId: number, name: string) => void;
+  onSetColor: (triggerId: number, color: string) => void;
+  [key: string]: unknown;
+};
 
-function triggerLabel(edge: SceneEdge): string {
-  if (edge.trigger_type === "always") return "Altijd";
-  if (edge.trigger_type === "motion") return "Beweging";
-  if (edge.trigger_type === "schedule") return `${edge.trigger_from ?? "?"}–${edge.trigger_until ?? "?"}`;
+// @xyflow/react's Node<T> constrains T to Record<string, unknown>; the
+// index signatures above satisfy that constraint for our data payloads.
+type SceneNode = Node<SceneNodeData, "scene">;
+type TriggerNode = Node<TriggerNodeData, "trigger">;
+type FlowNode = SceneNode | TriggerNode;
+
+function triggerKindLabel(trigger: Trigger): string {
+  if (trigger.kind === "always") return "Altijd";
+  if (trigger.kind === "motion") return "Beweging";
+  if (trigger.kind === "schedule") return `${trigger.schedule_from ?? "?"}–${trigger.schedule_until ?? "?"}`;
+  if (trigger.kind === "ha_sensor") return trigger.ha_entity_id ?? "HA-sensor";
   return "Nog niet ingesteld";
 }
 
 function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
-  const { scene, outputs, onSceneClick, onAddOutput, onMakeRoot, onRename, onSetColor } = data;
+  const { scene, onSceneClick, onAddOutput, onMakeRoot, onRename, onSetColor } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(scene.name);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -180,20 +187,7 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
           </>
         )}
       </div>
-      <div className="scene-node__outputs">
-        {outputs.map((edge, i) => (
-          <div key={edge.id} className="scene-node__output" style={{ top: `${40 + i * 24}px` }}>
-            <span className="scene-node__output-label">
-              {edge.to_scene_id === null ? "leeg" : triggerLabel(edge)}
-            </span>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={`output-${edge.id}`}
-            />
-          </div>
-        ))}
-      </div>
+      <Handle type="source" position={Position.Right} />
       <button type="button" className="scene-node__add-output nodrag" onClick={() => onAddOutput(scene.id)}>
         + output
       </button>
@@ -201,14 +195,121 @@ function SceneNodeComponent({ data }: NodeProps<SceneNode>) {
   );
 }
 
-const nodeTypes = { scene: SceneNodeComponent };
+function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
+  const { trigger, onTriggerClick, onRename, onSetColor } = data;
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(trigger.name ?? "");
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const clickTimerRef = useRef<number | null>(null);
 
-export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphChanged, onAddScene }: Props) {
-  const [popoverEdge, setPopoverEdge] = useState<SceneEdge | null>(null);
+  function commitRename() {
+    setEditingName(false);
+    const trimmed = nameDraft.trim();
+    if (trimmed !== (trigger.name ?? "")) {
+      onRename(trigger.id, trimmed);
+    }
+  }
+
+  // ponytail: same click/dblclick disambiguation as SceneNodeComponent --
+  // dblclick fires click+click+dblclick per DOM spec, so a plain onClick
+  // would also fire (and open the popover) on every double-click-to-rename.
+  function handleNameClick() {
+    if (clickTimerRef.current !== null) return;
+    clickTimerRef.current = window.setTimeout(() => {
+      onTriggerClick(trigger.id);
+      clickTimerRef.current = null;
+    }, 250);
+  }
+
+  function handleNameDoubleClick() {
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    setEditingName(true);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      className="trigger-node"
+      style={trigger.color ? { borderColor: trigger.color } : undefined}
+    >
+      <Handle type="target" position={Position.Left} />
+      <div className="trigger-node__header">
+        {editingName ? (
+          <input
+            className="trigger-node__name-input nodrag"
+            autoFocus
+            value={nameDraft}
+            placeholder={triggerKindLabel(trigger)}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") {
+                setNameDraft(trigger.name ?? "");
+                setEditingName(false);
+              }
+            }}
+          />
+        ) : (
+          <span
+            className="trigger-node__name nodrag"
+            onClick={handleNameClick}
+            onDoubleClick={handleNameDoubleClick}
+            title="Klik om de trigger in te stellen, dubbelklik om te hernoemen"
+          >
+            {trigger.name ?? triggerKindLabel(trigger)}
+          </span>
+        )}
+        <button
+          type="button"
+          className="trigger-node__color-swatch nodrag"
+          style={{ backgroundColor: trigger.color ?? "transparent" }}
+          onClick={() => setColorPickerOpen((open) => !open)}
+          title="Kleur"
+          aria-label="Kleur kiezen"
+        />
+        {colorPickerOpen && (
+          <div className="trigger-node__color-palette nodrag">
+            {NODE_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="trigger-node__color-option"
+                style={{ backgroundColor: c }}
+                onClick={() => {
+                  onSetColor(trigger.id, c);
+                  setColorPickerOpen(false);
+                }}
+                aria-label={`Kies kleur ${c}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {trigger.name && <span className="trigger-node__kind">{triggerKindLabel(trigger)}</span>}
+      <Handle type="source" position={Position.Right} id="out" />
+    </div>
+  );
+}
+
+const nodeTypes = { scene: SceneNodeComponent, trigger: TriggerNodeComponent };
+
+export default function SceneGraphCanvas({ scenes, triggers, onSceneClick, onGraphChanged, onAddScene }: Props) {
+  const [popoverTrigger, setPopoverTrigger] = useState<Trigger | null>(null);
 
   const handleAddOutput = useCallback(
     async (fromSceneId: number) => {
-      await createSceneEdge({ from_scene_id: fromSceneId });
+      await createTrigger({ from_scene_id: fromSceneId });
       onGraphChanged();
     },
     [onGraphChanged],
@@ -225,7 +326,7 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
     [scenes, onGraphChanged],
   );
 
-  const handleRename = useCallback(
+  const handleRenameScene = useCallback(
     async (sceneId: number, name: string) => {
       const scene = scenes.find((s) => s.id === sceneId);
       if (!scene) return;
@@ -236,7 +337,7 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
     [scenes, onGraphChanged],
   );
 
-  const handleSetColor = useCallback(
+  const handleSetSceneColor = useCallback(
     async (sceneId: number, color: string) => {
       const scene = scenes.find((s) => s.id === sceneId);
       if (!scene) return;
@@ -247,45 +348,106 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
     [scenes, onGraphChanged],
   );
 
-  const flowNodes: SceneNode[] = useMemo(
-    () =>
-      scenes.map((scene) => ({
-        id: String(scene.id),
-        type: "scene",
-        position: { x: scene.canvas_x, y: scene.canvas_y },
-        data: {
-          scene,
-          outputs: edges.filter((e) => e.from_scene_id === scene.id),
-          onSceneClick,
-          onAddOutput: handleAddOutput,
-          onMakeRoot: handleMakeRoot,
-          onRename: handleRename,
-          onSetColor: handleSetColor,
-        },
-      })),
-    [scenes, edges, onSceneClick, handleAddOutput, handleMakeRoot, handleRename, handleSetColor],
+  const handleTriggerClick = useCallback(
+    (triggerId: number) => {
+      const trigger = triggers.find((t) => t.id === triggerId);
+      if (trigger) setPopoverTrigger(trigger);
+    },
+    [triggers],
   );
 
-  const flowEdges: Edge[] = useMemo(
-    () =>
-      edges
-        .filter((e) => e.to_scene_id !== null)
-        .map((e) => ({
-          id: String(e.id),
-          source: String(e.from_scene_id),
-          sourceHandle: `output-${e.id}`,
-          target: String(e.to_scene_id),
-          label: triggerLabel(e),
+  const handleRenameTrigger = useCallback(
+    async (triggerId: number, name: string) => {
+      const trigger = triggers.find((t) => t.id === triggerId);
+      if (!trigger) return;
+      const { id: _id, ...draft } = trigger;
+      await updateTrigger(triggerId, { ...draft, name: name || null });
+      onGraphChanged();
+    },
+    [triggers, onGraphChanged],
+  );
+
+  const handleSetTriggerColor = useCallback(
+    async (triggerId: number, color: string) => {
+      const trigger = triggers.find((t) => t.id === triggerId);
+      if (!trigger) return;
+      const { id: _id, ...draft } = trigger;
+      await updateTrigger(triggerId, { ...draft, color });
+      onGraphChanged();
+    },
+    [triggers, onGraphChanged],
+  );
+
+  const flowNodes: FlowNode[] = useMemo(
+    () => [
+      ...scenes.map(
+        (scene): SceneNode => ({
+          id: `scene-${scene.id}`,
+          type: "scene",
+          position: { x: scene.canvas_x, y: scene.canvas_y },
+          data: {
+            scene,
+            onSceneClick,
+            onAddOutput: handleAddOutput,
+            onMakeRoot: handleMakeRoot,
+            onRename: handleRenameScene,
+            onSetColor: handleSetSceneColor,
+          },
+        }),
+      ),
+      ...triggers.map(
+        (trigger): TriggerNode => ({
+          id: `trigger-${trigger.id}`,
+          type: "trigger",
+          position: { x: trigger.canvas_x, y: trigger.canvas_y },
+          data: {
+            trigger,
+            onTriggerClick: handleTriggerClick,
+            onRename: handleRenameTrigger,
+            onSetColor: handleSetTriggerColor,
+          },
+        }),
+      ),
+    ],
+    [
+      scenes,
+      triggers,
+      onSceneClick,
+      handleAddOutput,
+      handleMakeRoot,
+      handleRenameScene,
+      handleSetSceneColor,
+      handleTriggerClick,
+      handleRenameTrigger,
+      handleSetTriggerColor,
+    ],
+  );
+
+  const flowEdges: Edge[] = useMemo(() => {
+    const result: Edge[] = [];
+    for (const trigger of triggers) {
+      result.push({
+        id: `in-${trigger.id}`,
+        source: `scene-${trigger.from_scene_id}`,
+        target: `trigger-${trigger.id}`,
+      });
+      if (trigger.to_scene_id !== null) {
+        result.push({
+          id: `out-${trigger.id}`,
+          source: `trigger-${trigger.id}`,
+          sourceHandle: "out",
+          target: `scene-${trigger.to_scene_id}`,
           markerEnd: { type: MarkerType.ArrowClosed },
-          data: { edge: e },
-        })),
-    [edges],
-  );
+        });
+      }
+    }
+    return result;
+  }, [triggers]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flowNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges);
 
-  // Houdt de React Flow-state in sync zodra scenes/edges van de server
+  // Houdt de React Flow-state in sync zodra scenes/triggers van de server
   // opnieuw binnenkomen (na een CRUD-actie elders) -- useNodesState/
   // useEdgesState gebruiken hun argument alleen als initiele waarde
   // (zoals useState), en houden verder hun eigen interne sleep-state bij
@@ -300,38 +462,26 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
 
   const handleConnect = useCallback(
     async (connection: Connection) => {
-      if (!connection.sourceHandle || !connection.target) return;
-      const edgeId = parseInt(connection.sourceHandle.replace("output-", ""), 10);
-      if (Number.isNaN(edgeId)) return;
-      const edge = edges.find((e) => e.id === edgeId);
-      if (!edge) return;
-      await updateSceneEdge(edgeId, {
-        from_scene_id: edge.from_scene_id,
-        to_scene_id: parseInt(connection.target, 10),
-        trigger_type: edge.trigger_type,
-        trigger_from: edge.trigger_from,
-        trigger_until: edge.trigger_until,
-        priority: edge.priority,
-      });
+      if (!connection.source?.startsWith("trigger-") || !connection.target?.startsWith("scene-")) return;
+      const triggerId = parseInt(connection.source.replace("trigger-", ""), 10);
+      const sceneId = parseInt(connection.target.replace("scene-", ""), 10);
+      if (Number.isNaN(triggerId) || Number.isNaN(sceneId)) return;
+      const trigger = triggers.find((t) => t.id === triggerId);
+      if (!trigger) return;
+      const { id: _id, ...draft } = trigger;
+      await updateTrigger(triggerId, { ...draft, to_scene_id: sceneId });
       onGraphChanged();
     },
-    [edges, onGraphChanged],
+    [triggers, onGraphChanged],
   );
 
-  const handleNodeDragStop = useCallback(
-    async (_event: unknown, node: SceneNode) => {
-      await updateScenePosition(parseInt(node.id, 10), node.position.x, node.position.y);
-    },
-    [],
-  );
-
-  const handleEdgeClick = useCallback(
-    (_event: unknown, edge: Edge) => {
-      const real = edges.find((e) => String(e.id) === edge.id);
-      if (real) setPopoverEdge(real);
-    },
-    [edges],
-  );
+  const handleNodeDragStop = useCallback(async (_event: unknown, node: FlowNode) => {
+    if (node.id.startsWith("scene-")) {
+      await updateScenePosition(parseInt(node.id.replace("scene-", ""), 10), node.position.x, node.position.y);
+    } else {
+      await updateTriggerPosition(parseInt(node.id.replace("trigger-", ""), 10), node.position.x, node.position.y);
+    }
+  }, []);
 
   return (
     <div className="scene-graph-canvas">
@@ -343,7 +493,6 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
-        onEdgeClick={handleEdgeClick}
         fitView
       >
         <Background />
@@ -352,10 +501,10 @@ export default function SceneGraphCanvas({ scenes, edges, onSceneClick, onGraphC
       <button type="button" className="scene-graph-canvas__add" onClick={onAddScene}>
         + Nieuwe scene
       </button>
-      {popoverEdge && (
-        <EdgeTriggerPopover
-          edge={popoverEdge}
-          onClose={() => setPopoverEdge(null)}
+      {popoverTrigger && (
+        <TriggerPopover
+          trigger={popoverTrigger}
+          onClose={() => setPopoverTrigger(null)}
           onSaved={onGraphChanged}
         />
       )}

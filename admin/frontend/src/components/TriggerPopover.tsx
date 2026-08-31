@@ -1,33 +1,36 @@
 import { useState } from "react";
-import { updateSceneEdge, deleteSceneEdge } from "../api/sceneEdges";
-import type { SceneEdge } from "../types";
-import "./EdgeTriggerPopover.css";
+import { updateTrigger, deleteTrigger } from "../api/triggers";
+import type { Trigger } from "../types";
+import "./TriggerPopover.css";
 
 interface Props {
-  edge: SceneEdge;
+  trigger: Trigger;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export default function EdgeTriggerPopover({ edge, onClose, onSaved }: Props) {
-  const [triggerType, setTriggerType] = useState<NonNullable<SceneEdge["trigger_type"]>>(
-    edge.trigger_type ?? "always",
-  );
-  const [from, setFrom] = useState(edge.trigger_from ?? "");
-  const [until, setUntil] = useState(edge.trigger_until ?? "");
+export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
+  const [kind, setKind] = useState<NonNullable<Trigger["kind"]>>(trigger.kind ?? "always");
+  const [from, setFrom] = useState(trigger.schedule_from ?? "");
+  const [until, setUntil] = useState(trigger.schedule_until ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     setSaving(true);
     try {
-      await updateSceneEdge(edge.id, {
-        from_scene_id: edge.from_scene_id,
-        to_scene_id: edge.to_scene_id,
-        trigger_type: triggerType,
-        trigger_from: triggerType === "schedule" ? from : null,
-        trigger_until: triggerType === "schedule" ? until : null,
-        priority: edge.priority,
+      await updateTrigger(trigger.id, {
+        from_scene_id: trigger.from_scene_id,
+        to_scene_id: trigger.to_scene_id,
+        kind,
+        schedule_from: kind === "schedule" ? from : null,
+        schedule_until: kind === "schedule" ? until : null,
+        ha_entity_id: trigger.ha_entity_id,
+        priority: trigger.priority,
+        canvas_x: trigger.canvas_x,
+        canvas_y: trigger.canvas_y,
+        name: trigger.name,
+        color: trigger.color,
       });
       onSaved();
       onClose();
@@ -41,7 +44,7 @@ export default function EdgeTriggerPopover({ edge, onClose, onSaved }: Props) {
   async function handleDelete() {
     setSaving(true);
     try {
-      await deleteSceneEdge(edge.id);
+      await deleteTrigger(trigger.id);
       onSaved();
       onClose();
     } catch {
@@ -52,44 +55,44 @@ export default function EdgeTriggerPopover({ edge, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="edge-popover__backdrop" role="dialog" aria-modal="true">
-      <div className="edge-popover">
-        <p className="edge-popover__title">Trigger voor deze verbinding</p>
+    <div className="trigger-popover__backdrop" role="dialog" aria-modal="true">
+      <div className="trigger-popover">
+        <p className="trigger-popover__title">Trigger instellen</p>
         {error && (
-          <p className="edge-popover__error" role="alert">
+          <p className="trigger-popover__error" role="alert">
             {error}
           </p>
         )}
-        <div className="edge-popover__options">
-          <label className="edge-popover__radio">
+        <div className="trigger-popover__options">
+          <label className="trigger-popover__radio">
             <input
               type="radio"
-              name="edge-trigger"
-              checked={triggerType === "always"}
-              onChange={() => setTriggerType("always")}
+              name="trigger-kind"
+              checked={kind === "always"}
+              onChange={() => setKind("always")}
             />
             Altijd
           </label>
-          <label className="edge-popover__radio">
+          <label className="trigger-popover__radio">
             <input
               type="radio"
-              name="edge-trigger"
-              checked={triggerType === "motion"}
-              onChange={() => setTriggerType("motion")}
+              name="trigger-kind"
+              checked={kind === "motion"}
+              onChange={() => setKind("motion")}
             />
             Beweging
           </label>
-          <label className="edge-popover__radio">
+          <label className="trigger-popover__radio">
             <input
               type="radio"
-              name="edge-trigger"
-              checked={triggerType === "schedule"}
-              onChange={() => setTriggerType("schedule")}
+              name="trigger-kind"
+              checked={kind === "schedule"}
+              onChange={() => setKind("schedule")}
             />
             Tijdschema
           </label>
-          {triggerType === "schedule" && (
-            <div className="edge-popover__schedule">
+          {kind === "schedule" && (
+            <div className="trigger-popover__schedule">
               <label>
                 <span>Van</span>
                 <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -101,7 +104,7 @@ export default function EdgeTriggerPopover({ edge, onClose, onSaved }: Props) {
             </div>
           )}
         </div>
-        <div className="edge-popover__actions">
+        <div className="trigger-popover__actions">
           <button type="button" onClick={handleDelete} disabled={saving}>
             Verwijderen
           </button>
