@@ -741,3 +741,118 @@ def test_output_connections_migration_is_idempotent(tmp_path):
     conn = init_db(path)
     count = conn.execute("SELECT COUNT(*) FROM output_connections").fetchone()[0]
     assert count == 0  # verse install, geen players -> geen connections
+
+
+def test_full_migration_chain_from_pre_plan_production_state(tmp_path):
+    """Regressie voor de volledige migratieketen in één keer (Additioneel
+    Punt 9). Elke bestaande migratietest hierboven test maar één hop
+    geïsoleerd -- dit had de Taak-5-migratievolgorde-regressie gevonden
+    die tijdens deze plan's eigen uitvoering opdook. Bootst de echte
+    productie-databasevorm na op dit plan's basiscommit (571f6f1):
+    scenes nog niet hernoemd, triggers al wel hernoemd vanaf scene_edges
+    maar de from_scene_id/to_scene_id-kolommen nog niet naar
+    from_branch_id/to_player_id, user_version=2. Eén init_db()-aanroep
+    moet de hele keten (v2 -> v7) in de juiste volgorde afronden."""
+    path = str(tmp_path / "test.db")
+    raw = sqlite3.connect(path)
+    # scenes-schema zoals een echt lang-lopende productie-DB 'm heeft:
+    # de basis-DDL plus alle kolommen die _ensure_column er onderweg al
+    # aan toegevoegd heeft (is_root/canvas_x/canvas_y/output_id/color).
+    raw.execute(
+        """CREATE TABLE scenes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            order_index INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            source_mode TEXT NOT NULL DEFAULT 'camera',
+            effect TEXT NOT NULL DEFAULT 'xray',
+            params TEXT NOT NULL DEFAULT '{}',
+            overlay_hash TEXT,
+            scale REAL NOT NULL DEFAULT 1.0,
+            position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+            canvas_width INTEGER,
+            canvas_height INTEGER,
+            source_scale REAL NOT NULL DEFAULT 1.0,
+            source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+            trigger_type TEXT NOT NULL DEFAULT 'always',
+            trigger_from TEXT,
+            trigger_until TEXT,
+            is_root INTEGER NOT NULL DEFAULT 0,
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0,
+            output_id INTEGER,
+            color TEXT
+        )"""
+    )
+    # triggers-schema na de scene_edges-rename (user_version=2) maar vóór
+    # de from_scene_id/to_scene_id -> from_branch_id/to_player_id-rename
+    # (die pas bij v5 gebeurt).
+    raw.execute(
+        """CREATE TABLE triggers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_scene_id INTEGER NOT NULL,
+            to_scene_id INTEGER,
+            kind TEXT,
+            schedule_from TEXT,
+            schedule_until TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            ha_entity_id TEXT,
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0,
+            name TEXT,
+            color TEXT
+        )"""
+    )
+    raw.execute(
+        """CREATE TABLE outputs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            camera_source TEXT NOT NULL DEFAULT '',
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0
+        )"""
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, position, "
+        "source_mode, trigger_type, is_root) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always', 1)"
+    )
+    raw.execute(
+        "INSERT INTO scenes (id, name, order_index, effect, params, overlay_hash, scale, position, "
+        "source_mode, trigger_type) VALUES "
+        "(2, 'Schrik', 1, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'scare_video', 'motion')"
+    )
+    raw.execute("INSERT INTO outputs (id, name, camera_source) VALUES (1, 'Spiegel', 'rtsp://cam.local/stream')")
+    # Twee echte trigger-rijen, zoals _migrate_scenes_to_graph die voor een
+    # scare_video-scene produceert: heen (motion) en terug (always).
+    raw.execute("INSERT INTO triggers (id, from_scene_id, to_scene_id, kind) VALUES (1, 1, 2, 'motion')")
+    raw.execute("INSERT INTO triggers (id, from_scene_id, to_scene_id, kind) VALUES (2, 2, 1, 'always')")
+    raw.execute("PRAGMA user_version = 2")
+    raw.commit()
+    raw.close()
+
+    conn = init_db(path)  # één aanroep moet de hele v2->v7-keten afronden
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"players", "sources", "player_branches", "output_connections"} <= tables
+
+    player_cols = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    assert {"source_id", "playback_mode", "repeat_while_ha_entity_id"} <= player_cols
+    source_cols = {row[1] for row in conn.execute("PRAGMA table_info(sources)")}
+    assert {"kind", "value"} <= source_cols
+    branch_cols = {row[1] for row in conn.execute("PRAGMA table_info(player_branches)")}
+    assert {"player_id", "name"} <= branch_cols
+    oc_cols = {row[1] for row in conn.execute("PRAGMA table_info(output_connections)")}
+    assert {"output_id", "from_branch_id"} <= oc_cols
+
+    names = dict(conn.execute("SELECT id, name FROM players").fetchall())
+    assert names == {1: "Basis", 2: "Schrik"}
+
+    branch1 = conn.execute("SELECT id FROM player_branches WHERE player_id = 1").fetchone()[0]
+    branch2 = conn.execute("SELECT id FROM player_branches WHERE player_id = 2").fetchone()[0]
+    trigger_rows = conn.execute(
+        "SELECT from_branch_id, to_player_id, kind FROM triggers ORDER BY id"
+    ).fetchall()
+    assert trigger_rows == [(branch1, 2, "motion"), (branch2, 1, "always")]
