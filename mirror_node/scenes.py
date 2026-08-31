@@ -18,7 +18,11 @@ class SceneGraph:
         self._clock = clock
 
     def set_graph(self, scenes, edges, root_scene_id):
-        self._scenes = {s["id"]: s for s in scenes}
+        # Disabled scenes tellen niet mee -- ze mogen nooit als winnaar
+        # terugkomen. Een edge naar zo'n scene wordt vanzelf als
+        # "target bestaat niet" behandeld door resolve() (zelfde pad als
+        # een edge naar een écht verwijderde scene).
+        self._scenes = {s["id"]: s for s in scenes if s.get("enabled", True)}
         by_from = {}
         for e in edges:
             if e.get("to_scene_id") is None or e.get("trigger_type") is None:
@@ -52,6 +56,8 @@ class SceneGraph:
         if self._current_id is None:
             return None, False
         for edge in self._edges.get(self._current_id, []):
+            if edge["to_scene_id"] not in self._scenes:
+                continue  # doel bestaat niet (of staat uit) -- val door naar de volgende edge
             if _edge_matches(edge, motion_active, now_hhmm):
                 if edge["to_scene_id"] != self._current_id:
                     self._current_id = edge["to_scene_id"]

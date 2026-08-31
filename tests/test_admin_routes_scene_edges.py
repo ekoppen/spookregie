@@ -85,6 +85,23 @@ def test_update_edge_connects_and_configures_trigger(tmp_path):
     assert updated["trigger_type"] == "motion"
 
 
+def test_update_edge_requires_valid_to_scene_id(tmp_path):
+    """Regressie voor Important 6: zonder deze validatie kan de UI (of
+    een losse aanroep) een edge naar een onbestaande scene laten wijzen
+    -- mirror_node volgt zo'n edge dan naar een lege scene en zit
+    permanent op zwart."""
+    client, bridge = _client(tmp_path)
+    a, _ = _two_scenes(client)
+    edge = client.post("/api/scene-edges", json={"from_scene_id": a["id"]}).json()
+
+    response = client.put(f"/api/scene-edges/{edge['id']}", json={
+        "from_scene_id": a["id"], "to_scene_id": 999,
+        "trigger_type": "always", "trigger_from": None, "trigger_until": None, "priority": 0,
+    })
+
+    assert response.status_code == 400
+
+
 def test_update_edge_returns_404_for_unknown_id(tmp_path):
     client, bridge = _client(tmp_path)
 

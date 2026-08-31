@@ -70,6 +70,10 @@ async def update_edge_route(edge_id: int, request: Request):
         raise HTTPException(status_code=404, detail="Verbinding niet gevonden")
     body = await request.json()
     fields = {k: body.get(k, v) for k, v in _DEFAULT_EDGE.items()}
+    if fields["to_scene_id"] is not None:
+        target = db.execute("SELECT id FROM scenes WHERE id = ?", (fields["to_scene_id"],)).fetchone()
+        if target is None:
+            raise HTTPException(status_code=400, detail="to_scene_id verwijst naar een onbestaande scene")
     db.execute(
         """UPDATE scene_edges SET to_scene_id=?, trigger_type=?, trigger_from=?,
              trigger_until=?, priority=? WHERE id=?""",
