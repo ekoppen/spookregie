@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { SceneDraft } from "../api/scenes";
+import type { PlayerDraft } from "../api/players";
 import "./PreviewPanel.css";
 
 interface Props {
-  draft: SceneDraft;
+  draft: PlayerDraft;
   onClose: () => void;
 }
 
@@ -80,7 +80,7 @@ export default function PreviewPanel({ draft, onClose }: Props) {
         </p>
       )}
       {imageUrl ? (
-        <img className="preview-panel__image" src={imageUrl} alt="Voorbeeld van de scene" />
+        <img className="preview-panel__image" src={imageUrl} alt="Voorbeeld van de player" />
       ) : (
         <p className="preview-panel__loading">{loading ? "Bezig…" : "Nog geen voorbeeld."}</p>
       )}
