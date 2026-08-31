@@ -33,7 +33,7 @@ from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
-from mirror_node.scenes import SceneEngine
+from mirror_node.scenes import SceneGraph
 from mirror_node.stream import MJPEGStreamer
 
 NODE_NAME = "mirror"
@@ -61,7 +61,7 @@ sleeping = threading.Event()
 # Handmatige test-trigger vanaf de beheerpagina; de camera-loop leest en wist
 # hem. Event i.p.v. een bool zodat het thread-safe is, net als `sleeping`.
 test_trigger_requested = threading.Event()
-scene_engine = SceneEngine()
+scene_graph = SceneGraph()
 synced_scare_videos = {}
 
 # ponytail: same hash format sync_media/content_hash produce; duplicated
@@ -118,16 +118,22 @@ def _apply_scare_video_config_message(payload, logger):
     _sync_scare_videos_in_background(hashes)
 
 
-def _apply_scenes_message(payload, logger):
+def _apply_graph_message(payload, logger):
     try:
-        scenes = json.loads(payload)
+        graph = json.loads(payload)
     except json.JSONDecodeError:
-        logger.error("Ongeldige scenes-JSON ontvangen, genegeerd")
+        logger.error("Ongeldige graaf-JSON ontvangen, genegeerd")
         return
-    if not isinstance(scenes, list):
-        logger.error("Scenes-config is geen lijst, genegeerd: %r", scenes)
+    if not isinstance(graph, dict):
+        logger.error("Graaf-config is geen object, genegeerd: %r", graph)
         return
-    scene_engine.set_scenes(scenes)
+    scenes = graph.get("scenes", [])
+    edges = graph.get("edges", [])
+    root_scene_id = graph.get("root_scene_id")
+    if not isinstance(scenes, list) or not isinstance(edges, list):
+        logger.error("Graaf-config heeft geen geldige scenes/edges-lijst, genegeerd: %r", graph)
+        return
+    scene_graph.set_graph(scenes, edges, root_scene_id)
     for scene in scenes:
         if isinstance(scene, dict):
             _sync_overlay_in_background(scene)
@@ -142,7 +148,7 @@ def _apply_scene_preview_message(payload, logger):
     if not isinstance(scene, dict):
         logger.error("Scene-preview is geen object, genegeerd: %r", scene)
         return
-    scene_engine.set_preview(scene)
+    scene_graph.set_preview(scene)
     _sync_overlay_in_background(scene)
 
 
@@ -158,8 +164,8 @@ def make_on_message(logger, topics):
                 else:
                     sleeping.clear()
                 return
-            if msg.topic == topics.config_mirror_scenes:
-                _apply_scenes_message(msg.payload.decode(), logger)
+            if msg.topic == topics.config_mirror_graph:
+                _apply_graph_message(msg.payload.decode(), logger)
                 return
             if msg.topic == topics.control_mirror_scene_preview:
                 _apply_scene_preview_message(msg.payload.decode(), logger)
@@ -280,34 +286,16 @@ def _handle_trigger(streamer, logger):
     return ACTIVE_SECONDS
 
 
-def _decide_action(fired, winning):
-    """Bepaalt wat de hoofdlus deze cyclus moet doen op basis van of er
-    net een trigger is afgegaan en welke scene de SceneEngine nu als
-    winnaar aanwijst. Puur -- geen state, geen I/O -- zodat de
-    driewegs-keuze (scare-video afspelen / camera-effect renderen /
-    zwart beeld) los van de camera-lus getest kan worden."""
+def _render_action(winning, transitioned):
+    """Bepaalt wat de hoofdlus deze cyclus moet doen, gegeven wat
+    scene_graph.resolve() teruggaf. Puur -- geen state, geen I/O --
+    zodat de driewegs-keuze (scare-video afspelen / camera-effect
+    renderen / zwart beeld) los van de camera-lus getest kan worden."""
     if winning is None:
         return "blank"
     if winning.get("source_mode") == "scare_video":
-        return "scare_video" if fired else "blank"
+        return "scare_video" if transitioned else "blank"
     return "render"
-
-
-def _resolve_action(scene_engine, fired, motion_active, now_hhmm):
-    """Wrapper om scene_engine.resolve() + _decide_action() die de staart
-    van een scare-video-venster afvangt: zodra de clip zelf al is
-    afgespeeld (fired=False, dit is niet het trigger-moment), moet de
-    mirror niet zwart blijven tot active_until verloopt maar meteen
-    terugvallen op wat er zonder beweging zou draaien (typisch de
-    always-basisscene) -- vervangt de dubbele resolve()-aanroep die er
-    vóór het extraheren van _decide_action was en er bij die refactor per
-    ongeluk uitviel. Geeft (action, winning) terug."""
-    winning = scene_engine.resolve(motion_active, now_hhmm)
-    action = _decide_action(fired, winning)
-    if action == "blank" and not fired and winning is not None and winning.get("source_mode") == "scare_video":
-        winning = scene_engine.resolve(False, now_hhmm)
-        action = _decide_action(fired, winning)
-    return action, winning
 
 
 def _redact_source(source):
@@ -369,7 +357,7 @@ def main():
             return
         client.publish(topics.status(NODE_NAME), "online", retain=True)
         client.subscribe(topics.system_sleep)
-        client.subscribe(topics.config_mirror_scenes)
+        client.subscribe(topics.config_mirror_graph)
         client.subscribe(topics.control_mirror_scene_preview)
         client.subscribe(topics.control_mirror_test)
         client.subscribe(topics.config_mirror_scare_video)
@@ -434,26 +422,24 @@ def main():
             now = time.time()
             now_hhmm = time.strftime("%H:%M")
 
-            fired = False
             if trigger.detect(gray) and now > active_until:
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
                 active_until = time.time() + ACTIVE_SECONDS
-                fired = True
 
             if test_trigger_requested.is_set():
                 test_trigger_requested.clear()
                 logger.info("mirror test-trigger")
                 active_until = time.time() + ACTIVE_SECONDS
-                fired = True
 
-            action, winning = _resolve_action(scene_engine, fired, now < active_until, now_hhmm)
+            winning, transitioned = scene_graph.resolve(now < active_until, now_hhmm)
+            action = _render_action(winning, transitioned)
 
             if action == "scare_video":
-                # Bij het moment van afgaan zelf: speel de scare-video nu
-                # blokkerend af (bestaand _handle_trigger-pad, ongewijzigd)
-                # i.p.v. elke cyclus opnieuw. _play_scare_video streamt zijn
-                # eigen frames al, dus hier verder niets meer te renderen.
+                # Bij aankomst op een scare-video-scene: speel 'm nu
+                # blokkerend af (bestaand _handle_trigger-pad,
+                # ongewijzigd). _play_scare_video streamt zijn eigen
+                # frames al, dus hier verder niets meer te renderen.
                 cooldown = _handle_trigger(streamer, logger)
                 active_until = time.time() + cooldown
                 rendered = frame * 0

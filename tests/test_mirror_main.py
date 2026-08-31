@@ -79,7 +79,7 @@ def test_on_message_survives_malformed_payload(monkeypatch):
     logger = _FakeLogger()
     topics = mirror_main.Topics()
     on_message = mirror_main.make_on_message(logger, topics)
-    on_message(None, None, _FakeMsg(topics.config_mirror_scenes, b"\xff\xfe"))
+    on_message(None, None, _FakeMsg(topics.config_mirror_graph, b"\xff\xfe"))
     assert logger.errors
 
 
@@ -131,37 +131,47 @@ def test_redact_source_leaves_plain_source_untouched():
     assert mirror_main._redact_source("") == mirror_main.CAMERA_INDEX
 
 
-def test_apply_scenes_message_ignores_non_list_json():
+def test_apply_graph_message_ignores_non_dict_json():
     logger = _FakeLogger()
-    mirror_main._apply_scenes_message('{"not": "a list"}', logger)
+    mirror_main._apply_graph_message("[1, 2, 3]", logger)
     assert logger.errors
 
 
-def test_apply_scenes_message_ignores_malformed_json():
+def test_apply_graph_message_ignores_malformed_json():
     logger = _FakeLogger()
-    mirror_main._apply_scenes_message("{niet-geldig-json", logger)
+    mirror_main._apply_graph_message("{niet-geldig-json", logger)
     assert logger.errors
 
 
-def test_apply_scenes_message_updates_scene_engine():
-    scene = {"id": 1, "trigger_type": "always", "overlay_hash": None}
-    mirror_main._apply_scenes_message(json.dumps([scene]), _FakeLogger())
+def test_apply_graph_message_ignores_non_list_scenes_or_edges():
+    logger = _FakeLogger()
+    mirror_main._apply_graph_message(json.dumps({"scenes": "nope", "edges": [], "root_scene_id": 1}), logger)
+    assert logger.errors
 
-    assert mirror_main.scene_engine.resolve(False, "12:00") == scene
+
+def test_apply_graph_message_updates_scene_graph():
+    scene = {"id": 1, "trigger_type": None, "overlay_hash": None}
+    payload = {"scenes": [scene], "edges": [], "root_scene_id": 1}
+    mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
+
+    result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
+    assert result == scene
+    assert transitioned is False
 
 
-def test_apply_scenes_message_syncs_overlay_for_each_scene(monkeypatch):
+def test_apply_graph_message_syncs_overlay_for_each_scene(monkeypatch):
     started = []
     monkeypatch.setattr(
         mirror_main.threading, "Thread",
         lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
     )
     scenes = [
-        {"id": 1, "trigger_type": "always", "overlay_hash": "a" * 64},
-        {"id": 2, "trigger_type": "motion", "overlay_hash": "b" * 64},
+        {"id": 1, "overlay_hash": "a" * 64},
+        {"id": 2, "overlay_hash": "b" * 64},
     ]
+    payload = {"scenes": scenes, "edges": [], "root_scene_id": 1}
 
-    mirror_main._apply_scenes_message(json.dumps(scenes), _FakeLogger())
+    mirror_main._apply_graph_message(json.dumps(payload), _FakeLogger())
 
     synced_hashes = [kw["args"][2] for kw in started]
     assert synced_hashes == [["a" * 64], ["b" * 64]]
@@ -173,100 +183,40 @@ def test_apply_scene_preview_message_sets_preview_and_syncs_overlay(monkeypatch)
         mirror_main.threading, "Thread",
         lambda **kw: started.append(kw) or type("T", (), {"start": lambda self: None})(),
     )
-    scene = {"id": 5, "trigger_type": "always", "overlay_hash": "a" * 64}
+    scene = {"id": 5, "overlay_hash": "a" * 64}
     try:
         mirror_main._apply_scene_preview_message(json.dumps(scene), _FakeLogger())
-        assert mirror_main.scene_engine.resolve(False, "12:00") == scene
+        result, transitioned = mirror_main.scene_graph.resolve(False, "12:00")
+        assert result == scene
         assert started and started[0]["args"][2] == ["a" * 64]
     finally:
-        mirror_main.scene_engine._preview = None
-        mirror_main.scene_engine._preview_set_at = None
+        mirror_main.scene_graph._preview = None
+        mirror_main.scene_graph._preview_set_at = None
 
 
-def test_decide_action_no_winner_is_blank():
-    assert mirror_main._decide_action(False, None) == "blank"
-    assert mirror_main._decide_action(True, None) == "blank"
+def test_render_action_no_winner_is_blank():
+    assert mirror_main._render_action(None, False) == "blank"
+    assert mirror_main._render_action(None, True) == "blank"
 
 
-def test_decide_action_scare_video_scene_fired_plays_scare_video():
+def test_render_action_scare_video_on_transition_plays():
     winning = {"source_mode": "scare_video"}
-    assert mirror_main._decide_action(True, winning) == "scare_video"
+    assert mirror_main._render_action(winning, True) == "scare_video"
 
 
-def test_decide_action_scare_video_scene_not_fired_is_blank():
+def test_render_action_scare_video_without_transition_is_blank():
+    """Dit is precies het geval dat de vorige feature met een losse
+    dubbele-resolve-hack moest oplappen (zwart na afloop van een clip
+    zonder terugpad) -- de state machine zelf voorkomt het nu, en dit
+    is de test die dat vastlegt."""
     winning = {"source_mode": "scare_video"}
-    assert mirror_main._decide_action(False, winning) == "blank"
+    assert mirror_main._render_action(winning, False) == "blank"
 
 
-def test_decide_action_camera_scene_renders_regardless_of_fired():
+def test_render_action_camera_scene_renders_regardless_of_transition():
     winning = {"source_mode": "camera"}
-    assert mirror_main._decide_action(True, winning) == "render"
-    assert mirror_main._decide_action(False, winning) == "render"
-
-
-def _engine(scenes):
-    engine = mirror_main.SceneEngine()
-    engine.set_scenes(scenes)
-    return engine
-
-
-def test_resolve_action_scare_video_scene_at_trigger_instant_plays_clip():
-    """fired=True (het trigger-moment zelf): ongewijzigd gedrag, de clip
-    moet nu afspelen, niet meteen doorvallen naar de basisscene."""
-    scare = {"source_mode": "scare_video", "trigger_type": "motion"}
-    engine = _engine([scare])
-
-    action, winning = mirror_main._resolve_action(engine, fired=True, motion_active=True, now_hhmm="12:00")
-
-    assert action == "scare_video"
-    assert winning == scare
-
-
-def test_resolve_action_falls_back_to_base_scene_after_clip_finished():
-    """De kern van de fix: fired=False maar nog binnen het actieve venster
-    (de clip is net afgespeeld) mag niet zwart blijven zolang de
-    scare-video-scene nog wint op motion -- val terug op de always-scene."""
-    scare = {"source_mode": "scare_video", "trigger_type": "motion"}
-    base = {"source_mode": "camera", "effect": "xray", "trigger_type": "always"}
-    engine = _engine([scare, base])
-
-    action, winning = mirror_main._resolve_action(engine, fired=False, motion_active=True, now_hhmm="12:00")
-
-    assert action == "render"
-    assert winning == base
-
-
-def test_resolve_action_stays_blank_when_no_fallback_scene_matches():
-    """Zonder een always/schedule-scene die zonder beweging matcht, blijft
-    het resultaat terecht zwart -- geen fallback beschikbaar."""
-    scare = {"source_mode": "scare_video", "trigger_type": "motion"}
-    engine = _engine([scare])
-
-    action, winning = mirror_main._resolve_action(engine, fired=False, motion_active=True, now_hhmm="12:00")
-
-    assert action == "blank"
-    assert winning is None
-
-
-def test_resolve_action_camera_motion_scene_keeps_rendering_during_its_window():
-    """Niet-scare_video-scenes zijn ongewijzigd: een camera-scene op motion
-    blijft gewoon renderen voor de duur van haar eigen actieve venster."""
-    motion_scene = {"source_mode": "camera", "effect": "xray", "trigger_type": "motion"}
-    engine = _engine([motion_scene])
-
-    action, winning = mirror_main._resolve_action(engine, fired=False, motion_active=True, now_hhmm="12:00")
-
-    assert action == "render"
-    assert winning == motion_scene
-
-
-def test_resolve_action_no_winner_at_all_is_blank():
-    engine = _engine([])
-
-    action, winning = mirror_main._resolve_action(engine, fired=False, motion_active=False, now_hhmm="12:00")
-
-    assert action == "blank"
-    assert winning is None
+    assert mirror_main._render_action(winning, True) == "render"
+    assert mirror_main._render_action(winning, False) == "render"
 
 
 def test_apply_scare_video_config_message_ignores_non_dict_json():
