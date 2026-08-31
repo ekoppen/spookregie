@@ -52,10 +52,27 @@ def test_create_scene_persists_and_publishes(tmp_path):
     assert response.status_code == 200
     created = response.json()
     assert created["name"] == "Basis"
-    assert ("graph", {"scenes": [created], "edges": [], "root_scene_id": None}) in bridge.calls
+    # Eerste scene ooit wordt automatisch root (Minor 12), ook al vroeg de
+    # payload expliciet is_root: False.
+    assert created["is_root"] is True
+    assert ("graph", {"scenes": [created], "edges": [], "root_scene_id": created["id"]}) in bridge.calls
 
     listed = client.get("/api/scenes").json()
     assert listed == [created]
+
+
+def test_first_scene_ever_becomes_root_automatically(tmp_path):
+    """Regressie voor Minor 12: zonder root staat de mirror-node
+    permanent op zwart zonder aanwijzing waarom. De eerste scene wordt
+    daarom altijd root, ongeacht wat de body vraagt; een tweede scene
+    daarna wordt dat niet vanzelf."""
+    client, bridge = _client(tmp_path)
+
+    first = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "Eerste", "is_root": False}).json()
+    second = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "Tweede", "is_root": False}).json()
+
+    assert first["is_root"] is True
+    assert second["is_root"] is False
 
 
 def test_get_scene_returns_404_for_unknown_id(tmp_path):

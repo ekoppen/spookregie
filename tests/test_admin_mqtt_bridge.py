@@ -211,7 +211,10 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
         topic: (json.loads(payload), retain)
         for topic, payload, retain in app.state.bridge._client.published
     }
-    assert published["config/mirror/graph"] == ({"scenes": [created], "edges": [], "root_scene_id": None}, True)
+    # Eerste (en enige) scene wordt automatisch root (Minor 12).
+    assert published["config/mirror/graph"] == (
+        {"scenes": [created], "edges": [], "root_scene_id": created["id"]}, True
+    )
     assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)
 
 

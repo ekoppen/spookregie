@@ -87,6 +87,12 @@ async def create_scene_route(request: Request):
     body = await request.json()
     fields = _fields_from_body(body)
     db = request.app.state.db
+    # Eerste scene ooit krijgt altijd is_root, ongeacht wat de body vroeg
+    # -- zonder root staat de mirror-node stil op zwart, zonder enige
+    # aanwijzing in de UI waarom (Minor 12).
+    has_root = db.execute("SELECT 1 FROM scenes WHERE is_root = 1 LIMIT 1").fetchone()
+    if has_root is None:
+        fields["is_root"] = True
     canvas_width, canvas_height = _canvas_columns(fields)
     cursor = db.execute(
         # ponytail: order_index blijft NOT NULL in het schema (legacy
