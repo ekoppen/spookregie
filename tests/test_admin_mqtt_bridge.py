@@ -103,11 +103,11 @@ def test_publish_mirror_graph_uses_configured_prefix(monkeypatch):
 
     bridge = MqttBridge(_settings(mqtt_topic_prefix="test"), tracker=object())
 
-    bridge.publish_mirror_graph({"scenes": [{"id": 1}], "edges": [], "root_scene_id": 1})
+    bridge.publish_mirror_graph({"scenes": [{"id": 1}], "triggers": [], "root_scene_id": 1, "output_id": None})
 
     topic, payload, retain = bridge._client.published[-1]
     assert topic == "test/config/mirror/graph"
-    assert json.loads(payload) == {"scenes": [{"id": 1}], "edges": [], "root_scene_id": 1}
+    assert json.loads(payload) == {"scenes": [{"id": 1}], "triggers": [], "root_scene_id": 1, "output_id": None}
     assert retain is True
 
 
@@ -213,7 +213,8 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
     }
     # Eerste (en enige) scene wordt automatisch root (Minor 12).
     assert published["config/mirror/graph"] == (
-        {"scenes": [created], "edges": [], "root_scene_id": created["id"]}, True
+        {"scenes": [created], "triggers": [], "root_scene_id": created["id"], "output_id": created["output_id"]},
+        True,
     )
     assert published["config/mirror/scare-video"] == ({"enabled_hashes": ["a" * 64]}, True)
 

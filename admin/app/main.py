@@ -29,7 +29,7 @@ from admin.app.routers import settings as settings_router
 from admin.app.routers import node_config as node_config_router
 from admin.app.routers import mirror_process as mirror_process_router
 from admin.app.routers import mirror_scare_video as mirror_scare_video_router
-from admin.app.routers import scene_edges as scene_edges_router
+from admin.app.routers import triggers as triggers_router
 from admin.app.routers import outputs as outputs_router
 from admin.app.routers.mirror_scare_video import read_enabled_hashes
 from admin.app.routers.schedule import read_schedule
@@ -110,7 +110,7 @@ def create_app(settings=None):
     app.include_router(media_router.router)
     app.include_router(mirror_router.router)
     app.include_router(scenes_router.router)
-    app.include_router(scene_edges_router.router)
+    app.include_router(triggers_router.router)
     app.include_router(scare_router.router)
     app.include_router(nodes_router.router)
     app.include_router(schedule_router.router)

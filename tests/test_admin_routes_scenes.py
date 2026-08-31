@@ -226,26 +226,26 @@ def test_update_scene_position_rejects_non_numeric(tmp_path):
     assert response.status_code == 400
 
 
-def test_deleting_scene_clears_its_own_and_incoming_edges(tmp_path):
+def test_deleting_scene_clears_its_own_and_incoming_triggers(tmp_path):
     client, bridge = _client(tmp_path)
     a = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "A"}).json()
     b = client.post("/api/scenes", json={**_SCENE_PAYLOAD, "name": "B"}).json()
-    client.post("/api/scene-edges", json={
+    client.post("/api/triggers", json={
         "from_scene_id": a["id"], "to_scene_id": b["id"],
-        "trigger_type": "motion", "trigger_from": None, "trigger_until": None, "priority": 0,
+        "kind": "motion", "schedule_from": None, "schedule_until": None, "priority": 0,
     })
-    client.post("/api/scene-edges", json={
+    client.post("/api/triggers", json={
         "from_scene_id": b["id"], "to_scene_id": a["id"],
-        "trigger_type": "always", "trigger_from": None, "trigger_until": None, "priority": 0,
+        "kind": "always", "schedule_from": None, "schedule_until": None, "priority": 0,
     })
 
     client.delete(f"/api/scenes/{a['id']}")
 
-    remaining = client.get("/api/scene-edges").json()
+    remaining = client.get("/api/triggers").json()
     assert len(remaining) == 1
     assert remaining[0]["from_scene_id"] == b["id"]
     assert remaining[0]["to_scene_id"] is None
-    assert remaining[0]["trigger_type"] is None
+    assert remaining[0]["kind"] is None
 
 
 def test_create_scene_without_output_id_uses_the_default_output(tmp_path):
