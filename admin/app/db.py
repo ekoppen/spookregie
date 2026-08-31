@@ -143,16 +143,27 @@ def _migrate_scenes_to_graph(conn):
     (of, als die er niet is, de scene met de laagste order_index);
     elke andere scene met een niet-lege trigger_type krijgt een edge
     vanaf de root met die trigger; elke scare_video-scene krijgt ook
-    een edge terug naar de root ('altijd'). Idempotent: doet niets
-    zodra er al edges bestaan, of als er geen scenes zijn."""
-    existing_edges = conn.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0]
-    if existing_edges > 0:
+    een edge terug naar de root ('altijd').
+
+    Idempotent via PRAGMA user_version (niet via "zijn er edges?" -- een
+    verse graaf-installatie met scenes die de gebruiker nog niet
+    gekoppeld heeft, heeft ook nul edges, en zou anders bij elke herstart
+    opnieuw als legacy-data gezien worden en is_root/edges herschrijven)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    if conn.execute("SELECT COUNT(*) FROM scene_edges").fetchone()[0] > 0:
+        # Upgrade-pad: al eerder gemigreerd onder de oude edge-count-gate
+        # (vóór deze fix). Alleen de marker zetten -- de body opnieuw
+        # draaien zou dubbele edges aanmaken op een deploy die na de
+        # eerdere migratie al eigen edges heeft toegevoegd/aangepast.
+        conn.execute("PRAGMA user_version = 1")
         return
     rows = conn.execute(
         "SELECT id, source_mode, trigger_type, trigger_from, trigger_until, order_index "
         "FROM scenes ORDER BY order_index"
     ).fetchall()
     if not rows:
+        conn.execute("PRAGMA user_version = 1")
         return
     always_rows = [r for r in rows if r[2] == "always"]
     root_id = always_rows[0][0] if always_rows else rows[0][0]
@@ -174,3 +185,4 @@ def _migrate_scenes_to_graph(conn):
                    VALUES (?, ?, 'always', NULL, NULL, 0)""",
                 (scene_id, root_id),
             )
+    conn.execute("PRAGMA user_version = 1")
