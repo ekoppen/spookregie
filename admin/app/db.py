@@ -90,6 +90,17 @@ def init_db(path):
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_uuid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            platform TEXT NOT NULL DEFAULT '',
+            git_sha TEXT,
+            last_seen_at TEXT,
+            output_id INTEGER
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS mirror_scare_video_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             enabled_hashes TEXT NOT NULL DEFAULT '[]'

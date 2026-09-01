@@ -34,6 +34,7 @@ from admin.app.routers import triggers as triggers_router
 from admin.app.routers import outputs as outputs_router
 from admin.app.routers import output_connections as output_connections_router
 from admin.app.routers import sources as sources_router
+from admin.app.routers import devices as devices_router
 from admin.app.routers import preview as preview_router
 from admin.app.routers.mirror_scare_video import read_enabled_hashes
 from admin.app.routers.schedule import read_schedule
@@ -144,6 +145,7 @@ def create_app(settings=None):
     app.include_router(outputs_router.router)
     app.include_router(output_connections_router.router)
     app.include_router(sources_router.router)
+    app.include_router(devices_router.router)
     app.include_router(preview_router.router)
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")

@@ -856,3 +856,22 @@ def test_full_migration_chain_from_pre_plan_production_state(tmp_path):
         "SELECT from_branch_id, to_player_id, kind FROM triggers ORDER BY id"
     ).fetchall()
     assert trigger_rows == [(branch1, 2, "motion"), (branch2, 1, "always")]
+
+
+def test_devices_table_starts_empty(tmp_path):
+    conn = init_db(str(tmp_path / "admin.db"))
+    assert conn.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 0
+
+
+def test_devices_table_survives_a_second_init_db_call(tmp_path):
+    db_path = str(tmp_path / "admin.db")
+    conn = init_db(db_path)
+    conn.execute(
+        "INSERT INTO devices (device_uuid, name, platform) VALUES ('abc-123', 'Oude MacBook', 'darwin')"
+    )
+    conn.commit()
+    conn.close()
+
+    conn2 = init_db(db_path)
+    rows = conn2.execute("SELECT device_uuid, name FROM devices").fetchall()
+    assert rows == [("abc-123", "Oude MacBook")]
