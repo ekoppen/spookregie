@@ -831,9 +831,9 @@ def test_full_migration_chain_from_pre_plan_production_state(tmp_path):
     raw.commit()
     raw.close()
 
-    conn = init_db(path)  # één aanroep moet de hele v2->v7-keten afronden
+    conn = init_db(path)  # één aanroep moet de hele v2->v8-keten afronden
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
 
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"players", "sources", "player_branches", "output_connections"} <= tables
@@ -875,3 +875,80 @@ def test_devices_table_survives_a_second_init_db_call(tmp_path):
     conn2 = init_db(db_path)
     rows = conn2.execute("SELECT device_uuid, name FROM devices").fetchall()
     assert rows == [("abc-123", "Oude MacBook")]
+
+
+def test_media_category_column_renamed_to_kind(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
+
+    assert "kind" in cols
+    assert "category" not in cols
+
+
+def test_existing_media_categories_are_remapped_to_kinds(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    # Zet een pre-upgrade media-rij neer met de oude schema-naam, zoals een
+    # echte bestaande deployment 'm zou hebben vóór deze migratie ooit draait.
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE media (
+            hash TEXT PRIMARY KEY, filename TEXT NOT NULL,
+            category TEXT NOT NULL, uploaded_at TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        "INSERT INTO media VALUES (?, ?, ?, ?)", ("a" * 64, "spook.png", "mirror_overlay", "1.0")
+    )
+    conn.execute(
+        "INSERT INTO media VALUES (?, ?, ?, ?)", ("b" * 64, "gil.wav", "scare_audio", "2.0")
+    )
+    conn.execute(
+        "INSERT INTO media VALUES (?, ?, ?, ?)", ("c" * 64, "zombie.mp4", "mirror_scare_video", "3.0")
+    )
+    conn.commit()
+    conn.close()
+
+    conn = init_db(db_path)
+
+    rows = {r[0]: r[1] for r in conn.execute("SELECT hash, kind FROM media")}
+    assert rows["a" * 64] == "image"
+    assert rows["b" * 64] == "audio"
+    assert rows["c" * 64] == "video"
+
+
+def test_media_kind_migration_is_idempotent(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    conn = init_db(db_path)
+    conn.execute(
+        "INSERT INTO media (hash, filename, kind, uploaded_at) VALUES (?, ?, ?, ?)",
+        ("d" * 64, "geluid.wav", "audio", "1.0"),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = init_db(db_path)  # tweede run mag niet crashen op een niet-bestaande 'category'-kolom
+
+    row = conn.execute("SELECT kind FROM media WHERE hash = ?", ("d" * 64,)).fetchone()
+    assert row[0] == "audio"  # ongewijzigd, niet per ongeluk opnieuw geremapt
+
+
+def test_players_get_audio_source_id_column(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+
+    assert "audio_source_id" in cols
+
+
+def test_existing_player_audio_source_id_defaults_to_null(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    conn.execute(
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, "
+        "position, source_mode) VALUES (1, 'X', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera')"
+    )
+    conn.commit()
+
+    audio_source_id = conn.execute("SELECT audio_source_id FROM players WHERE id = 1").fetchone()[0]
+
+    assert audio_source_id is None

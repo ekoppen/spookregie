@@ -31,7 +31,7 @@ def save_media(conn, media_dir, data, filename, category):
     with open(os.path.join(media_dir, hash_), "wb") as f:
         f.write(data)
     conn.execute(
-        "INSERT OR REPLACE INTO media (hash, filename, category, uploaded_at) VALUES (?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO media (hash, filename, kind, uploaded_at) VALUES (?, ?, ?, ?)",
         (hash_, filename, category, str(time.time())),
     )
     conn.commit()
@@ -80,12 +80,12 @@ def get_media_audio_path(media_dir, hash_):
 def list_media(conn, category=None):
     if category is not None:
         rows = conn.execute(
-            "SELECT hash, filename, category, uploaded_at FROM media WHERE category = ? ORDER BY uploaded_at DESC",
+            "SELECT hash, filename, kind, uploaded_at FROM media WHERE kind = ? ORDER BY uploaded_at DESC",
             (category,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT hash, filename, category, uploaded_at FROM media ORDER BY uploaded_at DESC"
+            "SELECT hash, filename, kind, uploaded_at FROM media ORDER BY uploaded_at DESC"
         ).fetchall()
     return [
         {"hash": r[0], "filename": r[1], "category": r[2], "uploaded_at": r[3]}
