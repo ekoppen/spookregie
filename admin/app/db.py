@@ -134,6 +134,9 @@ def init_db(path):
     _ensure_column(conn, "mirror_config", "source_position", "TEXT NOT NULL DEFAULT '[0.5, 0.5]'")
     _ensure_column(conn, "outputs", "canvas_x", "REAL NOT NULL DEFAULT 0")
     _ensure_column(conn, "outputs", "canvas_y", "REAL NOT NULL DEFAULT 0")
+    _ensure_column(conn, "devices", "is_mirror", "INTEGER NOT NULL DEFAULT 1")
+    _ensure_column(conn, "devices", "is_camera", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "devices", "camera_stream_url", "TEXT")
     _tables_before_players_rename = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "scenes" in _tables_before_players_rename:
         _ensure_column(conn, "scenes", "is_root", "INTEGER NOT NULL DEFAULT 0")

@@ -1092,3 +1092,25 @@ def test_media_kind_migration_skips_rename_when_category_is_already_gone(tmp_pat
     cols = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
     assert "kind" in cols
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+
+
+def test_devices_get_role_and_camera_stream_url_columns(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(devices)")}
+
+    assert {"is_mirror", "is_camera", "camera_stream_url"} <= cols
+
+
+def test_existing_device_defaults_to_mirror_only(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    conn.execute(
+        "INSERT INTO devices (device_uuid, name, platform) VALUES ('abc-123', 'Oude MacBook', 'darwin')"
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT is_mirror, is_camera, camera_stream_url FROM devices WHERE device_uuid = 'abc-123'"
+    ).fetchone()
+
+    assert row == (1, 0, None)
