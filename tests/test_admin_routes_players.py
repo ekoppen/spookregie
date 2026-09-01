@@ -292,6 +292,51 @@ def test_create_player_with_explicit_source_id(tmp_path):
     assert created["source_id"] == other_source["id"]
 
 
+def test_create_player_with_audio_source_id(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+    audio_source = client.post("/api/sources", json={
+        "name": "Kraken", "kind": "audio", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+
+    created = client.post("/api/players", json={
+        **_PLAYER_PAYLOAD, "source_id": default_source["id"], "audio_source_id": audio_source["id"],
+    }).json()
+
+    assert created["audio_source_id"] == audio_source["id"]
+
+
+def test_create_player_rejects_audio_source_id_of_wrong_kind(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]  # camera_stream, geen audio
+
+    response = client.post("/api/players", json={
+        **_PLAYER_PAYLOAD, "source_id": default_source["id"], "audio_source_id": default_source["id"],
+    })
+
+    assert response.status_code == 400
+
+
+def test_create_player_rejects_source_id_of_audio_kind(tmp_path):
+    client, bridge = _client(tmp_path)
+    audio_source = client.post("/api/sources", json={
+        "name": "Kraken", "kind": "audio", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+
+    response = client.post("/api/players", json={**_PLAYER_PAYLOAD, "source_id": audio_source["id"]})
+
+    assert response.status_code == 400
+
+
+def test_create_player_without_audio_source_id_defaults_to_null(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+
+    created = client.post("/api/players", json={**_PLAYER_PAYLOAD, "source_id": default_source["id"]}).json()
+
+    assert created["audio_source_id"] is None
+
+
 def test_scene_color_round_trips(tmp_path):
     client, bridge = _client(tmp_path)
 

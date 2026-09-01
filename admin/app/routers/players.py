@@ -14,7 +14,8 @@ def _row_to_branch(row):
 _PLAYER_COLUMNS = (
     "id, name, enabled, source_mode, effect, params, overlay_hash, "
     "scale, position, canvas_width, canvas_height, source_scale, source_position, "
-    "is_root, canvas_x, canvas_y, color, source_id, playback_mode, repeat_while_ha_entity_id"
+    "is_root, canvas_x, canvas_y, color, source_id, playback_mode, repeat_while_ha_entity_id, "
+    "audio_source_id"
 )
 
 _DEFAULT_PLAYER = {
@@ -36,6 +37,7 @@ _DEFAULT_PLAYER = {
     "source_id": None,
     "playback_mode": "once",
     "repeat_while_ha_entity_id": None,
+    "audio_source_id": None,
 }
 
 
@@ -61,6 +63,7 @@ def _row_to_player(row):
         "source_id": row[17],
         "playback_mode": row[18],
         "repeat_while_ha_entity_id": row[19],
+        "audio_source_id": row[20],
     }
 
 
@@ -94,6 +97,20 @@ def _resolve_source_id(db, source_id):
     return default_source[0]
 
 
+def _validate_source_kind(db, source_id, allowed_kinds, field_label):
+    """400 als source_id niet bestaat, of niet één van de toegestane kinds
+    heeft voor dit veld -- source_id (video) en audio_source_id (audio)
+    delen dezelfde sources-tabel maar mogen elkaars kinds niet gebruiken."""
+    row = db.execute("SELECT kind FROM sources WHERE id = ?", (source_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=400, detail=f"{field_label} verwijst naar een onbestaande source")
+    if row[0] not in allowed_kinds:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_label} moet een source van kind {sorted(allowed_kinds)} zijn, niet {row[0]!r}",
+        )
+
+
 @router.get("/api/players")
 def list_players_route(request: Request):
     return _list_players(request.app.state.db)
@@ -122,6 +139,9 @@ async def create_player_route(request: Request):
         fields["is_root"] = True
     canvas_width, canvas_height = _canvas_columns(fields)
     fields["source_id"] = _resolve_source_id(db, fields["source_id"])
+    _validate_source_kind(db, fields["source_id"], {"camera_stream", "static_image", "video_loop"}, "source_id")
+    if fields["audio_source_id"] is not None:
+        _validate_source_kind(db, fields["audio_source_id"], {"audio"}, "audio_source_id")
     cursor = db.execute(
         # ponytail: order_index blijft NOT NULL in het schema (legacy
         # migratiekolom) maar wordt door de graaf-app niet meer gebruikt
@@ -130,8 +150,9 @@ async def create_player_route(request: Request):
         """INSERT INTO players
              (name, order_index, enabled, source_mode, effect, params, overlay_hash,
               scale, position, canvas_width, canvas_height, source_scale, source_position,
-              is_root, canvas_x, canvas_y, color, source_id, playback_mode, repeat_while_ha_entity_id)
-           VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              is_root, canvas_x, canvas_y, color, source_id, playback_mode, repeat_while_ha_entity_id,
+              audio_source_id)
+           VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             fields["name"], int(fields["enabled"]), fields["source_mode"],
             fields["effect"], json.dumps(fields["params"]), fields["overlay_hash"],
@@ -139,7 +160,7 @@ async def create_player_route(request: Request):
             fields["source_scale"], json.dumps(fields["source_position"]),
             int(fields["is_root"]), fields["canvas_x"], fields["canvas_y"],
             fields["color"], fields["source_id"], fields["playback_mode"],
-            fields["repeat_while_ha_entity_id"],
+            fields["repeat_while_ha_entity_id"], fields["audio_source_id"],
         ),
     )
     if fields["is_root"]:
@@ -161,18 +182,22 @@ async def update_player_route(player_id: int, request: Request):
     fields = _fields_from_body(body)
     canvas_width, canvas_height = _canvas_columns(fields)
     fields["source_id"] = _resolve_source_id(db, fields["source_id"])
+    _validate_source_kind(db, fields["source_id"], {"camera_stream", "static_image", "video_loop"}, "source_id")
+    if fields["audio_source_id"] is not None:
+        _validate_source_kind(db, fields["audio_source_id"], {"audio"}, "audio_source_id")
     db.execute(
         """UPDATE players SET name=?, enabled=?, source_mode=?, effect=?, params=?, overlay_hash=?,
              scale=?, position=?, canvas_width=?, canvas_height=?, source_scale=?, source_position=?,
              is_root=?, canvas_x=?, canvas_y=?, color=?, source_id=?, playback_mode=?,
-             repeat_while_ha_entity_id=? WHERE id=?""",
+             repeat_while_ha_entity_id=?, audio_source_id=? WHERE id=?""",
         (
             fields["name"], int(fields["enabled"]), fields["source_mode"], fields["effect"],
             json.dumps(fields["params"]), fields["overlay_hash"], fields["scale"],
             json.dumps(fields["position"]), canvas_width, canvas_height, fields["source_scale"],
             json.dumps(fields["source_position"]), int(fields["is_root"]),
             fields["canvas_x"], fields["canvas_y"], fields["color"], fields["source_id"],
-            fields["playback_mode"], fields["repeat_while_ha_entity_id"], player_id,
+            fields["playback_mode"], fields["repeat_while_ha_entity_id"], fields["audio_source_id"],
+            player_id,
         ),
     )
     if fields["is_root"]:

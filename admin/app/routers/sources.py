@@ -88,6 +88,7 @@ def delete_source_route(source_id: int, request: Request):
     has_players = db.execute("SELECT 1 FROM players WHERE source_id = ? LIMIT 1", (source_id,)).fetchone()
     if has_players is not None:
         raise HTTPException(status_code=400, detail="Source heeft nog players -- verplaats of verwijder die eerst")
+    db.execute("UPDATE players SET audio_source_id = NULL WHERE audio_source_id = ?", (source_id,))
     db.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     db.commit()
     publish_graph(db, request.app.state.bridge)
