@@ -125,6 +125,18 @@ EOF
 elif [ "$PLATFORM" = "Linux" ]; then
   echo "-- Linux: systemd-services installeren (vereist sudo) --"
 
+  # opencv-python (mirror_node's cv2, met echt GUI-venster voor de
+  # beamer-output -- geen -headless build, zie mirror_node/requirements.txt)
+  # linkt bij import al tegen libGL, ook vóórdat er een venster geopend
+  # wordt. Op een kale Debian/Raspberry Pi OS-install ontbreekt die vaak,
+  # wat de service in een crashloop zet (ImportError: libGL.so.1) --
+  # zonder deze regel moest dat handmatig achteraf hersteld worden.
+  # `apt-get install` is zelf al idempotent (no-op als 'ie al aanwezig is),
+  # dus geen aparte "is 'ie al geinstalleerd"-check nodig.
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update -qq && sudo apt-get install -y libgl1
+  fi
+
   # ponytail: these are system-level units (installed under
   # /etc/systemd/system/ via sudo) which run as root unless told
   # otherwise -- but EnvironmentFile points at $ENV_FILE, which lives in
