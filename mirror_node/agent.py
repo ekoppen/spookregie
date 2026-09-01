@@ -57,6 +57,31 @@ def _current_git_sha(cwd, logger=None):
     return out if code == 0 else None
 
 
+def _pip_install(repo_dir, logger=None):
+    """Herinstalleert mirror_node/requirements.txt in de venv na een
+    succesvolle pull -- zonder dit herstart de mirror-service in een
+    ImportError zodra een update een nieuwe/gewijzigde dependency
+    toevoegt, en crash-loopt hij (Restart=always/KeepAlive) voor altijd.
+    Zelfde timeout/geen-rollback-vorm als _git: bij mislukken loggen en
+    stoppen (geen herstart in een kapotte dependency-staat), volgende
+    cyclus probeert opnieuw."""
+    pip = os.path.join(repo_dir, ".venv", "bin", "pip")
+    requirements = os.path.join(repo_dir, "mirror_node", "requirements.txt")
+    try:
+        result = subprocess.run(
+            [pip, "install", "-q", "-r", requirements], timeout=120, capture_output=True, text=True
+        )
+    except subprocess.TimeoutExpired:
+        if logger:
+            logger.warning("pip install timed out na 120s")
+        return False
+    if result.returncode != 0:
+        if logger:
+            logger.error("pip install mislukt: %s", result.stderr.strip())
+        return False
+    return True
+
+
 def _restart_mirror_node(logger):
     if not MIRROR_RESTART_COMMAND:
         logger.warning("MIRROR_RESTART_COMMAND niet gezet, kan mirror_node niet herstarten na update")
@@ -94,6 +119,9 @@ def check_and_apply_update(repo_dir, logger):
     code, _out, err = _git(["pull", "--ff-only"], repo_dir, logger)
     if code != 0:
         logger.error("git pull mislukt: %s", err)
+        return
+    if not _pip_install(repo_dir, logger):
+        logger.error("pip install mislukt na pull, herstart overgeslagen (blijf op oude dependencies draaien)")
         return
     _restart_mirror_node(logger)
 
