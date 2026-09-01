@@ -5,7 +5,7 @@ from admin.app.graph_publish import publish_graph
 router = APIRouter()
 
 _SOURCE_COLUMNS = "id, name, kind, value, canvas_x, canvas_y"
-_VALID_KINDS = {"camera_stream", "static_image"}
+_VALID_KINDS = {"camera_stream", "static_image", "video_loop", "audio"}
 
 
 def _row_to_source(row):

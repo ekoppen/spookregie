@@ -147,3 +147,25 @@ def test_source_routes_require_auth(tmp_path):
     client = TestClient(app)
 
     assert client.get("/api/sources").status_code == 401
+
+
+def test_create_source_accepts_video_loop_kind(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.post("/api/sources", json={
+        "name": "Achtergrondloop", "kind": "video_loop", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "video_loop"
+
+
+def test_create_source_accepts_audio_kind(tmp_path):
+    client, bridge = _client(tmp_path)
+
+    response = client.post("/api/sources", json={
+        "name": "Achtergrondgeluid", "kind": "audio", "value": "b" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "audio"
