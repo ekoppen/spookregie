@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listDevices, updateDevice, deleteDevice } from "../api/devices";
 import { listOutputs } from "../api/outputs";
 import { getNodes } from "../api/nodes";
+import { createSource } from "../api/sources";
 import { ApiError } from "../api/client";
 import type { Device, Output, NodeStatusMap } from "../types";
 import "./DevicesPage.css";
@@ -62,6 +63,25 @@ export default function DevicesPage() {
     }
   }
 
+  async function handleCreateSourceFromDevice(device: Device) {
+    if (!device.camera_stream_url) return;
+    setSaving(true);
+    try {
+      await createSource({
+        name: `${device.name} camera`,
+        kind: "camera_stream",
+        value: device.camera_stream_url,
+        canvas_x: 0,
+        canvas_y: 0,
+      });
+      showNotice("Source aangemaakt.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Aanmaken is mislukt.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleDelete(id: number) {
     if (!window.confirm("Dit apparaat uit de lijst verwijderen? Het meldt zich vanzelf opnieuw als het weer een checkin stuurt.")) return;
     setSaving(true);
@@ -102,37 +122,57 @@ export default function DevicesPage() {
           const draft = drafts[device.id] ?? { name: device.name, output_id: device.output_id };
           const online = nodes[device.device_uuid]?.status === "online";
           return (
-            <div className="devices-row" key={device.id}>
-              <span className={`devices-status-badge devices-status-badge--${online ? "online" : "offline"}`}>
-                {online ? "Online" : "Offline"}
-              </span>
-              <input
-                className="devices-field__input"
-                type="text"
-                value={draft.name}
-                onChange={(e) => updateDraft(device.id, { name: e.target.value })}
-              />
-              <span className="devices-field__meta">{device.platform}</span>
-              <span className="devices-field__meta">{device.git_sha ? device.git_sha.slice(0, 7) : "—"}</span>
-              <span className="devices-field__meta">{device.last_seen_at ?? "—"}</span>
-              <select
-                className="devices-field__select"
-                value={draft.output_id ?? ""}
-                onChange={(e) => updateDraft(device.id, { output_id: e.target.value ? Number(e.target.value) : null })}
-              >
-                <option value="">Geen output</option>
-                {outputs.map((output) => (
-                  <option key={output.id} value={output.id}>
-                    {output.name}
-                  </option>
-                ))}
-              </select>
-              <button type="button" onClick={() => handleSave(device.id)} disabled={saving}>
-                Opslaan
-              </button>
-              <button type="button" onClick={() => handleDelete(device.id)} disabled={saving}>
-                Verwijderen
-              </button>
+            <div key={device.id}>
+              <div className="devices-row">
+                <span className={`devices-status-badge devices-status-badge--${online ? "online" : "offline"}`}>
+                  {online ? "Online" : "Offline"}
+                </span>
+                <input
+                  className="devices-field__input"
+                  type="text"
+                  value={draft.name}
+                  onChange={(e) => updateDraft(device.id, { name: e.target.value })}
+                />
+                <span className="devices-field__meta">{device.platform}</span>
+                <span className="devices-field__meta">{device.git_sha ? device.git_sha.slice(0, 7) : "—"}</span>
+                <span className="devices-field__meta">{device.last_seen_at ?? "—"}</span>
+                {device.is_mirror ? (
+                  <select
+                    className="devices-field__select"
+                    value={draft.output_id ?? ""}
+                    onChange={(e) => updateDraft(device.id, { output_id: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">Geen output</option>
+                    {outputs.map((output) => (
+                      <option key={output.id} value={output.id}>
+                        {output.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="devices-field__meta">— (camera-only)</span>
+                )}
+                <button type="button" onClick={() => handleSave(device.id)} disabled={saving}>
+                  Opslaan
+                </button>
+                <button type="button" onClick={() => handleDelete(device.id)} disabled={saving}>
+                  Verwijderen
+                </button>
+              </div>
+              {device.is_camera && (
+                <div className="devices-camera-row">
+                  <span className="devices-camera-row__url">
+                    {device.camera_stream_url ?? "Nog geen stream-URL ontvangen"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateSourceFromDevice(device)}
+                    disabled={saving || !device.camera_stream_url}
+                  >
+                    Maak hiervan een source
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

@@ -102,3 +102,16 @@
   background: rgba(231, 76, 60, 0.15);
   color: var(--alarm);
 }
+
+.devices-camera-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0 0.3rem 2.6rem;
+  font-size: 0.8rem;
+}
+
+.devices-camera-row__url {
+  font-family: monospace;
+  color: var(--ash);
+}
