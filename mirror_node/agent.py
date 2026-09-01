@@ -166,7 +166,10 @@ def main():
         git_sha = _current_git_sha(REPO_DIR) or "onbekend"
         camera_stream_url = None
         if IS_CAMERA:
-            camera_stream_url = f"http://{_detect_local_ip(MQTT_HOST)}:{CAMERA_SERVER_PORT}/stream"
+            try:
+                camera_stream_url = f"http://{_detect_local_ip(MQTT_HOST)}:{CAMERA_SERVER_PORT}/stream"
+            except OSError as exc:
+                logger.warning("kon eigen LAN-IP niet bepalen, camera_stream_url dit keer overgeslagen: %s", exc)
         payload = build_checkin_payload(
             name=socket.gethostname(),
             platform=sys.platform,

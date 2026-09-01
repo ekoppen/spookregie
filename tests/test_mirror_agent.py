@@ -41,7 +41,7 @@ def test_build_checkin_payload_includes_camera_role():
 def test_detect_local_ip_uses_udp_getsockname(monkeypatch):
     class FakeSocket:
         def __init__(self, *args, **kwargs):
-            pass
+            self.connected_to = None
 
         def __enter__(self):
             return self
@@ -55,9 +55,19 @@ def test_detect_local_ip_uses_udp_getsockname(monkeypatch):
         def getsockname(self):
             return ("192.168.178.80", 54321)
 
-    monkeypatch.setattr(agent_module.socket, "socket", FakeSocket)
+    created = {}
 
-    assert agent_module._detect_local_ip("10.10.107.10") == "192.168.178.80"
+    def fake_socket_factory(*args, **kwargs):
+        sock = FakeSocket(*args, **kwargs)
+        created["sock"] = sock
+        return sock
+
+    monkeypatch.setattr(agent_module.socket, "socket", fake_socket_factory)
+
+    result = agent_module._detect_local_ip("10.10.107.10")
+
+    assert result == "192.168.178.80"
+    assert created["sock"].connected_to == ("10.10.107.10", 1)
 
 
 def test_needs_update_true_when_shas_differ():
