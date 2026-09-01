@@ -147,6 +147,11 @@ def init_db(path):
     _migrate_sources(conn)
     _migrate_scene_edges_to_triggers(conn)
     _migrate_scenes_to_players(conn)
+    # Onvoorwaardelijk (en dus NIET binnen _migrate_scenes_to_players, die
+    # PRAGMA-gated is op >=3 en op elke bestaande deploy meteen terugkeert):
+    # een simpele nullable kolom hoort in de _ensure_column-stijl thuis, maar
+    # kan pas hier omdat 'players' pas hierboven gegarandeerd bestaat.
+    _ensure_column(conn, "players", "audio_source_id", "INTEGER")
     _migrate_player_branches(conn)
     _migrate_triggers_to_branches(conn)
     _migrate_output_canvas_position(conn)
@@ -401,7 +406,6 @@ def _migrate_scenes_to_players(conn):
     _ensure_column(conn, "players", "source_id", "INTEGER")
     _ensure_column(conn, "players", "playback_mode", "TEXT NOT NULL DEFAULT 'once'")
     _ensure_column(conn, "players", "repeat_while_ha_entity_id", "TEXT")
-    _ensure_column(conn, "players", "audio_source_id", "INTEGER")
     default_source = conn.execute("SELECT id FROM sources ORDER BY id LIMIT 1").fetchone()
     if default_source is not None:
         conn.execute("UPDATE players SET source_id = ? WHERE source_id IS NULL", (default_source[0],))

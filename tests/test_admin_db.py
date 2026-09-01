@@ -858,6 +858,129 @@ def test_full_migration_chain_from_pre_plan_production_state(tmp_path):
     assert trigger_rows == [(branch1, 2, "motion"), (branch2, 1, "always")]
 
 
+# Schema van 'players' zoals een echte deployment die had op user_version=7
+# (dus vlak vóór deze media-library-feature): al hernoemd vanaf scenes, al
+# met source_id/playback_mode/repeat_while_ha_entity_id, maar nog zónder
+# audio_source_id. Gebruikt om te bewijzen dat de audio_source_id-kolom ook
+# op een BESTAANDE deploy toegevoegd wordt -- op v7 slaat
+# _migrate_scenes_to_players (PRAGMA-gated op >=3) volledig over.
+_V7_PLAYERS_DDL = """CREATE TABLE players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    source_mode TEXT NOT NULL DEFAULT 'camera',
+    effect TEXT NOT NULL DEFAULT 'xray',
+    params TEXT NOT NULL DEFAULT '{}',
+    overlay_hash TEXT,
+    scale REAL NOT NULL DEFAULT 1.0,
+    position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+    canvas_width INTEGER,
+    canvas_height INTEGER,
+    source_scale REAL NOT NULL DEFAULT 1.0,
+    source_position TEXT NOT NULL DEFAULT '[0.5, 0.5]',
+    trigger_type TEXT NOT NULL DEFAULT 'always',
+    trigger_from TEXT,
+    trigger_until TEXT,
+    is_root INTEGER NOT NULL DEFAULT 0,
+    canvas_x REAL NOT NULL DEFAULT 0,
+    canvas_y REAL NOT NULL DEFAULT 0,
+    output_id INTEGER,
+    color TEXT,
+    source_id INTEGER,
+    playback_mode TEXT NOT NULL DEFAULT 'once',
+    repeat_while_ha_entity_id TEXT
+)"""
+
+
+def _seed_user_version_7_db(path):
+    """Zet een DB neer zoals elke draaiende deployment 'm heeft vlak vóór
+    deze feature: user_version=7, players al hernoemd (zonder
+    audio_source_id), media nog met de oude 'category'-kolomnaam. De rest
+    van de tabellen maakt init_db's onvoorwaardelijke CREATE TABLE IF NOT
+    EXISTS-blok zelf aan."""
+    raw = sqlite3.connect(path)
+    raw.execute(_V7_PLAYERS_DDL)
+    raw.execute(
+        """CREATE TABLE media (
+            hash TEXT PRIMARY KEY, filename TEXT NOT NULL,
+            category TEXT NOT NULL, uploaded_at TEXT NOT NULL
+        )"""
+    )
+    raw.execute(
+        """CREATE TABLE sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'camera_stream',
+            value TEXT NOT NULL DEFAULT '',
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0
+        )"""
+    )
+    # triggers zoals ze er ná de v5-hernoeming uitzien (from_branch_id/
+    # to_player_id) -- staat niet in init_db's onvoorwaardelijke blok.
+    raw.execute(
+        """CREATE TABLE triggers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_branch_id INTEGER NOT NULL,
+            to_player_id INTEGER,
+            kind TEXT,
+            schedule_from TEXT,
+            schedule_until TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            ha_entity_id TEXT,
+            canvas_x REAL NOT NULL DEFAULT 0,
+            canvas_y REAL NOT NULL DEFAULT 0,
+            name TEXT,
+            color TEXT
+        )"""
+    )
+    raw.execute("INSERT INTO sources (id, name, kind, value) VALUES (1, 'Cam', 'camera_stream', 'rtsp://cam')")
+    raw.execute(
+        "INSERT INTO players (id, name, order_index, effect, params, overlay_hash, scale, position, "
+        "source_mode, trigger_type, is_root, source_id) VALUES "
+        "(1, 'Basis', 0, 'xray', '{}', NULL, 1.0, '[0.5,0.5]', 'camera', 'always', 1, 1)"
+    )
+    raw.execute("PRAGMA user_version = 7")
+    raw.commit()
+    raw.close()
+
+
+def test_existing_v7_deployment_gets_audio_source_id_column(tmp_path):
+    """Regressie voor Kritiek 1: audio_source_id werd toegevoegd binnen
+    _migrate_scenes_to_players, die op elke bestaande deploy (v7) meteen
+    terugkeert. De kolom kwam er dus alleen op een verse installatie, en
+    elke upgrade crashte daarna in _list_players met 'no such column'."""
+    path = str(tmp_path / "test.db")
+    _seed_user_version_7_db(path)
+
+    conn = init_db(path)
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(players)")}
+    assert "audio_source_id" in cols
+
+
+def test_upgraded_v7_deployment_can_still_publish_its_graph(tmp_path):
+    """Integratiekant van dezelfde regressie: _list_players/publish_graph
+    zijn wat er meteen ná init_db op elke CRUD-route én bij elke
+    MQTT-reconnect draait. Zonder de kolom is dit een 500 op de hele UI."""
+    from admin.app.graph_publish import publish_graph
+
+    path = str(tmp_path / "test.db")
+    _seed_user_version_7_db(path)
+    conn = init_db(path)
+
+    published = []
+
+    class _FakeBridge:
+        def publish_mirror_graph(self, payload):
+            published.append(payload)
+
+    publish_graph(conn, _FakeBridge())
+
+    assert published[0]["players"][0]["audio_source_id"] is None
+
+
 def test_devices_table_starts_empty(tmp_path):
     conn = init_db(str(tmp_path / "admin.db"))
     assert conn.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 0
