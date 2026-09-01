@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   ReactFlow,
@@ -95,7 +96,12 @@ function NodeContextMenu({
     };
   }, [onClose]);
 
-  return (
+  // Portal naar document.body: React Flow's pane heeft een CSS transform
+  // (voor pan/zoom), en position:fixed op een nakomeling van een
+  // getransformeerd element rekent niet meer t.o.v. de echte viewport maar
+  // t.o.v. die getransformeerde ouder -- zonder portal staat het menu dus
+  // steeds verder van de cursor af naarmate er meer gepand/gezoomd is.
+  return createPortal(
     <div
       className="node-context-menu nodrag"
       style={{ position: "fixed", left: x, top: y }}
@@ -114,7 +120,8 @@ function NodeContextMenu({
           {item.label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
