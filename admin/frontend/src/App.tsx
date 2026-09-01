@@ -11,6 +11,7 @@ import SettingsPage from "./pages/SettingsPage";
 import OutputsPage from "./pages/OutputsPage";
 import SourcesPage from "./pages/SourcesPage";
 import DevicesPage from "./pages/DevicesPage";
+import MediaPage from "./pages/MediaPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, checking } = useAuth();
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/outputs" element={<OutputsPage />} />
           <Route path="/sources" element={<SourcesPage />} />
           <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/media" element={<MediaPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

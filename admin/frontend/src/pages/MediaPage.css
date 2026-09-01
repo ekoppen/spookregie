@@ -1,0 +1,47 @@
+.media-page {
+  padding: 1.5rem 2rem;
+  color: var(--bone);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.media-page__header {
+  margin-bottom: 1.5rem;
+}
+
+.media-page__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ash);
+  margin: 0 0 0.3rem;
+}
+
+.media-page__eyebrow-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ember);
+}
+
+.media-page__heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.media-page__hint {
+  color: var(--ash);
+  max-width: 60ch;
+  margin: 0;
+}
+
+.media-page__section {
+  margin-bottom: 2rem;
+}
+
+.media-page__section-heading {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
