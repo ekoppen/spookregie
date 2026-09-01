@@ -6,7 +6,7 @@ import "./SourcesPage.css";
 
 interface Draft {
   name: string;
-  kind: "camera_stream" | "static_image";
+  kind: Source["kind"];
   value: string;
 }
 

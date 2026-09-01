@@ -1,15 +1,15 @@
 import { apiFetch } from "./client";
 import type { MediaItem } from "../types";
 
-export function listMedia(category?: string): Promise<MediaItem[]> {
-  const query = category ? `?category=${encodeURIComponent(category)}` : "";
+export function listMedia(kind?: string): Promise<MediaItem[]> {
+  const query = kind ? `?kind=${encodeURIComponent(kind)}` : "";
   return apiFetch<MediaItem[]>(`/api/media${query}`);
 }
 
-export async function uploadMedia(file: File, category: string): Promise<MediaItem> {
+export async function uploadMedia(file: File, kind: string): Promise<MediaItem> {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("category", category);
+  formData.append("kind", kind);
   const response = await fetch("/api/media", {
     method: "POST",
     credentials: "include",

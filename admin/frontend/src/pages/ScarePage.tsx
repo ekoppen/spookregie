@@ -104,7 +104,7 @@ export default function ScarePage() {
       <section className="scare-panel">
         <p className="scare-panel__eyebrow">Geluidsbibliotheek</p>
         <MediaLibrary
-          category="scare_audio"
+          kind="audio"
           selectionMode="multiple"
           selected={enabledHashes}
           onSelectionChange={setEnabledHashes}

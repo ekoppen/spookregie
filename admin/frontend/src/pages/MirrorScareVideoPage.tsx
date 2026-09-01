@@ -52,7 +52,7 @@ export default function MirrorScareVideoPage() {
           het live beeld (inclusief geluid, indien aanwezig).
         </p>
         <MediaLibrary
-          category="mirror_scare_video"
+          kind="video"
           selectionMode="multiple"
           selected={enabledHashes}
           onSelectionChange={setEnabledHashes}

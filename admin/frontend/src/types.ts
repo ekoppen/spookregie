@@ -16,6 +16,7 @@ export interface Player {
   canvas_y: number;
   color: string | null;
   source_id: number | null;
+  audio_source_id: number | null;
   playback_mode: "once" | "repeat_once" | "repeat_while";
   repeat_while_ha_entity_id: string | null;
 }
@@ -29,7 +30,7 @@ export interface PlayerBranch {
 export interface Source {
   id: number;
   name: string;
-  kind: "camera_stream" | "static_image";
+  kind: "camera_stream" | "static_image" | "video_loop" | "audio";
   value: string;
   canvas_x: number;
   canvas_y: number;
@@ -81,7 +82,7 @@ export interface ScareConfig {
 export interface MediaItem {
   hash: string;
   filename: string;
-  category: "mirror_overlay" | "scare_audio" | "mirror_scare_video";
+  kind: "image" | "audio" | "video";
   uploaded_at: string;
 }
 

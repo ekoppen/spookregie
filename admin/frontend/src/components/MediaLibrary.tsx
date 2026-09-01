@@ -4,29 +4,29 @@ import type { MediaItem } from "../types";
 import "./MediaLibrary.css";
 
 interface Props {
-  category: "mirror_overlay" | "scare_audio" | "mirror_scare_video";
+  kind: "image" | "audio" | "video";
   selected: string[];
   onSelectionChange: (hashes: string[]) => void;
   selectionMode: "single" | "multiple";
 }
 
-const CATEGORY_COPY: Record<Props["category"], { empty: string; upload: string }> = {
-  mirror_overlay: {
-    empty: "Nog geen overlays geüpload.",
-    upload: "Overlay toevoegen",
+const KIND_COPY: Record<Props["kind"], { empty: string; upload: string }> = {
+  image: {
+    empty: "Nog geen afbeeldingen geüpload.",
+    upload: "Afbeelding toevoegen",
   },
-  scare_audio: {
+  audio: {
     empty: "Nog geen geluiden geüpload.",
     upload: "Geluid toevoegen",
   },
-  mirror_scare_video: {
-    empty: "Nog geen scare-video's geüpload.",
+  video: {
+    empty: "Nog geen video's geüpload.",
     upload: "Video toevoegen",
   },
 };
 
-function CategoryIcon({ category }: { category: Props["category"] }) {
-  if (category === "mirror_overlay") {
+function KindIcon({ kind }: { kind: Props["kind"] }) {
+  if (kind === "image") {
     return (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
         <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -35,7 +35,7 @@ function CategoryIcon({ category }: { category: Props["category"] }) {
       </svg>
     );
   }
-  if (category === "mirror_scare_video") {
+  if (kind === "video") {
     return (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
         <rect x="3" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -52,14 +52,14 @@ function CategoryIcon({ category }: { category: Props["category"] }) {
   );
 }
 
-export default function MediaLibrary({ category, selected, onSelectionChange, selectionMode }: Props) {
+export default function MediaLibrary({ kind, selected, onSelectionChange, selectionMode }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const copy = CATEGORY_COPY[category];
+  const copy = KIND_COPY[kind];
 
   function refresh() {
-    listMedia(category)
+    listMedia(kind)
       .then((result) => {
         setItems(result);
         setError(null);
@@ -67,14 +67,14 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
       .catch(() => setError("Bibliotheek kon niet worden geladen."));
   }
 
-  useEffect(refresh, [category]);
+  useEffect(refresh, [kind]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
-      await uploadMedia(file, category);
+      await uploadMedia(file, kind);
       setError(null);
       refresh();
     } catch (err) {
@@ -141,13 +141,13 @@ export default function MediaLibrary({ category, selected, onSelectionChange, se
                   <input
                     className="media-card__input"
                     type={selectionMode === "single" ? "radio" : "checkbox"}
-                    name={selectionMode === "single" ? `media-${category}` : undefined}
+                    name={selectionMode === "single" ? `media-${kind}` : undefined}
                     checked={isSelected}
                     onChange={() => toggleSelect(item.hash)}
                   />
                   <span className="media-card__led" aria-hidden="true" />
                   <span className="media-card__icon">
-                    <CategoryIcon category={category} />
+                    <KindIcon kind={kind} />
                   </span>
                   <span className="media-card__name" title={item.filename}>
                     {item.filename}

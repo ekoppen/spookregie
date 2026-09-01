@@ -48,6 +48,7 @@ const PLAYER: Player = {
   canvas_y: 0,
   color: null,
   source_id: null,
+  audio_source_id: null,
   playback_mode: "once",
   repeat_while_ha_entity_id: null,
 };

@@ -46,6 +46,7 @@ const EMPTY_DRAFT: PlayerDraft = {
   canvas_y: 0,
   color: null,
   source_id: null,
+  audio_source_id: null,
   playback_mode: "once",
   repeat_while_ha_entity_id: null,
 };
@@ -320,7 +321,7 @@ export default function PlayerWizardModal({ playerId, initialStep, onClose, onSa
               </div>
               <p className="player-modal__label">Overlay</p>
               <MediaLibrary
-                category="mirror_overlay"
+                kind="image"
                 selectionMode="single"
                 selected={draft.overlay_hash ? [draft.overlay_hash] : []}
                 onSelectionChange={(hashes) => update({ overlay_hash: hashes[0] ?? null })}
