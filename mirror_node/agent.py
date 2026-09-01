@@ -34,13 +34,24 @@ def needs_update(local_sha, remote_sha):
     return local_sha != remote_sha
 
 
-def _git(args, cwd):
-    result = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True)
+def _git(args, cwd, logger=None):
+    try:
+        result = subprocess.run(
+            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=30
+        )
+    except subprocess.TimeoutExpired:
+        # Geen rollback/crash -- zelfde no-rollback-gedrag als een falende
+        # git-opdracht: loggen en de volgende cyclus opnieuw proberen. Zonder
+        # deze timeout blokkeert een hangende remote de hele main-loop,
+        # inclusief de periodieke checkin (zie commit 3938d40 voor precedent).
+        if logger:
+            logger.warning("git %s timed out na 30s", " ".join(args))
+        return 1, "", "timeout"
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
-def _current_git_sha(cwd):
-    code, out, _err = _git(["rev-parse", "HEAD"], cwd)
+def _current_git_sha(cwd, logger=None):
+    code, out, _err = _git(["rev-parse", "HEAD"], cwd, logger)
     return out if code == 0 else None
 
 
@@ -54,8 +65,8 @@ def _restart_mirror_node(logger):
         # launchd's $(id -u) is al door de heredoc geëxpandeerd op
         # installatiemoment) -- .split() + een lijst voorkomt command-
         # injection via een env-var, ook al is de bron hier vertrouwd.
-        subprocess.run(MIRROR_RESTART_COMMAND.split(), check=True)
-    except subprocess.CalledProcessError as exc:
+        subprocess.run(MIRROR_RESTART_COMMAND.split(), check=True, timeout=10)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         # Geen rollback (bewuste keuze, zie spec) -- gewoon loggen en de
         # volgende update-cyclus opnieuw proberen.
         logger.error("Herstarten van mirror_node mislukt: %s", exc)
@@ -66,19 +77,19 @@ def check_and_apply_update(repo_dir, logger):
     main, pull + herstart bij verschil. Geen rollback bij een falende
     herstart -- de volgende cyclus (interval of MQTT-duw) probeert het
     gewoon opnieuw."""
-    code, _out, err = _git(["fetch", "origin", "main"], repo_dir)
+    code, _out, err = _git(["fetch", "origin", "main"], repo_dir, logger)
     if code != 0:
         logger.warning("git fetch mislukt: %s", err)
         return
-    local_sha = _current_git_sha(repo_dir)
-    code, remote_sha, err = _git(["rev-parse", "origin/main"], repo_dir)
+    local_sha = _current_git_sha(repo_dir, logger)
+    code, remote_sha, err = _git(["rev-parse", "origin/main"], repo_dir, logger)
     if code != 0 or not remote_sha:
         logger.warning("kon remote HEAD niet bepalen: %s", err)
         return
     if not needs_update(local_sha, remote_sha):
         return
     logger.info("nieuwe commit gevonden (%s -> %s), pull + herstart", local_sha, remote_sha)
-    code, _out, err = _git(["pull", "--ff-only"], repo_dir)
+    code, _out, err = _git(["pull", "--ff-only"], repo_dir, logger)
     if code != 0:
         logger.error("git pull mislukt: %s", err)
         return
