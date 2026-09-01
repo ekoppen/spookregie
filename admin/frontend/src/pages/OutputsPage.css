@@ -53,13 +53,13 @@
 
 .outputs-row {
   display: grid;
-  grid-template-columns: 1fr 2fr auto auto;
+  grid-template-columns: 1fr auto auto;
   gap: 0.6rem;
   align-items: center;
 }
 
 .outputs-row--new {
-  grid-template-columns: 1fr 2fr auto;
+  grid-template-columns: 1fr auto;
   border-top: 1px dashed var(--panel-edge);
   padding-top: 0.75rem;
 }
