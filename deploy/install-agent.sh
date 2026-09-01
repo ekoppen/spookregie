@@ -19,6 +19,8 @@ fi
 python3 -m venv "$REPO_DIR/.venv"
 "$REPO_DIR/.venv/bin/pip" install -q -r "$REPO_DIR/mirror_node/requirements.txt"
 
+PLATFORM="$(uname)"
+
 mkdir -p "$(dirname "$ENV_FILE")"
 chmod 700 "$(dirname "$ENV_FILE")"
 if [ ! -f "$ENV_FILE" ]; then
@@ -41,13 +43,29 @@ MQTT_TOPIC_PREFIX=$mqtt_topic_prefix
 BACKEND_URL=$backend_url
 SPOOKREGIE_REPO_DIR=$REPO_DIR
 EOF
+
+  # mirror_node opent een echt GUI-venster (cv2, geen -headless build) voor
+  # de beamer-output -- dat venster heeft een draaiende desktop-/X-sessie
+  # nodig om naartoe te tekenen. Op macOS regelt launchd dit vanzelf (native
+  # Cocoa-venster, geen DISPLAY nodig); op Linux draait de service als
+  # systemd system-unit, die zonder deze twee variabelen geen idee heeft
+  # welke X-sessie te gebruiken (Qt-fout "Could not load ... xcb").
+  if [ "$PLATFORM" = "Linux" ]; then
+    read -rp "DISPLAY van de desktop-sessie met de beamer eraan [:0]: " display
+    display="${display:-:0}"
+    read -rp "XAUTHORITY-pad van die sessie [\$HOME/.Xauthority]: " xauthority
+    xauthority="${xauthority:-$HOME/.Xauthority}"
+    cat >> "$ENV_FILE" <<EOF
+DISPLAY=$display
+XAUTHORITY=$xauthority
+EOF
+  fi
+
   chmod 600 "$ENV_FILE"
   echo "Configuratie opgeslagen in $ENV_FILE"
 else
   echo "Configuratiebestand bestaat al op $ENV_FILE, sla vragen over."
 fi
-
-PLATFORM="$(uname)"
 
 if [ "$PLATFORM" = "Darwin" ]; then
   echo "-- macOS: LaunchAgents installeren --"
