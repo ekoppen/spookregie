@@ -29,7 +29,7 @@
 
 ---
 
-### Taak 1: DB-migratie — `media.category` → `kind`, `players.audio_source_id`
+### Task 1: DB-migratie — `media.category` → `kind`, `players.audio_source_id`
 
 **Files:**
 - Modify: `admin/app/db.py`
@@ -179,7 +179,7 @@ git commit -m "feat: migratie media.category->kind en players.audio_source_id"
 
 ---
 
-### Taak 2: Backend `media.py`/`routers/media.py` — `category` → `kind`
+### Task 2: Backend `media.py`/`routers/media.py` — `category` → `kind`
 
 **Files:**
 - Modify: `admin/app/media.py`
@@ -314,7 +314,7 @@ git commit -m "feat: media-opslag van category naar algemeen kind-veld (image/au
 
 ---
 
-### Taak 3: Backend `sources.py` — nieuwe kinds `video_loop`/`audio`
+### Task 3: Backend `sources.py` — nieuwe kinds `video_loop`/`audio`
 
 **Files:**
 - Modify: `admin/app/routers/sources.py`
@@ -377,7 +377,7 @@ git commit -m "feat: sources accepteren nu ook video_loop en audio kinds"
 
 ---
 
-### Taak 4: Backend `players.py` — `audio_source_id`, kind-validatie, cleanup-on-delete
+### Task 4: Backend `players.py` — `audio_source_id`, kind-validatie, cleanup-on-delete
 
 **Files:**
 - Modify: `admin/app/routers/players.py`
@@ -603,7 +603,7 @@ git commit -m "feat: players.audio_source_id met kind-validatie en cleanup-on-de
 
 ---
 
-### Taak 5: `mirror_node` — `video_loop`-afspelen in `_ensure_source`
+### Task 5: `mirror_node` — `video_loop`-afspelen in `_ensure_source`
 
 **Files:**
 - Modify: `mirror_node/main.py`
@@ -829,7 +829,7 @@ git commit -m "feat: mirror_node speelt video_loop-sources af (loopend, via _ens
 
 ---
 
-### Taak 6: `mirror_node` — `_AudioState`-tracker voor onafhankelijk loopende audio
+### Task 6: `mirror_node` — `_AudioState`-tracker voor onafhankelijk loopende audio
 
 **Files:**
 - Modify: `mirror_node/main.py`
@@ -1051,7 +1051,7 @@ git commit -m "feat: mirror_node speelt een onafhankelijk loopend audio-spoor af
 
 ---
 
-### Taak 7: Frontend — `types.ts`/`api/media.ts`/`MediaLibrary.tsx` + embeds naar `kind`
+### Task 7: Frontend — `types.ts`/`api/media.ts`/`MediaLibrary.tsx` + embeds naar `kind`
 
 **Files:**
 - Modify: `admin/frontend/src/types.ts`
@@ -1363,7 +1363,7 @@ git commit -m "feat: frontend media-typen/component/embeds van category naar kin
 
 ---
 
-### Taak 8: Frontend — nieuwe `/media`-pagina
+### Task 8: Frontend — nieuwe `/media`-pagina
 
 **Files:**
 - Create: `admin/frontend/src/pages/MediaPage.tsx`
@@ -1513,7 +1513,7 @@ git commit -m "feat: nieuwe /media-pagina met bladeren per kind"
 
 ---
 
-### Taak 9: Frontend — `SourcesPage.tsx` picker voor image/video/audio-kinds
+### Task 9: Frontend — `SourcesPage.tsx` picker voor image/video/audio-kinds
 
 **Files:**
 - Modify: `admin/frontend/src/pages/SourcesPage.tsx`
@@ -1845,7 +1845,7 @@ git commit -m "feat: media-picker op SourcesPage voor image/video/audio-kinds"
 
 ---
 
-### Taak 10: Frontend — canvas: audio-Source aan een Player koppelen via edge
+### Task 10: Frontend — canvas: audio-Source aan een Player koppelen via edge
 
 **Files:**
 - Modify: `admin/frontend/src/components/PlayerGraphCanvas.tsx`
