@@ -18,8 +18,8 @@ import {
 import "@xyflow/react/dist/style.css";
 import { createTrigger, updateTrigger, updateTriggerPosition, deleteTrigger } from "../api/triggers";
 import { updatePlayer, updatePlayerPosition, deletePlayer } from "../api/players";
-import { updateSource, deleteSource } from "../api/sources";
-import { updateOutput, deleteOutput } from "../api/outputs";
+import { updateSource, deleteSource, createSource } from "../api/sources";
+import { updateOutput, deleteOutput, createOutput } from "../api/outputs";
 import { createPlayerBranch } from "../api/branches";
 import { createOutputConnection, deleteOutputConnection } from "../api/outputConnections";
 import { ApiError } from "../api/client";
@@ -513,6 +513,8 @@ export default function PlayerGraphCanvas({
   players, sources, branches, triggers, outputs, outputConnections, onPlayerClick, onGraphChanged, onAddPlayer,
 }: Props) {
   const [popoverTrigger, setPopoverTrigger] = useState<Trigger | null>(null);
+  const [addTriggerOpen, setAddTriggerOpen] = useState(false);
+  const [addTriggerBranchId, setAddTriggerBranchId] = useState<number | "">("");
 
   const branchToPlayer = useMemo(
     () => Object.fromEntries(branches.map((b) => [b.id, b.player_id])),
@@ -526,6 +528,36 @@ export default function PlayerGraphCanvas({
     },
     [onGraphChanged],
   );
+
+  // ponytail: elke branch heeft precies één eigenaar-player, en elke player
+  // heeft server-side al minstens één branch (auto-aangemaakt bij creatie) --
+  // dus zodra er players bestaan, bestaan er ook branches om uit te kiezen.
+  const branchOptions = useMemo(
+    () =>
+      branches.map((branch) => {
+        const player = players.find((p) => p.id === branch.player_id);
+        return { id: branch.id, label: `${player?.name ?? "?"} → ${branch.name}` };
+      }),
+    [branches, players],
+  );
+
+  const handleCreateTriggerFromPicker = useCallback(async () => {
+    if (addTriggerBranchId === "") return;
+    await createTrigger({ from_branch_id: addTriggerBranchId });
+    setAddTriggerOpen(false);
+    setAddTriggerBranchId("");
+    onGraphChanged();
+  }, [addTriggerBranchId, onGraphChanged]);
+
+  const handleAddSource = useCallback(async () => {
+    await createSource({ name: "Nieuwe source", kind: "camera_stream", value: "", canvas_x: 0, canvas_y: 0 });
+    onGraphChanged();
+  }, [onGraphChanged]);
+
+  const handleAddOutput = useCallback(async () => {
+    await createOutput({ name: "Nieuwe output", camera_source: "", canvas_x: 0, canvas_y: 0 });
+    onGraphChanged();
+  }, [onGraphChanged]);
 
   const handleMakeRoot = useCallback(
     async (playerId: number) => {
@@ -866,9 +898,44 @@ export default function PlayerGraphCanvas({
         <Background />
         <Controls />
       </ReactFlow>
-      <button type="button" className="player-graph-canvas__add" onClick={onAddPlayer}>
-        + Nieuwe player
-      </button>
+      <div className="player-graph-canvas__toolbar">
+        <button type="button" className="player-graph-canvas__add" onClick={onAddPlayer}>
+          + Nieuwe player
+        </button>
+        <button type="button" className="player-graph-canvas__add" onClick={handleAddSource}>
+          + Nieuwe source
+        </button>
+        <button type="button" className="player-graph-canvas__add" onClick={handleAddOutput}>
+          + Nieuwe output
+        </button>
+        <button
+          type="button"
+          className="player-graph-canvas__add"
+          disabled={branchOptions.length === 0}
+          title={branchOptions.length === 0 ? "Maak eerst een player aan" : undefined}
+          onClick={() => setAddTriggerOpen((open) => !open)}
+        >
+          + Nieuwe trigger
+        </button>
+        {addTriggerOpen && (
+          <div className="player-graph-canvas__add-trigger-picker">
+            <select
+              value={addTriggerBranchId}
+              onChange={(e) => setAddTriggerBranchId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">— kies een aftakking —</option>
+              {branchOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={handleCreateTriggerFromPicker} disabled={addTriggerBranchId === ""}>
+              Aanmaken
+            </button>
+          </div>
+        )}
+      </div>
       {popoverTrigger && (
         <TriggerPopover
           trigger={popoverTrigger}

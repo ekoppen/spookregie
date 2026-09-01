@@ -7,9 +7,9 @@ import PlayerGraphCanvas, { parseOutputConnectionEdgeIds } from "./PlayerGraphCa
 import type { Player, Trigger, Source, Output } from "../types";
 import type { Edge } from "@xyflow/react";
 import { deletePlayer } from "../api/players";
-import { deleteTrigger } from "../api/triggers";
-import { deleteSource } from "../api/sources";
-import { deleteOutput } from "../api/outputs";
+import { deleteTrigger, createTrigger } from "../api/triggers";
+import { deleteSource, createSource } from "../api/sources";
+import { deleteOutput, createOutput } from "../api/outputs";
 
 vi.mock("../api/triggers", () => ({
   createTrigger: vi.fn(),
@@ -22,8 +22,8 @@ vi.mock("../api/players", () => ({
   updatePlayerPosition: vi.fn(),
   deletePlayer: vi.fn(),
 }));
-vi.mock("../api/sources", () => ({ updateSource: vi.fn(), deleteSource: vi.fn() }));
-vi.mock("../api/outputs", () => ({ updateOutput: vi.fn(), deleteOutput: vi.fn() }));
+vi.mock("../api/sources", () => ({ updateSource: vi.fn(), deleteSource: vi.fn(), createSource: vi.fn() }));
+vi.mock("../api/outputs", () => ({ updateOutput: vi.fn(), deleteOutput: vi.fn(), createOutput: vi.fn() }));
 vi.mock("../api/branches", () => ({ createPlayerBranch: vi.fn() }));
 vi.mock("../api/outputConnections", () => ({
   createOutputConnection: vi.fn(),
@@ -252,6 +252,100 @@ describe("PlayerGraphCanvas -- rechtsklik-menu", () => {
     await userEvent.click(await screen.findByText("Verwijderen"));
 
     expect(deleteOutput).toHaveBeenCalledWith(3);
+    expect(onGraphChanged).toHaveBeenCalled();
+  });
+});
+
+describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te voegen", () => {
+  it("+ Nieuwe source roept createSource aan met standaardwaarden", async () => {
+    const onGraphChanged = vi.fn();
+    render(
+      <PlayerGraphCanvas
+        players={[]}
+        sources={[]}
+        branches={[]}
+        triggers={[]}
+        outputs={[]}
+        outputConnections={[]}
+        onPlayerClick={vi.fn()}
+        onGraphChanged={onGraphChanged}
+        onAddPlayer={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByText("+ Nieuwe source"));
+
+    expect(createSource).toHaveBeenCalledWith({
+      name: "Nieuwe source",
+      kind: "camera_stream",
+      value: "",
+      canvas_x: 0,
+      canvas_y: 0,
+    });
+    expect(onGraphChanged).toHaveBeenCalled();
+  });
+
+  it("+ Nieuwe output roept createOutput aan met standaardwaarden", async () => {
+    const onGraphChanged = vi.fn();
+    render(
+      <PlayerGraphCanvas
+        players={[]}
+        sources={[]}
+        branches={[]}
+        triggers={[]}
+        outputs={[]}
+        outputConnections={[]}
+        onPlayerClick={vi.fn()}
+        onGraphChanged={onGraphChanged}
+        onAddPlayer={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByText("+ Nieuwe output"));
+
+    expect(createOutput).toHaveBeenCalledWith({ name: "Nieuwe output", camera_source: "", canvas_x: 0, canvas_y: 0 });
+    expect(onGraphChanged).toHaveBeenCalled();
+  });
+
+  it("+ Nieuwe trigger is uitgeschakeld zonder players/branches", async () => {
+    render(
+      <PlayerGraphCanvas
+        players={[]}
+        sources={[]}
+        branches={[]}
+        triggers={[]}
+        outputs={[]}
+        outputConnections={[]}
+        onPlayerClick={vi.fn()}
+        onGraphChanged={vi.fn()}
+        onAddPlayer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("+ Nieuwe trigger")).toBeDisabled();
+  });
+
+  it("+ Nieuwe trigger opent een keuzemenu en maakt de trigger aan vanaf de gekozen aftakking", async () => {
+    const onGraphChanged = vi.fn();
+    render(
+      <PlayerGraphCanvas
+        players={[PLAYER]}
+        sources={[]}
+        branches={[{ id: 101, player_id: 1, name: "Uitgang 1" }]}
+        triggers={[]}
+        outputs={[]}
+        outputConnections={[]}
+        onPlayerClick={vi.fn()}
+        onGraphChanged={onGraphChanged}
+        onAddPlayer={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByText("+ Nieuwe trigger"));
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "101");
+    await userEvent.click(screen.getByText("Aanmaken"));
+
+    expect(createTrigger).toHaveBeenCalledWith({ from_branch_id: 101 });
     expect(onGraphChanged).toHaveBeenCalled();
   });
 });
