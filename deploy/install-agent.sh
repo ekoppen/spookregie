@@ -155,6 +155,16 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
+  # ponytail: het unprivileged serviceaccount (User=$INSTALL_USER hierboven)
+  # kan zelf geen `systemctl restart` op een systemwide unit doen -- dat
+  # vereist root/polkit, wat een non-interactive Type=simple service niet
+  # kan geven. Deze sudoers-drop-in geeft alleen dat ene vaste commando,
+  # zonder argumentvrijheid, dus dit heropent niet de root-privesc die de
+  # vorige beveiligingsfix (User=/Group=) juist sloot.
+  echo "$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-mirror" \
+    | sudo tee /etc/sudoers.d/spookregie >/dev/null
+  sudo chmod 440 /etc/sudoers.d/spookregie
+
   sudo tee /etc/systemd/system/spookregie-agent.service > /dev/null <<EOF
 [Unit]
 Description=Spookregie device-agent
@@ -166,7 +176,7 @@ User=$INSTALL_USER
 Group=$INSTALL_GROUP
 WorkingDirectory=$REPO_DIR
 EnvironmentFile=$ENV_FILE
-Environment=MIRROR_RESTART_COMMAND=systemctl restart spookregie-mirror
+Environment="MIRROR_RESTART_COMMAND=sudo -n /bin/systemctl restart spookregie-mirror"
 ExecStart=$REPO_DIR/.venv/bin/python -m mirror_node.agent
 Restart=always
 
