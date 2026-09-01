@@ -64,7 +64,7 @@ def test_create_player_persists_and_publishes(tmp_path):
     assert (
         "graph",
         {
-            "output_id": default_output["id"], "players": [created], "sources": graph_sources,
+            "players": [created], "sources": graph_sources,
             "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
             "root_player_id": created["id"],
         },
@@ -112,7 +112,7 @@ def test_update_player_persists_and_publishes(tmp_path):
     assert (
         "graph",
         {
-            "output_id": default_output["id"], "players": [response.json()], "sources": graph_sources,
+            "players": [response.json()], "sources": graph_sources,
             "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
             "root_player_id": None,
         },
@@ -141,7 +141,7 @@ def test_delete_player_removes_and_publishes(tmp_path):
     assert (
         "graph",
         {
-            "output_id": default_output["id"], "players": [], "sources": graph_sources,
+            "players": [], "sources": graph_sources,
             "branches": [], "triggers": [], "output_connections": graph_output_connections,
             "root_player_id": None,
         },
@@ -311,7 +311,7 @@ def test_published_graph_has_the_full_new_shape(tmp_path):
 
     kind, graph = bridge.calls[-1]
     assert kind == "graph"
-    assert graph["output_id"] == default_output["id"]
+    assert "output_id" not in graph
     assert graph["players"] == [created]
     assert graph["root_player_id"] == created["id"]
     assert {s["kind"] for s in graph["sources"]} <= {"camera_stream", "static_image"}

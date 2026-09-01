@@ -231,7 +231,7 @@ def test_reconnect_republishes_retained_scenes_and_scare_video_config(tmp_path, 
     # Eerste (en enige) scene wordt automatisch root (Minor 12).
     assert published["config/mirror/graph"] == (
         {
-            "output_id": default_output_id, "players": [created], "sources": graph_sources,
+            "players": [created], "sources": graph_sources,
             "branches": graph_branches, "triggers": [], "output_connections": graph_output_connections,
             "root_player_id": created["id"],
         },
