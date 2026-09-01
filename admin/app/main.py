@@ -84,19 +84,30 @@ def _handle_device_info(conn, app):
         name = info.get("name")
         platform = info.get("platform", "")
         git_sha = info.get("git_sha")
-        is_mirror = int(bool(info.get("is_mirror", True)))
-        is_camera = int(bool(info.get("is_camera", False)))
-        camera_stream_url = info.get("camera_stream_url")
         if not isinstance(name, str) or not name:
             return
-        existing = conn.execute("SELECT id FROM devices WHERE device_uuid = ?", (device_uuid,)).fetchone()
+        existing = conn.execute(
+            "SELECT id, is_mirror, is_camera, camera_stream_url FROM devices WHERE device_uuid = ?",
+            (device_uuid,),
+        ).fetchone()
         if existing is None:
+            is_mirror = int(bool(info.get("is_mirror", True)))
+            is_camera = int(bool(info.get("is_camera", False)))
+            camera_stream_url = info.get("camera_stream_url")
             conn.execute(
                 "INSERT INTO devices (device_uuid, name, platform, git_sha, last_seen_at, "
                 "is_mirror, is_camera, camera_stream_url) VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)",
                 (device_uuid, name, platform, git_sha, is_mirror, is_camera, camera_stream_url),
             )
         else:
+            # Backward compat: een payload zonder is_mirror/is_camera/
+            # camera_stream_url (oude agent, of een verdwaald retained
+            # bericht van vóór de agent-update) mag een al bekend
+            # apparaat niet terugzetten naar mirror-only -- val terug op
+            # de al opgeslagen waarde i.p.v. een harde default.
+            is_mirror = int(bool(info.get("is_mirror", existing[1])))
+            is_camera = int(bool(info.get("is_camera", existing[2])))
+            camera_stream_url = info.get("camera_stream_url", existing[3])
             # Bewust: 'name' NIET overschrijven -- een gebruiker die het
             # apparaat in de beheerpagina hernoemd heeft, wil niet dat de
             # eerstvolgende checkin dat weer terugzet naar de hostname.

@@ -305,6 +305,32 @@ def test_device_info_checkin_updates_camera_stream_url_on_existing_device(tmp_pa
     assert devices[0]["camera_stream_url"] == "http://192.168.1.51:8080/stream"
 
 
+def test_device_info_checkin_without_role_fields_preserves_existing_camera_role(tmp_path):
+    """Backward compat, UPDATE path: een oude/onvolledige check-in mag een
+    al bekend camera-apparaat niet terugzetten naar mirror-only."""
+    client = _client(tmp_path, real_bridge=True)
+    client.app.state.bridge._on_device_info(
+        "cam-2",
+        {
+            "name": "MacBook camera",
+            "platform": "darwin",
+            "git_sha": "abc1234",
+            "is_mirror": False,
+            "is_camera": True,
+            "camera_stream_url": "http://192.168.1.52:8080/stream",
+        },
+    )
+
+    client.app.state.bridge._on_device_info(
+        "cam-2", {"name": "hostname-genegeerd", "platform": "darwin", "git_sha": "def5678"}
+    )
+
+    devices = client.get("/api/devices").json()
+    assert devices[0]["is_mirror"] is False
+    assert devices[0]["is_camera"] is True
+    assert devices[0]["camera_stream_url"] == "http://192.168.1.52:8080/stream"
+
+
 def test_devices_route_requires_login(tmp_path):
     settings = Settings(
         admin_password="testwachtwoord",
