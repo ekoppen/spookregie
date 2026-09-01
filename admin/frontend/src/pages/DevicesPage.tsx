@@ -114,6 +114,7 @@ export default function DevicesPage() {
               />
               <span className="devices-field__meta">{device.platform}</span>
               <span className="devices-field__meta">{device.git_sha ? device.git_sha.slice(0, 7) : "—"}</span>
+              <span className="devices-field__meta">{device.last_seen_at ?? "—"}</span>
               <select
                 className="devices-field__select"
                 value={draft.output_id ?? ""}
