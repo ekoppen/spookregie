@@ -23,8 +23,11 @@ class FakeBridge:
     def publish_mirror_ha_trigger(self, entity_id):
         self.calls.append(("ha_trigger", entity_id))
 
+    def publish_device_assignment(self, device_uuid, output_id):
+        self.calls.append(("device_assignment", device_uuid, output_id))
 
-def _client(tmp_path):
+
+def _client(tmp_path, real_bridge=False):
     settings = Settings(
         admin_password="testwachtwoord",
         db_path=str(tmp_path / "admin.db"),
@@ -33,7 +36,12 @@ def _client(tmp_path):
         port=8000,
     )
     app = create_app(settings)
-    app.state.bridge = FakeBridge()
+    # ponytail: real_bridge keeps create_app()'s actual MqttBridge in place
+    # (needed by the device-checkin/-assignment tests below, which poke at
+    # bridge internals) instead of swapping in the calls-recording FakeBridge
+    # the plain CRUD tests use.
+    if not real_bridge:
+        app.state.bridge = FakeBridge()
     client = TestClient(app)
     client.post("/api/login", json={"password": "testwachtwoord"})
     return client
@@ -112,6 +120,75 @@ def test_delete_device_removes_it(tmp_path):
 
     assert response.status_code == 200
     assert client.get("/api/devices").json() == []
+
+
+def test_update_device_publishes_assignment_when_output_id_changes(tmp_path, monkeypatch):
+    import admin.app.mqtt_bridge as mqtt_bridge_module
+
+    class FakeMqttClient:
+        def __init__(self, client_id=None):
+            self.published = []
+            self.subscribed = []
+
+        def username_pw_set(self, *a, **k):
+            pass
+
+        def reconnect_delay_set(self, **k):
+            pass
+
+        def connect_async(self, *a, **k):
+            pass
+
+        def loop_start(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+        def subscribe(self, topic):
+            self.subscribed.append(topic)
+
+        def publish(self, topic, payload=None, retain=False):
+            self.published.append((topic, payload, retain))
+
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    client = _client(tmp_path, real_bridge=True)
+    db = client.app.state.db
+    device_id = _seed_device(db)
+    output = client.post("/api/outputs", json={"name": "Spiegel"}).json()
+
+    client.put(f"/api/devices/{device_id}", json={"name": "Voordeur-spiegel", "output_id": output["id"]})
+
+    published = client.app.state.bridge._client.published
+    assignment_messages = [p for p in published if "device-assignment/abc-123" in p[0]]
+    assert len(assignment_messages) == 1
+    import json as jsonlib
+    assert jsonlib.loads(assignment_messages[0][1]) == {"output_id": output["id"]}
+
+
+def test_device_info_checkin_creates_a_new_device(tmp_path):
+    client = _client(tmp_path, real_bridge=True)
+    client.app.state.bridge._on_device_info("new-device-uuid", {"name": "Pi Achtertuin", "platform": "linux", "git_sha": "abc1234"})
+
+    devices = client.get("/api/devices").json()
+    assert len(devices) == 1
+    assert devices[0]["device_uuid"] == "new-device-uuid"
+    assert devices[0]["name"] == "Pi Achtertuin"
+    assert devices[0]["platform"] == "linux"
+    assert devices[0]["git_sha"] == "abc1234"
+
+
+def test_device_info_checkin_does_not_overwrite_a_user_renamed_device(tmp_path):
+    client = _client(tmp_path, real_bridge=True)
+    db = client.app.state.db
+    device_id = _seed_device(db, device_uuid="abc-123", name="Voordeur-spiegel")
+
+    client.app.state.bridge._on_device_info("abc-123", {"name": "hostname-gerapporteerd-door-apparaat", "platform": "darwin", "git_sha": "cafe123"})
+
+    devices = client.get("/api/devices").json()
+    assert devices[0]["name"] == "Voordeur-spiegel"
+    assert devices[0]["platform"] == "darwin"
+    assert devices[0]["git_sha"] == "cafe123"
 
 
 def test_devices_route_requires_login(tmp_path):

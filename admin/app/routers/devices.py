@@ -26,9 +26,10 @@ def list_devices_route(request: Request):
 @router.put("/api/devices/{device_id:int}")
 async def update_device_route(device_id: int, request: Request):
     db = request.app.state.db
-    existing = db.execute("SELECT id FROM devices WHERE id = ?", (device_id,)).fetchone()
+    existing = db.execute("SELECT id, device_uuid, output_id FROM devices WHERE id = ?", (device_id,)).fetchone()
     if existing is None:
         raise HTTPException(status_code=404, detail="Apparaat niet gevonden")
+    device_uuid, old_output_id = existing[1], existing[2]
     body = await request.json()
     name = str(body.get("name", "")).strip()
     if not name:
@@ -36,8 +37,8 @@ async def update_device_route(device_id: int, request: Request):
     output_id = body.get("output_id")
     db.execute("UPDATE devices SET name = ?, output_id = ? WHERE id = ?", (name, output_id, device_id))
     db.commit()
-    # Publiceert (nog) geen MQTT-toewijzing -- dat gebeurt vanaf Task 4,
-    # zodra MqttBridge een publish_device_assignment-methode heeft.
+    if output_id != old_output_id:
+        request.app.state.bridge.publish_device_assignment(device_uuid, output_id)
     row = db.execute(f"SELECT {_DEVICE_COLUMNS} FROM devices WHERE id = ?", (device_id,)).fetchone()
     return _row_to_device(row)
 

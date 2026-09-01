@@ -79,6 +79,31 @@ def _get_watched_ha_entities_from_db(conn):
     return get_watched
 
 
+def _handle_device_info(conn):
+    def handle(device_uuid, info):
+        name = info.get("name")
+        platform = info.get("platform", "")
+        git_sha = info.get("git_sha")
+        if not isinstance(name, str) or not name:
+            return
+        existing = conn.execute("SELECT id FROM devices WHERE device_uuid = ?", (device_uuid,)).fetchone()
+        if existing is None:
+            conn.execute(
+                "INSERT INTO devices (device_uuid, name, platform, git_sha, last_seen_at) VALUES (?, ?, ?, ?, datetime('now'))",
+                (device_uuid, name, platform, git_sha),
+            )
+        else:
+            # Bewust: 'name' NIET overschrijven -- een gebruiker die het
+            # apparaat in de beheerpagina hernoemd heeft, wil niet dat de
+            # eerstvolgende checkin dat weer terugzet naar de hostname.
+            conn.execute(
+                "UPDATE devices SET platform = ?, git_sha = ?, last_seen_at = datetime('now') WHERE device_uuid = ?",
+                (platform, git_sha, device_uuid),
+            )
+        conn.commit()
+    return handle
+
+
 def create_app(settings=None):
     settings = settings or get_settings()
     app = FastAPI()
@@ -102,6 +127,7 @@ def create_app(settings=None):
     app.state.bridge = MqttBridge(
         app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger,
         on_connect_extra=_republish_retained_config,
+        on_device_info=_handle_device_info(app.state.db),
     )
     app.state.mirror_process = MirrorProcessManager(
         app.state.runtime_settings,
