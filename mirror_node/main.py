@@ -32,12 +32,13 @@ from shared.logging_setup import setup_logging
 from shared.media_sync import sync_media, fetch_scare_video_audio
 from mirror_node.trigger import FrameDiffTrigger
 from mirror_node.camera import open_camera
+from mirror_node.device_identity import get_or_create_device_uuid
 from mirror_node.effects import get_effect
 from mirror_node.overlay import composite_overlay, place_on_canvas
 from mirror_node.players import PlayerGraph
 from mirror_node.stream import MJPEGStreamer
 
-NODE_NAME = "mirror"
+NODE_NAME = get_or_create_device_uuid()
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "homeassistant.local")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
@@ -79,7 +80,7 @@ _ha_entity_states = {}
 # Laatst ontvangen graaf-metadata (naast player_graph zelf) die de
 # output-routing-publish en de dynamische source-resolutie nodig hebben --
 # bijgewerkt door _apply_graph_message, gelezen door main()'s lus.
-_current_output_id = None
+_assigned_output_id = None
 _current_output_connections = []
 _current_branches = []
 _current_sources = []
@@ -163,7 +164,7 @@ def _apply_scare_video_config_message(payload, logger):
 
 
 def _apply_graph_message(payload, logger):
-    global _current_output_id, _current_output_connections, _current_branches, _current_sources
+    global _current_output_connections, _current_branches, _current_sources
     try:
         graph = json.loads(payload)
     except json.JSONDecodeError:
@@ -180,7 +181,6 @@ def _apply_graph_message(payload, logger):
         logger.error("Graaf-config heeft geen geldige players/triggers-lijst, genegeerd: %r", graph)
         return
     player_graph.set_graph(players, branches, triggers, root_player_id)
-    _current_output_id = graph.get("output_id")
     _current_output_connections = graph.get("output_connections", [])
     _current_branches = branches
     _current_sources = graph.get("sources", [])
@@ -232,6 +232,19 @@ def _apply_ha_sensor_state_message(payload, logger):
         _ha_entity_states[entity_id] = (state, time.time())
 
 
+def _apply_device_assignment_message(payload, logger):
+    global _assigned_output_id
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.error("Ongeldige device-assignment-JSON ontvangen, genegeerd")
+        return
+    if not isinstance(data, dict):
+        logger.error("Device-assignment is geen object, genegeerd: %r", data)
+        return
+    _assigned_output_id = data.get("output_id")
+
+
 def _ha_entity_state(entity_id):
     """Geeft de laatst-bekende state terug, of None als er nog niets
     binnenkwam OF de laatste update ouder is dan HA_ENTITY_STATE_STALE_SECONDS
@@ -248,6 +261,8 @@ def _ha_entity_state(entity_id):
 
 
 def make_on_message(logger, topics):
+    device_assignment_topic = topics.device_assignment(NODE_NAME)
+
     def on_message(client, userdata, msg):
         # Vangnet: een exception hier zou paho's netwerkthread killen — de node
         # blijft dan renderen maar reageert nergens meer op, ook niet op
@@ -261,6 +276,9 @@ def make_on_message(logger, topics):
                 return
             if msg.topic == topics.config_mirror_graph:
                 _apply_graph_message(msg.payload.decode(), logger)
+                return
+            if msg.topic == device_assignment_topic:
+                _apply_device_assignment_message(msg.payload.decode(), logger)
                 return
             if msg.topic == topics.control_mirror_scene_preview:
                 _apply_scene_preview_message(msg.payload.decode(), logger)
@@ -549,6 +567,7 @@ def main():
         client.subscribe(topics.config_mirror_scare_video)
         client.subscribe(topics.control_mirror_ha_trigger)
         client.subscribe(topics.control_mirror_ha_sensor_state)
+        client.subscribe(topics.device_assignment(NODE_NAME))
 
     def on_disconnect(client, userdata, rc):
         logger.warning("MQTT verbinding verbroken (rc=%s)", rc)
@@ -680,12 +699,12 @@ def main():
             if (
                 winning is not None
                 and transitioned
-                and _current_output_id is not None
-                and _player_feeds_this_output(winning["id"], _current_output_id, _current_branches, _current_output_connections)
+                and _assigned_output_id is not None
+                and _player_feeds_this_output(winning["id"], _assigned_output_id, _current_branches, _current_output_connections)
                 and winning["id"] != _last_published_output_player_id
             ):
                 client.publish(
-                    topics.mirror_output, json.dumps({"player_id": winning["id"], "output_id": _current_output_id})
+                    topics.mirror_output, json.dumps({"player_id": winning["id"], "output_id": _assigned_output_id})
                 )
                 _last_published_output_player_id = winning["id"]
 

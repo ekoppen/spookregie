@@ -501,6 +501,29 @@ def test_apply_ha_sensor_state_message_ignores_malformed_payload():
     assert logger.errors
 
 
+def test_apply_graph_message_no_longer_sets_output_id_from_payload():
+    mirror_main._assigned_output_id = None
+    payload = json.dumps({
+        "players": [], "sources": [], "branches": [], "triggers": [],
+        "output_connections": [], "root_player_id": None,
+    })
+    mirror_main._apply_graph_message(payload, _FakeLogger())
+    assert mirror_main._assigned_output_id is None  # unchanged by a graph message now
+
+
+def test_apply_device_assignment_message_sets_assigned_output_id():
+    mirror_main._assigned_output_id = None
+    mirror_main._apply_device_assignment_message(json.dumps({"output_id": 7}), _FakeLogger())
+    assert mirror_main._assigned_output_id == 7
+    mirror_main._assigned_output_id = None
+
+
+def test_apply_device_assignment_message_handles_null_output_id():
+    mirror_main._assigned_output_id = 7
+    mirror_main._apply_device_assignment_message(json.dumps({"output_id": None}), _FakeLogger())
+    assert mirror_main._assigned_output_id is None
+
+
 def test_resolve_frame_source_reuses_open_capture_for_unchanged_source(monkeypatch):
     open_calls = []
     monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: open_calls.append(value) or "cap-object")
