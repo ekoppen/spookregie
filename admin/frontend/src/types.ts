@@ -64,6 +64,16 @@ export interface OutputConnection {
   from_branch_id: number;
 }
 
+export interface Device {
+  id: number;
+  device_uuid: string;
+  name: string;
+  platform: string;
+  git_sha: string | null;
+  last_seen_at: string | null;
+  output_id: number | null;
+}
+
 export interface ScareConfig {
   enabled_hashes: string[];
 }
