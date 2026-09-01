@@ -49,6 +49,20 @@ class Topics:
         return self._p("control/mirror/ha-sensor-state")
 
     @property
+    def device_info_wildcard(self) -> str:
+        return self._p("control/mirror/device-info/+")
+
+    def device_info(self, device_uuid: str) -> str:
+        return self._p(f"control/mirror/device-info/{device_uuid}")
+
+    def device_assignment(self, device_uuid: str) -> str:
+        return self._p(f"control/mirror/device-assignment/{device_uuid}")
+
+    @property
+    def device_update_check(self) -> str:
+        return self._p("control/mirror/device-update-check")
+
+    @property
     def status_wildcard(self) -> str:
         return self._p("status/+")
 

@@ -84,3 +84,28 @@ def test_control_mirror_ha_sensor_state_topic():
 def test_control_mirror_ha_sensor_state_topic_respects_prefix():
     topics = Topics(prefix="halloween")
     assert topics.control_mirror_ha_sensor_state == "halloween/control/mirror/ha-sensor-state"
+
+
+def test_device_info_topic():
+    topics = Topics()
+    assert topics.device_info("abc-123") == "control/mirror/device-info/abc-123"
+
+
+def test_device_info_topic_respects_prefix():
+    topics = Topics(prefix="halloween")
+    assert topics.device_info("abc-123") == "halloween/control/mirror/device-info/abc-123"
+
+
+def test_device_info_wildcard_topic():
+    topics = Topics()
+    assert topics.device_info_wildcard == "control/mirror/device-info/+"
+
+
+def test_device_assignment_topic():
+    topics = Topics()
+    assert topics.device_assignment("abc-123") == "control/mirror/device-assignment/abc-123"
+
+
+def test_device_update_check_topic():
+    topics = Topics()
+    assert topics.device_update_check == "control/mirror/device-update-check"
