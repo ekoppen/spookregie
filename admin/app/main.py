@@ -84,21 +84,26 @@ def _handle_device_info(conn, app):
         name = info.get("name")
         platform = info.get("platform", "")
         git_sha = info.get("git_sha")
+        is_mirror = int(bool(info.get("is_mirror", True)))
+        is_camera = int(bool(info.get("is_camera", False)))
+        camera_stream_url = info.get("camera_stream_url")
         if not isinstance(name, str) or not name:
             return
         existing = conn.execute("SELECT id FROM devices WHERE device_uuid = ?", (device_uuid,)).fetchone()
         if existing is None:
             conn.execute(
-                "INSERT INTO devices (device_uuid, name, platform, git_sha, last_seen_at) VALUES (?, ?, ?, ?, datetime('now'))",
-                (device_uuid, name, platform, git_sha),
+                "INSERT INTO devices (device_uuid, name, platform, git_sha, last_seen_at, "
+                "is_mirror, is_camera, camera_stream_url) VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)",
+                (device_uuid, name, platform, git_sha, is_mirror, is_camera, camera_stream_url),
             )
         else:
             # Bewust: 'name' NIET overschrijven -- een gebruiker die het
             # apparaat in de beheerpagina hernoemd heeft, wil niet dat de
             # eerstvolgende checkin dat weer terugzet naar de hostname.
             conn.execute(
-                "UPDATE devices SET platform = ?, git_sha = ?, last_seen_at = datetime('now') WHERE device_uuid = ?",
-                (platform, git_sha, device_uuid),
+                "UPDATE devices SET platform = ?, git_sha = ?, last_seen_at = datetime('now'), "
+                "is_mirror = ?, is_camera = ?, camera_stream_url = ? WHERE device_uuid = ?",
+                (platform, git_sha, is_mirror, is_camera, camera_stream_url, device_uuid),
             )
         conn.commit()
         # Nudge het apparaat om meteen een update-check te doen (in plaats

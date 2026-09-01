@@ -246,6 +246,65 @@ def test_device_info_checkin_publishes_update_check_nudge(tmp_path, monkeypatch)
     assert nudges[0][2] is False  # niet-retained
 
 
+def test_device_info_checkin_stores_camera_role_and_stream_url(tmp_path):
+    client = _client(tmp_path, real_bridge=True)
+
+    client.app.state.bridge._on_device_info(
+        "camera-device-uuid",
+        {
+            "name": "MacBook camera",
+            "platform": "darwin",
+            "git_sha": "abc1234",
+            "is_mirror": False,
+            "is_camera": True,
+            "camera_stream_url": "http://192.168.1.50:8080/stream",
+        },
+    )
+
+    devices = client.get("/api/devices").json()
+    assert len(devices) == 1
+    assert devices[0]["is_mirror"] is False
+    assert devices[0]["is_camera"] is True
+    assert devices[0]["camera_stream_url"] == "http://192.168.1.50:8080/stream"
+
+
+def test_device_info_checkin_without_role_fields_defaults_to_mirror_only(tmp_path):
+    """Backward compat: een oude agent die nog geen is_mirror/is_camera
+    stuurt mag een bestaand of nieuw apparaat niet naar camera-only zetten."""
+    client = _client(tmp_path, real_bridge=True)
+
+    client.app.state.bridge._on_device_info(
+        "old-agent-uuid", {"name": "Oude node", "platform": "linux", "git_sha": "abc1234"}
+    )
+
+    devices = client.get("/api/devices").json()
+    assert devices[0]["is_mirror"] is True
+    assert devices[0]["is_camera"] is False
+    assert devices[0]["camera_stream_url"] is None
+
+
+def test_device_info_checkin_updates_camera_stream_url_on_existing_device(tmp_path):
+    client = _client(tmp_path, real_bridge=True)
+    db = client.app.state.db
+    _seed_device(db, device_uuid="cam-1", name="MacBook camera")
+
+    client.app.state.bridge._on_device_info(
+        "cam-1",
+        {
+            "name": "hostname-genegeerd",
+            "platform": "darwin",
+            "git_sha": "def456",
+            "is_mirror": False,
+            "is_camera": True,
+            "camera_stream_url": "http://192.168.1.51:8080/stream",
+        },
+    )
+
+    devices = client.get("/api/devices").json()
+    assert devices[0]["is_camera"] is True
+    assert devices[0]["camera_stream_url"] == "http://192.168.1.51:8080/stream"
+
+
 def test_devices_route_requires_login(tmp_path):
     settings = Settings(
         admin_password="testwachtwoord",
