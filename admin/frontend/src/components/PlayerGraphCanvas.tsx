@@ -38,7 +38,7 @@ interface Props {
   outputConnections: OutputConnection[];
   onPlayerClick: (playerId: number, step: "input" | "animation" | "output") => void;
   onGraphChanged: () => void;
-  onAddPlayer: () => void;
+  onAddPlayer: (initialPosition: { canvas_x: number; canvas_y: number }) => void;
 }
 
 type PlayerNodeData = {
@@ -537,6 +537,11 @@ const nodeTypes = {
   trigger: TriggerNodeComponent,
 };
 
+// Horizontale afstand tussen een nieuwe node en de node waar 'ie naast
+// geplaatst wordt -- ruim boven de breedste node (player, 220px) zodat
+// handles en labels nooit overlappen.
+const NEW_NODE_SPACING_X = 280;
+
 export default function PlayerGraphCanvas({
   players, sources, branches, triggers, outputs, outputConnections, onPlayerClick, onGraphChanged, onAddPlayer,
 }: Props) {
@@ -549,17 +554,48 @@ export default function PlayerGraphCanvas({
     [branches],
   );
 
+  // Nieuwe source/output/player-nodes verschenen altijd op vaste (0, 0) --
+  // ver van waar de rest van de graaf inmiddels staat, dus elke nieuwe node
+  // moest een lange sleep krijgen om 'm bij de andere te zetten. Plaats 'm
+  // in plaats daarvan naast de meest rechtse bestaande node (van welk type
+  // dan ook), op dezelfde hoogte -- bij een lege graaf blijft (0, 0) het
+  // startpunt.
+  const nextNodePosition = useCallback((): { canvas_x: number; canvas_y: number } => {
+    const all = [
+      ...players.map((p) => ({ x: p.canvas_x, y: p.canvas_y })),
+      ...sources.map((s) => ({ x: s.canvas_x, y: s.canvas_y })),
+      ...outputs.map((o) => ({ x: o.canvas_x, y: o.canvas_y })),
+      ...triggers.map((t) => ({ x: t.canvas_x, y: t.canvas_y })),
+    ];
+    if (all.length === 0) return { canvas_x: 0, canvas_y: 0 };
+    const rightmost = all.reduce((a, b) => (b.x > a.x ? b : a));
+    return { canvas_x: rightmost.x + NEW_NODE_SPACING_X, canvas_y: rightmost.y };
+  }, [players, sources, outputs, triggers]);
+
   const audioSourceNameById = useMemo(
     () => Object.fromEntries(sources.filter((s) => s.kind === "audio").map((s) => [s.id, s.name])),
     [sources],
   );
 
+  // Een trigger hoort logisch bij de branch/player waar 'ie vandaan komt --
+  // naast die player neerzetten (i.p.v. nextNodePosition()'s algemene
+  // "meest rechtse node") is de betekenisvollere plek.
+  const positionNearBranchOwner = useCallback(
+    (branchId: number): { canvas_x: number; canvas_y: number } => {
+      const ownerId = branchToPlayer[branchId];
+      const owner = players.find((p) => p.id === ownerId);
+      if (!owner) return nextNodePosition();
+      return { canvas_x: owner.canvas_x + NEW_NODE_SPACING_X, canvas_y: owner.canvas_y };
+    },
+    [branchToPlayer, players, nextNodePosition],
+  );
+
   const handleAddBranchTrigger = useCallback(
     async (branchId: number) => {
-      await createTrigger({ from_branch_id: branchId });
+      await createTrigger({ from_branch_id: branchId, ...positionNearBranchOwner(branchId) });
       onGraphChanged();
     },
-    [onGraphChanged],
+    [onGraphChanged, positionNearBranchOwner],
   );
 
   // ponytail: elke branch heeft precies één eigenaar-player, en elke player
@@ -576,21 +612,21 @@ export default function PlayerGraphCanvas({
 
   const handleCreateTriggerFromPicker = useCallback(async () => {
     if (addTriggerBranchId === "") return;
-    await createTrigger({ from_branch_id: addTriggerBranchId });
+    await createTrigger({ from_branch_id: addTriggerBranchId, ...positionNearBranchOwner(addTriggerBranchId) });
     setAddTriggerOpen(false);
     setAddTriggerBranchId("");
     onGraphChanged();
-  }, [addTriggerBranchId, onGraphChanged]);
+  }, [addTriggerBranchId, onGraphChanged, positionNearBranchOwner]);
 
   const handleAddSource = useCallback(async () => {
-    await createSource({ name: "Nieuwe source", kind: "camera_stream", value: "", canvas_x: 0, canvas_y: 0 });
+    await createSource({ name: "Nieuwe source", kind: "camera_stream", value: "", ...nextNodePosition() });
     onGraphChanged();
-  }, [onGraphChanged]);
+  }, [onGraphChanged, nextNodePosition]);
 
   const handleAddOutput = useCallback(async () => {
-    await createOutput({ name: "Nieuwe output", camera_source: "", canvas_x: 0, canvas_y: 0 });
+    await createOutput({ name: "Nieuwe output", camera_source: "", ...nextNodePosition() });
     onGraphChanged();
-  }, [onGraphChanged]);
+  }, [onGraphChanged, nextNodePosition]);
 
   const handleMakeRoot = useCallback(
     async (playerId: number) => {
@@ -987,7 +1023,7 @@ export default function PlayerGraphCanvas({
         >
           + Trigger
         </button>
-        <button type="button" className="player-graph-canvas__add" onClick={onAddPlayer}>
+        <button type="button" className="player-graph-canvas__add" onClick={() => onAddPlayer(nextNodePosition())}>
           + Player
         </button>
         <button type="button" className="player-graph-canvas__add" onClick={handleAddOutput}>

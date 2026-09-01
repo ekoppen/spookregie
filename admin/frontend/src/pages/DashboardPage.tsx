@@ -43,6 +43,9 @@ export default function DashboardPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPlayerId, setWizardPlayerId] = useState<number | null>(null);
   const [wizardInitialStep, setWizardInitialStep] = useState<"input" | "animation" | "output">("input");
+  const [wizardInitialPosition, setWizardInitialPosition] = useState<{ canvas_x: number; canvas_y: number } | null>(
+    null,
+  );
   const [running, setRunning] = useState(false);
   const [processBusy, setProcessBusy] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -145,9 +148,14 @@ export default function DashboardPage() {
     }
   }
 
-  function openWizard(id: number | null, step: "input" | "animation" | "output" = "input") {
+  function openWizard(
+    id: number | null,
+    step: "input" | "animation" | "output" = "input",
+    position: { canvas_x: number; canvas_y: number } | null = null,
+  ) {
     setWizardPlayerId(id);
     setWizardInitialStep(step);
+    setWizardInitialPosition(position);
     setWizardOpen(true);
   }
 
@@ -227,7 +235,7 @@ export default function DashboardPage() {
           outputConnections={outputConnections}
           onPlayerClick={(id, step) => openWizard(id, step)}
           onGraphChanged={refreshGraph}
-          onAddPlayer={() => openWizard(null)}
+          onAddPlayer={(pos) => openWizard(null, "input", pos)}
         />
       </section>
 
@@ -256,6 +264,7 @@ export default function DashboardPage() {
         <PlayerWizardModal
           playerId={wizardPlayerId}
           initialStep={wizardInitialStep}
+          initialPosition={wizardInitialPosition ?? undefined}
           onClose={() => setWizardOpen(false)}
           onSaved={refreshGraph}
         />

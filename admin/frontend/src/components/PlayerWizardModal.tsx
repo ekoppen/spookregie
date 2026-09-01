@@ -54,6 +54,7 @@ const EMPTY_DRAFT: PlayerDraft = {
 interface Props {
   playerId: number | null;
   initialStep?: Step;
+  initialPosition?: { canvas_x: number; canvas_y: number };
   onClose: () => void;
   onSaved: () => void;
 }
@@ -70,8 +71,10 @@ const STEP_LABEL: Record<Step, string> = {
   branches: "Aftakkingen",
 };
 
-export default function PlayerWizardModal({ playerId, initialStep, onClose, onSaved }: Props) {
-  const [draft, setDraft] = useState<PlayerDraft>(EMPTY_DRAFT);
+export default function PlayerWizardModal({ playerId, initialStep, initialPosition, onClose, onSaved }: Props) {
+  const [draft, setDraft] = useState<PlayerDraft>(() =>
+    initialPosition ? { ...EMPTY_DRAFT, ...initialPosition } : EMPTY_DRAFT,
+  );
   const [step, setStep] = useState<Step>(initialStep ?? "input");
   const [cameraSource, setCameraSource] = useState("");
   const [sources, setSources] = useState<Source[]>([]);

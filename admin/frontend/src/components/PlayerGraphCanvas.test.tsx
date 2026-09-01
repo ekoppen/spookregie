@@ -350,7 +350,7 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
     await userEvent.selectOptions(await screen.findByRole("combobox"), "101");
     await userEvent.click(screen.getByText("Aanmaken"));
 
-    expect(createTrigger).toHaveBeenCalledWith({ from_branch_id: 101 });
+    expect(createTrigger).toHaveBeenCalledWith({ from_branch_id: 101, canvas_x: 280, canvas_y: 0 });
     expect(onGraphChanged).toHaveBeenCalled();
   });
 });
