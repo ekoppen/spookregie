@@ -615,6 +615,9 @@ def test_ensure_source_opens_video_loop_via_videocapture(monkeypatch):
         def isOpened(self):
             return True
 
+        def get(self, prop):
+            return 25.0
+
     monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
     monkeypatch.setattr(
         mirror_main.cv2, "VideoCapture",
@@ -629,6 +632,53 @@ def test_ensure_source_opens_video_loop_via_videocapture(monkeypatch):
     assert isinstance(result, FakeCapture)
     assert opened == [mirror_main.os.path.join(mirror_main.MEDIA_CACHE_DIR, "c" * 64)]
     assert state.kind == "video_loop"
+
+
+def test_ensure_source_records_video_loop_fps_for_pacing(monkeypatch):
+    # De hoofdlus paceert een video_loop op state.fps -- zonder dat speelt
+    # het bestand af zo snel als de CPU 'm kan decoderen.
+    class FakeCapture:
+        def isOpened(self):
+            return True
+
+        def get(self, prop):
+            return 30.0
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda path, backend: FakeCapture())
+    state = mirror_main._SourceState()
+
+    mirror_main._ensure_source(state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger())
+
+    assert state.fps == 30.0
+
+
+def test_ensure_source_video_loop_falls_back_to_24fps(monkeypatch):
+    class FakeCapture:
+        def isOpened(self):
+            return True
+
+        def get(self, prop):
+            return 0.0  # onbekende fps in de container
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.cv2, "VideoCapture", lambda path, backend: FakeCapture())
+    state = mirror_main._SourceState()
+
+    mirror_main._ensure_source(state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger())
+
+    assert state.fps == 24.0
+
+
+def test_ensure_source_does_not_pace_a_camera_stream(monkeypatch):
+    # Een RTSP-stream paceert zichzelf al; fps moet None blijven zodat de
+    # hoofdlus daar géén extra sleep op zet.
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, index: "fake-cap")
+    state = mirror_main._SourceState()
+
+    mirror_main._ensure_source(state, {"id": 5, "kind": "camera_stream", "value": "rtsp://a"}, _FakeLogger())
+
+    assert state.fps is None
 
 
 def test_ensure_source_video_loop_returns_none_when_not_yet_synced(monkeypatch):
@@ -659,6 +709,9 @@ def test_ensure_source_video_loop_reuses_open_capture_for_unchanged_source(monke
     class FakeCapture:
         def isOpened(self):
             return True
+
+        def get(self, prop):
+            return 25.0
 
     monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
     monkeypatch.setattr(
@@ -750,11 +803,20 @@ def test_reopen_capture_after_failures_falls_back_to_camera_when_no_source_yet(m
 
 
 class _FakeProcess:
-    def __init__(self):
+    def __init__(self, exit_code=None):
         self.terminated = False
+        self.waited = False
+        self._exit_code = exit_code
 
     def terminate(self):
         self.terminated = True
+
+    def wait(self, timeout=None):
+        self.waited = True
+        return 0
+
+    def poll(self):
+        return self._exit_code
 
 
 def test_ensure_audio_starts_loop_for_players_audio_source(monkeypatch):
@@ -834,4 +896,76 @@ def test_ensure_audio_failure_to_start_is_not_cached_as_resolved(monkeypatch):
     monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
     mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
 
+    assert state.value == "a" * 64
+
+
+def test_ensure_audio_immediately_exiting_process_is_not_cached_as_resolved(monkeypatch):
+    # Popen slaagt, maar ffmpeg breekt meteen af (bv. ALSA-device nog bezet
+    # door de net gestopte voorganger). Zonder levenstest zou die mislukking
+    # permanent als "opgelost" gelden en nooit meer geprobeerd worden.
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess(exit_code=1))
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert state.value is None
+    assert state.process is None
+
+    # Volgende poging mag gewoon opnieuw starten.
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert state.value == "a" * 64
+
+
+def test_stop_audio_waits_for_the_terminated_process(monkeypatch):
+    # Zonder wait() houdt het net getermineerde ffmpeg het ALSA-device nog
+    # even vast en faalt de opvolger die in dezelfde tick start.
+    state = mirror_main._AudioState()
+    process = _FakeProcess()
+    state.process = process
+
+    mirror_main._stop_audio(state, _FakeLogger())
+
+    assert process.terminated is True
+    assert process.waited is True
+    assert state.process is None
+
+
+def test_stop_audio_survives_a_process_that_refuses_to_die(monkeypatch):
+    class _StubbornProcess(_FakeProcess):
+        def wait(self, timeout=None):
+            raise mirror_main.subprocess.TimeoutExpired("ffmpeg", timeout)
+
+    state = mirror_main._AudioState()
+    state.process = _StubbornProcess()
+
+    mirror_main._stop_audio(state, _FakeLogger())  # mag de lus niet ophangen
+
+    assert state.process is None
+
+
+def test_audio_restarts_after_sleep_stopped_it(monkeypatch):
+    # Regressie voor Belangrijk 4a: de slaap-tak stopt de audio én reset
+    # state.value, zodat _ensure_audio 'm daarna weer als gewijzigd ziet.
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+    player = {"id": 1, "audio_source_id": 5}
+    mirror_main._ensure_audio(state, player, sources_by_id, _FakeLogger())
+    running = state.process
+
+    # Wat de hoofdlus doet zodra sleeping.is_set() waar is:
+    mirror_main._stop_audio(state, _FakeLogger())
+    state.value = None
+
+    assert running.terminated is True
+
+    # En weer wakker: zelfde player, zelfde audio-source -> moet herstarten.
+    mirror_main._ensure_audio(state, player, sources_by_id, _FakeLogger())
+
+    assert state.process is not None
     assert state.value == "a" * 64

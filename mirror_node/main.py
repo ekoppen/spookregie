@@ -334,6 +334,10 @@ class _SourceState:
         self.value = None
         self.capture = None
         self.image = None
+        # Alleen gezet voor video_loop: een bestand-capture decodeert zo
+        # snel als de CPU toelaat (anders dan een zelf-pacende RTSP-stream),
+        # dus de hoofdlus moet er zelf op wachten. None = niet paceren.
+        self.fps = None
 
 
 class _AudioState:
@@ -354,6 +358,13 @@ def _stop_audio(state, logger):
     if state.process is not None:
         try:
             state.process.terminate()
+            # Wachten tot 'ie echt weg is: ffmpeg houdt het ALSA
+            # default-device vast tot het proces eindigt, dus een direct
+            # daarna gestarte opvolger krijgt anders EBUSY en valt stil.
+            # Reapt meteen ook het zombie-proces.
+            state.process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            logger.warning("Audio-proces stopte niet binnen 2s -- ga verder")
         except Exception as exc:
             logger.warning("Kon audio-proces niet stoppen: %s", exc)
         state.process = None
@@ -369,10 +380,19 @@ def _start_audio_loop(value, logger):
     teruggeven bij falen."""
     audio_path = os.path.join(MEDIA_CACHE_DIR, value)
     try:
-        return subprocess.Popen(
+        process = subprocess.Popen(
             ["ffmpeg", "-y", "-stream_loop", "-1", "-i", audio_path, "-f", "alsa", "default"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        # Popen slaagt ook als ffmpeg meteen daarna zelf afbreekt (geen
+        # ALSA-device, bezet device, kapot bestand). Zonder deze korte
+        # levenstest zou zo'n mislukking als "opgelost" gecached worden en
+        # nooit meer geprobeerd -- de prop blijft dan permanent stil.
+        time.sleep(0.2)
+        if process.poll() is not None:
+            logger.warning("audio-loop kon niet starten voor %s (proces stopte meteen)", value)
+            return None
+        return process
     except Exception as exc:
         logger.warning("Kon audio-loop niet starten: %s", exc)
         return None
@@ -418,6 +438,7 @@ def _ensure_source(state, source, logger):
         state.capture.release()
         state.capture = None
     state.image = None
+    state.fps = None
     kind = source.get("kind")
     value = source.get("value", "")
     if kind == "static_image":
@@ -453,6 +474,7 @@ def _ensure_source(state, source, logger):
             return None
         state.source_id, state.kind, state.value = source.get("id"), kind, value
         state.capture = capture
+        state.fps = capture.get(cv2.CAP_PROP_FPS) or 24.0
         return state.capture
     state.source_id, state.kind, state.value = source.get("id"), kind, value
     state.capture = open_camera(value, CAMERA_INDEX)
@@ -737,7 +759,18 @@ def main():
             sources_by_id = {s["id"]: s for s in _current_sources}
             current_player = player_graph._players.get(player_graph._current_id)
             resolved_source = sources_by_id.get(current_player.get("source_id")) if current_player else None
-            _ensure_audio(audio_state, current_player, sources_by_id, logger)
+            if sleeping.is_set():
+                # Een slapende prop hoort ook stil te zijn: zonder dit blijft
+                # de achtergrond-audio eindeloos doorlopen terwijl het beeld
+                # al zwart is. value=None (bovenop _stop_audio, dat alleen
+                # .process leegt) zodat _ensure_audio de lus na de slaap als
+                # gewijzigd ziet en 'm weer opstart. Hier, niet in de
+                # zwart-scherm-tak verderop: die wordt pas ná een geslaagde
+                # frame-read bereikt.
+                _stop_audio(audio_state, logger)
+                audio_state.value = None
+            else:
+                _ensure_audio(audio_state, current_player, sources_by_id, logger)
             acquired = _ensure_source(source_state, resolved_source, logger) if resolved_source else None
 
             if resolved_source is not None and resolved_source.get("kind") == "static_image":
@@ -756,6 +789,12 @@ def main():
                     # geldig frame als de bron open is).
                     acquired.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ok, frame = acquired.read()
+                if ok and source_state.fps:
+                    # Alleen video_loop zet fps -- een bestand-capture levert
+                    # frames zo snel als de CPU aankan, dus zonder deze pauze
+                    # speelt de clip op willekeurige hardware-snelheid af.
+                    # Zelfde aanpak als _play_scare_video.
+                    time.sleep(1.0 / source_state.fps)
             elif cap is not None:
                 # Geen (nog) bekende source voor de huidige player -- val
                 # terug op de startup-camera zodat het beeld nooit
