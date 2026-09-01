@@ -136,3 +136,20 @@ def test_output_canvas_position_round_trips(tmp_path):
     assert created["canvas_y"] == -3.0
     fetched = client.get(f"/api/outputs/{created['id']}").json()
     assert fetched["canvas_x"] == 12.5
+
+
+def test_delete_output_unassigns_devices_pointing_at_it(tmp_path):
+    client, bridge = _client(tmp_path)
+    output = client.post("/api/outputs", json={"name": "Spiegel"}).json()
+    db = client.app.state.db
+    db.execute(
+        "INSERT INTO devices (device_uuid, name, platform, output_id) VALUES ('abc-123', 'Oude MacBook', 'darwin', ?)",
+        (output["id"],),
+    )
+    db.commit()
+
+    response = client.delete(f"/api/outputs/{output['id']}")
+
+    assert response.status_code == 200
+    devices = client.get("/api/devices").json()
+    assert devices[0]["output_id"] is None

@@ -77,6 +77,7 @@ def delete_output_route(output_id: int, request: Request):
     ).fetchone()
     if has_connections is not None:
         raise HTTPException(status_code=400, detail="Output heeft nog verbindingen -- ontkoppel die eerst")
+    db.execute("UPDATE devices SET output_id = NULL WHERE output_id = ?", (output_id,))
     db.execute("DELETE FROM outputs WHERE id = ?", (output_id,))
     db.commit()
     publish_graph(db, request.app.state.bridge)
