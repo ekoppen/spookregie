@@ -8,6 +8,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from shared.mqtt_contract import Topics
+from shared.topic_prefix import fetch_topic_prefix
 from shared.logging_setup import setup_logging
 from mirror_node.device_identity import get_or_create_device_uuid
 
@@ -15,7 +16,8 @@ MQTT_HOST = os.environ.get("MQTT_HOST", "homeassistant.local")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
-MQTT_TOPIC_PREFIX = os.environ.get("MQTT_TOPIC_PREFIX", "")
+MQTT_TOPIC_PREFIX_ENV = os.environ.get("MQTT_TOPIC_PREFIX", "")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 REPO_DIR = os.environ.get("SPOOKREGIE_REPO_DIR", os.path.expanduser("~/spookregie"))
 LOG_DIR = os.environ.get("LOG_DIR", "./logs")
 CHECKIN_INTERVAL_SECONDS = float(os.environ.get("AGENT_CHECKIN_INTERVAL_SECONDS", "300"))
@@ -99,7 +101,12 @@ def check_and_apply_update(repo_dir, logger):
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     device_uuid = get_or_create_device_uuid()
-    topics = Topics(prefix=MQTT_TOPIC_PREFIX)
+    # Zelfde fetch-bij-startup-patroon als mirror_node.main: haalt de actuele
+    # topic-prefix bij de backend op i.p.v. alleen de env-var te lezen, zodat
+    # een prefix-wijziging via Instellingen ook de agent bereikt (na een
+    # herstart) en niet alleen mirror_node zelf.
+    topic_prefix = fetch_topic_prefix(BACKEND_URL, fallback=MQTT_TOPIC_PREFIX_ENV)
+    topics = Topics(prefix=topic_prefix)
     logger = setup_logging(f"agent-{device_uuid}", LOG_DIR)
 
     client = mqtt.Client(client_id=f"agent-{device_uuid}")
