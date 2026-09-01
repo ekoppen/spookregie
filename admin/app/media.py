@@ -9,30 +9,30 @@ from shared.media_sync import content_hash, is_content_hash
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
-def validate_upload(data, category):
+def validate_upload(data, kind):
     """Geeft een foutmelding terug, of None als de upload in orde is.
     Alleen de magic bytes worden gecheckt — genoeg om een verkeerd bestand
     bij upload te weigeren in plaats van een node er later op te laten
     stuklopen (zie spec)."""
     if len(data) > MAX_UPLOAD_SIZE:
         return f"bestand is groter dan {MAX_UPLOAD_SIZE // (1024 * 1024)} MB"
-    if category == "mirror_overlay" and not data.startswith(b"\x89PNG"):
-        return "overlay moet een PNG-bestand zijn"
-    if category == "scare_audio" and not (data[:4] == b"RIFF" and data[8:12] == b"WAVE"):
-        return "scare-audio moet een WAV-bestand zijn"
-    if category == "mirror_scare_video" and data[4:8] != b"ftyp":
-        return "scare-video moet een MP4-bestand zijn"
+    if kind == "image" and not data.startswith(b"\x89PNG"):
+        return "afbeelding moet een PNG-bestand zijn"
+    if kind == "audio" and not (data[:4] == b"RIFF" and data[8:12] == b"WAVE"):
+        return "audio moet een WAV-bestand zijn"
+    if kind == "video" and data[4:8] != b"ftyp":
+        return "video moet een MP4-bestand zijn"
     return None
 
 
-def save_media(conn, media_dir, data, filename, category):
+def save_media(conn, media_dir, data, filename, kind):
     os.makedirs(media_dir, exist_ok=True)
     hash_ = content_hash(data)
     with open(os.path.join(media_dir, hash_), "wb") as f:
         f.write(data)
     conn.execute(
         "INSERT OR REPLACE INTO media (hash, filename, kind, uploaded_at) VALUES (?, ?, ?, ?)",
-        (hash_, filename, category, str(time.time())),
+        (hash_, filename, kind, str(time.time())),
     )
     conn.commit()
     return hash_
@@ -45,12 +45,12 @@ def get_media_path(media_dir, hash_):
     return path if os.path.exists(path) else None
 
 
-def extract_audio_if_video(media_dir, hash_, category):
-    """Extraheert het geluidsspoor van een geüploade scare-video naar
+def extract_audio_if_video(media_dir, hash_, kind):
+    """Extraheert het geluidsspoor van een geüploade video naar
     <hash>.audio via ffmpeg. Best-effort: geen geluidsspoor, een
     ontbrekende ffmpeg-binary, of een mislukte extractie levert gewoon
     geen bestand op -- de video-upload zelf mag hier nooit op stuklopen."""
-    if category != "mirror_scare_video":
+    if kind != "video":
         return
     video_path = os.path.join(media_dir, hash_)
     audio_path = video_path + ".audio"
@@ -77,18 +77,18 @@ def get_media_audio_path(media_dir, hash_):
     return path if os.path.exists(path) else None
 
 
-def list_media(conn, category=None):
-    if category is not None:
+def list_media(conn, kind=None):
+    if kind is not None:
         rows = conn.execute(
             "SELECT hash, filename, kind, uploaded_at FROM media WHERE kind = ? ORDER BY uploaded_at DESC",
-            (category,),
+            (kind,),
         ).fetchall()
     else:
         rows = conn.execute(
             "SELECT hash, filename, kind, uploaded_at FROM media ORDER BY uploaded_at DESC"
         ).fetchall()
     return [
-        {"hash": r[0], "filename": r[1], "category": r[2], "uploaded_at": r[3]}
+        {"hash": r[0], "filename": r[1], "kind": r[2], "uploaded_at": r[3]}
         for r in rows
     ]
 

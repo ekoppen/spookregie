@@ -14,19 +14,19 @@ router = APIRouter()
 
 
 @router.post("/api/media")
-async def upload_media(request: Request, file: UploadFile, category: str = Form(...)):
+async def upload_media(request: Request, file: UploadFile, kind: str = Form(...)):
     data = await file.read()
-    error = validate_upload(data, category)
+    error = validate_upload(data, kind)
     if error is not None:
         raise HTTPException(status_code=400, detail=error)
-    h = save_media(request.app.state.db, request.app.state.settings.media_dir, data, file.filename, category)
-    extract_audio_if_video(request.app.state.settings.media_dir, h, category)
-    return {"hash": h, "filename": file.filename, "category": category}
+    h = save_media(request.app.state.db, request.app.state.settings.media_dir, data, file.filename, kind)
+    extract_audio_if_video(request.app.state.settings.media_dir, h, kind)
+    return {"hash": h, "filename": file.filename, "kind": kind}
 
 
 @router.get("/api/media")
-def list_media_route(request: Request, category: str | None = None):
-    return list_media(request.app.state.db, category=category)
+def list_media_route(request: Request, kind: str | None = None):
+    return list_media(request.app.state.db, kind=kind)
 
 
 @router.get("/api/media/{hash_}")

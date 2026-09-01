@@ -21,19 +21,19 @@ from shared.media_sync import content_hash
 def test_validate_upload_rejects_oversized_data():
     data = b"\x89PNG" + b"x" * MAX_UPLOAD_SIZE
 
-    assert validate_upload(data, "mirror_overlay") is not None
+    assert validate_upload(data, "image") is not None
 
 
 def test_validate_upload_accepts_valid_headers():
-    assert validate_upload(b"\x89PNG\r\n\x1a\nrest", "mirror_overlay") is None
-    assert validate_upload(b"RIFF\x24\x00\x00\x00WAVEfmt ", "scare_audio") is None
+    assert validate_upload(b"\x89PNG\r\n\x1a\nrest", "image") is None
+    assert validate_upload(b"RIFF\x24\x00\x00\x00WAVEfmt ", "audio") is None
 
 
 def test_validate_upload_rejects_wrong_headers():
-    assert validate_upload(b"GIF89a", "mirror_overlay") is not None
-    assert validate_upload(b"ID3iets", "scare_audio") is not None
+    assert validate_upload(b"GIF89a", "image") is not None
+    assert validate_upload(b"ID3iets", "audio") is not None
     # RIFF zonder WAVE (bijv. een AVI) hoort ook geweigerd te worden
-    assert validate_upload(b"RIFF\x24\x00\x00\x00AVI ", "scare_audio") is not None
+    assert validate_upload(b"RIFF\x24\x00\x00\x00AVI ", "audio") is not None
 
 
 def test_validate_upload_ignores_unknown_category():
@@ -45,7 +45,7 @@ def test_save_media_stores_file_and_returns_hash(tmp_path):
     media_dir = str(tmp_path / "media")
     data = b"fake-png-bytes"
 
-    result_hash = save_media(conn, media_dir, data, "spook.png", "mirror_overlay")
+    result_hash = save_media(conn, media_dir, data, "spook.png", "image")
 
     assert result_hash == content_hash(data)
     assert get_media_path(media_dir, result_hash) is not None
@@ -61,21 +61,21 @@ def test_get_media_path_returns_none_for_unknown_hash(tmp_path):
 def test_list_media_filters_by_category(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")
-    save_media(conn, media_dir, b"overlay-data", "spook.png", "mirror_overlay")
-    save_media(conn, media_dir, b"audio-data", "gil.wav", "scare_audio")
+    save_media(conn, media_dir, b"overlay-data", "spook.png", "image")
+    save_media(conn, media_dir, b"audio-data", "gil.wav", "audio")
 
-    overlays = list_media(conn, category="mirror_overlay")
+    overlays = list_media(conn, kind="image")
 
     assert len(overlays) == 1
     assert overlays[0]["filename"] == "spook.png"
-    assert overlays[0]["category"] == "mirror_overlay"
+    assert overlays[0]["kind"] == "image"
 
 
 def test_list_media_without_category_returns_all(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")
-    save_media(conn, media_dir, b"overlay-data", "spook.png", "mirror_overlay")
-    save_media(conn, media_dir, b"audio-data", "gil.wav", "scare_audio")
+    save_media(conn, media_dir, b"overlay-data", "spook.png", "image")
+    save_media(conn, media_dir, b"audio-data", "gil.wav", "audio")
 
     assert len(list_media(conn)) == 2
 
@@ -83,7 +83,7 @@ def test_list_media_without_category_returns_all(tmp_path):
 def test_delete_media_removes_file_and_row(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")
-    h = save_media(conn, media_dir, b"data", "x.wav", "scare_audio")
+    h = save_media(conn, media_dir, b"data", "x.wav", "audio")
 
     deleted = delete_media(conn, media_dir, h)
 
@@ -95,7 +95,7 @@ def test_delete_media_removes_file_and_row(tmp_path):
 def test_delete_media_clears_stale_overlay_reference(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")
-    h = save_media(conn, media_dir, b"\x89PNGdata", "spook.png", "mirror_overlay")
+    h = save_media(conn, media_dir, b"\x89PNGdata", "spook.png", "image")
     conn.execute(
         "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
         "VALUES (1, 'xray', '{}', ?, 1.0, '[0.5, 0.5]')",
@@ -112,8 +112,8 @@ def test_delete_media_clears_stale_overlay_reference(tmp_path):
 def test_delete_media_leaves_other_overlay_reference_untouched(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
     media_dir = str(tmp_path / "media")
-    h1 = save_media(conn, media_dir, b"\x89PNGdata1", "spook.png", "mirror_overlay")
-    h2 = save_media(conn, media_dir, b"\x89PNGdata2", "geest.png", "mirror_overlay")
+    h1 = save_media(conn, media_dir, b"\x89PNGdata1", "spook.png", "image")
+    h2 = save_media(conn, media_dir, b"\x89PNGdata2", "geest.png", "image")
     conn.execute(
         "INSERT INTO mirror_config (id, effect, params, overlay_hash, scale, position) "
         "VALUES (1, 'xray', '{}', ?, 1.0, '[0.5, 0.5]')",
@@ -203,11 +203,11 @@ def _mp4_bytes():
 
 
 def test_validate_upload_accepts_valid_mp4_header():
-    assert validate_upload(_mp4_bytes(), "mirror_scare_video") is None
+    assert validate_upload(_mp4_bytes(), "video") is None
 
 
 def test_validate_upload_rejects_video_without_mp4_header():
-    assert validate_upload(b"GIF89a-niet-een-mp4", "mirror_scare_video") is not None
+    assert validate_upload(b"GIF89a-niet-een-mp4", "video") is not None
 
 
 def test_extract_audio_if_video_creates_companion_file(tmp_path, monkeypatch):
@@ -224,7 +224,7 @@ def test_extract_audio_if_video_creates_companion_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
 
-    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+    extract_audio_if_video(media_dir, video_hash, "video")
 
     assert get_media_audio_path(media_dir, video_hash) is not None
     with open(get_media_audio_path(media_dir, video_hash), "rb") as f:
@@ -237,7 +237,7 @@ def test_extract_audio_if_video_skips_non_video_category(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr("admin.app.media.subprocess.run", lambda *a, **k: calls.append(1))
 
-    extract_audio_if_video(media_dir, "a" * 64, "mirror_overlay")
+    extract_audio_if_video(media_dir, "a" * 64, "image")
 
     assert calls == []
 
@@ -254,7 +254,7 @@ def test_extract_audio_if_video_cleans_up_on_ffmpeg_failure(tmp_path, monkeypatc
 
     monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
 
-    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+    extract_audio_if_video(media_dir, video_hash, "video")
 
     assert get_media_audio_path(media_dir, video_hash) is None
 
@@ -268,7 +268,7 @@ def test_extract_audio_if_video_handles_missing_ffmpeg_binary(tmp_path, monkeypa
 
     monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
 
-    extract_audio_if_video(media_dir, "c" * 64, "mirror_scare_video")  # mag niet crashen
+    extract_audio_if_video(media_dir, "c" * 64, "video")  # mag niet crashen
 
     assert get_media_audio_path(media_dir, "c" * 64) is None
 
@@ -289,7 +289,7 @@ def test_extract_audio_if_video_survives_cleanup_failure(tmp_path, monkeypatch):
     monkeypatch.setattr("admin.app.media.subprocess.run", fake_run)
     monkeypatch.setattr("admin.app.media.os.remove", failing_remove)
 
-    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")  # mag niet crashen
+    extract_audio_if_video(media_dir, video_hash, "video")  # mag niet crashen
 
 
 def test_get_media_audio_path_rejects_malformed_hash(tmp_path):
@@ -321,7 +321,7 @@ def test_extract_audio_if_video_produces_real_playable_wav(tmp_path):
     )
     assert os.path.exists(video_path)
 
-    extract_audio_if_video(media_dir, video_hash, "mirror_scare_video")
+    extract_audio_if_video(media_dir, video_hash, "video")
 
     audio_path = get_media_audio_path(media_dir, video_hash)
     assert audio_path is not None
