@@ -44,6 +44,7 @@ interface Props {
 type PlayerNodeData = {
   player: Player;
   branches: PlayerBranch[];
+  audioSourceName: string | null;
   onPlayerClick: Props["onPlayerClick"];
   onAddBranchTrigger: (branchId: number) => void;
   onMakeRoot: (playerId: number) => void;
@@ -144,6 +145,16 @@ export function parseOutputConnectionEdgeIds(edges: Edge[]): number[] {
     .filter((id) => !Number.isNaN(id));
 }
 
+// Bepaalt welk player-veld een gesleepte source->player-verbinding moet
+// updaten. Als losstaande pure functie (i.p.v. inline in handleConnect)
+// zodat de routeringslogica getest kan worden zonder een echte ReactFlow-
+// sleepverbinding te hoeven simuleren -- zelfde reden als
+// parseOutputConnectionEdgeIds hierboven (edges/handles krijgen in jsdom
+// nooit afmetingen, dus renderen niet).
+export function resolveSourceConnectionUpdate(source: Source): Partial<Player> {
+  return source.kind === "audio" ? { audio_source_id: source.id } : { source_id: source.id };
+}
+
 function triggerKindLabel(trigger: Trigger): string {
   if (trigger.kind === "always") return "Altijd";
   if (trigger.kind === "motion") return "Beweging";
@@ -153,7 +164,7 @@ function triggerKindLabel(trigger: Trigger): string {
 }
 
 function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
-  const { player, branches, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor, onDelete } = data;
+  const { player, branches, audioSourceName, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor, onDelete } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(player.name);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -209,6 +220,7 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
       onContextMenu={handleContextMenu}
     >
       <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Top} id="audio-in" />
       <div className="player-node__header">
         <button
           type="button"
@@ -283,6 +295,11 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
             </span>
           </>
         )}
+        {audioSourceName && (
+          <span className="player-node__chip player-node__chip--audio nodrag" title="Gekoppelde audio-source">
+            🔊 {audioSourceName}
+          </span>
+        )}
       </div>
       {branches.map((branch) => (
         <div className="player-node__branch" key={branch.id}>
@@ -313,6 +330,13 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
   );
 }
 
+function sourceIcon(kind: Source["kind"]): string {
+  if (kind === "camera_stream") return "📷";
+  if (kind === "static_image") return "🖼";
+  if (kind === "video_loop") return "🎞";
+  return "🔊"; // audio
+}
+
 function SourceNodeComponent({ data }: NodeProps<SourceNode>) {
   const { source, onDelete } = data;
   const navigate = useNavigate();
@@ -326,7 +350,7 @@ function SourceNodeComponent({ data }: NodeProps<SourceNode>) {
   return (
     <div className="source-node" onContextMenu={handleContextMenu}>
       <div className="source-node__header">
-        <span className="source-node__icon">{source.kind === "camera_stream" ? "📷" : "🖼"}</span>
+        <span className="source-node__icon">{sourceIcon(source.kind)}</span>
         <span className="source-node__name">{source.name}</span>
       </div>
       <Handle type="source" position={Position.Right} />
@@ -521,6 +545,11 @@ export default function PlayerGraphCanvas({
     [branches],
   );
 
+  const audioSourceNameById = useMemo(
+    () => Object.fromEntries(sources.filter((s) => s.kind === "audio").map((s) => [s.id, s.name])),
+    [sources],
+  );
+
   const handleAddBranchTrigger = useCallback(
     async (branchId: number) => {
       await createTrigger({ from_branch_id: branchId });
@@ -684,6 +713,7 @@ export default function PlayerGraphCanvas({
           data: {
             player,
             branches: branches.filter((b) => b.player_id === player.id),
+            audioSourceName: player.audio_source_id !== null ? audioSourceNameById[player.audio_source_id] ?? null : null,
             onPlayerClick,
             onAddBranchTrigger: handleAddBranchTrigger,
             onMakeRoot: handleMakeRoot,
@@ -725,7 +755,7 @@ export default function PlayerGraphCanvas({
       ),
     ],
     [
-      players, sources, outputs, triggers, branches,
+      players, sources, outputs, triggers, branches, audioSourceNameById,
       onPlayerClick, handleAddBranchTrigger, handleMakeRoot, handleRenamePlayer, handleSetPlayerColor,
       handleTriggerClick, handleRenameTrigger, handleSetTriggerColor,
       handleDeletePlayer, handleDeleteSource, handleDeleteOutput, handleDeleteTrigger,
@@ -740,6 +770,15 @@ export default function PlayerGraphCanvas({
           id: `source-in-${player.id}`,
           source: `source-${player.source_id}`,
           target: `player-${player.id}`,
+        });
+      }
+      if (player.audio_source_id !== null) {
+        result.push({
+          id: `audio-in-${player.id}`,
+          source: `source-${player.audio_source_id}`,
+          target: `player-${player.id}`,
+          targetHandle: "audio-in",
+          style: { strokeDasharray: "4 2" },
         });
       }
     }
@@ -801,9 +840,10 @@ export default function PlayerGraphCanvas({
         const playerId = parseInt(connection.target.replace("player-", ""), 10);
         if (Number.isNaN(sourceId) || Number.isNaN(playerId)) return;
         const player = players.find((p) => p.id === playerId);
-        if (!player) return;
+        const source = sources.find((s) => s.id === sourceId);
+        if (!player || !source) return;
         const { id: _id, ...draft } = player;
-        await updatePlayer(playerId, { ...draft, source_id: sourceId });
+        await updatePlayer(playerId, { ...draft, ...resolveSourceConnectionUpdate(source) });
         onGraphChanged();
         return;
       }
@@ -830,7 +870,7 @@ export default function PlayerGraphCanvas({
         onGraphChanged();
       }
     },
-    [players, triggers, onGraphChanged],
+    [players, sources, triggers, onGraphChanged],
   );
 
   const handleEdgesDelete = useCallback(

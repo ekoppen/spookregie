@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import PlayerGraphCanvas, { parseOutputConnectionEdgeIds } from "./PlayerGraphCanvas";
+import PlayerGraphCanvas, { parseOutputConnectionEdgeIds, resolveSourceConnectionUpdate } from "./PlayerGraphCanvas";
 import type { Player, Trigger, Source, Output } from "../types";
 import type { Edge } from "@xyflow/react";
 import { deletePlayer } from "../api/players";
@@ -348,6 +348,67 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
 
     expect(createTrigger).toHaveBeenCalledWith({ from_branch_id: 101 });
     expect(onGraphChanged).toHaveBeenCalled();
+  });
+});
+
+describe("PlayerGraphCanvas -- audio-source koppelen aan een player", () => {
+  const AUDIO_SOURCE: Source = { id: 7, name: "Gil-geluid", kind: "audio", value: "media/gil.wav", canvas_x: 0, canvas_y: 0 };
+
+  it("toont geen audio-badge als de player geen audio_source_id heeft", async () => {
+    render(
+      <MemoryRouter>
+        <PlayerGraphCanvas
+          players={[PLAYER]}
+          sources={[AUDIO_SOURCE]}
+          branches={[]}
+          triggers={[]}
+          outputs={[]}
+          outputConnections={[]}
+          onPlayerClick={vi.fn()}
+          onGraphChanged={vi.fn()}
+          onAddPlayer={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Basis");
+    expect(screen.queryByTitle("Gekoppelde audio-source")).not.toBeInTheDocument();
+  });
+
+  it("toont de naam van de gekoppelde audio-source als badge", async () => {
+    const player = { ...PLAYER, audio_source_id: 7 };
+    render(
+      <MemoryRouter>
+        <PlayerGraphCanvas
+          players={[player]}
+          sources={[AUDIO_SOURCE]}
+          branches={[]}
+          triggers={[]}
+          outputs={[]}
+          outputConnections={[]}
+          onPlayerClick={vi.fn()}
+          onGraphChanged={vi.fn()}
+          onAddPlayer={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findByTitle("Gekoppelde audio-source")).textContent).toContain("Gil-geluid");
+  });
+
+  // Geen bestaande test in dit bestand oefent handleConnect's source->player-
+  // tak uit via een echte ReactFlow-sleepverbinding: edges/handles krijgen in
+  // jsdom nooit afmetingen (zie het commentaar bij parseOutputConnectionEdgeIds
+  // hierboven), dus een drag-simulatie is hier niet haalbaar. Zelfde aanpak:
+  // de routeringslogica staat als pure functie los van handleConnect en wordt
+  // hier rechtstreeks getest.
+  it("zet audio_source_id (niet source_id) bij een connect vanaf een audio-kind source", () => {
+    expect(resolveSourceConnectionUpdate(AUDIO_SOURCE)).toEqual({ audio_source_id: 7 });
+  });
+
+  it("zet source_id (bestaand gedrag) bij een connect vanaf een niet-audio source", () => {
+    const videoSource: Source = { id: 8, name: "Spiegel camera", kind: "camera_stream", value: "rtsp://x", canvas_x: 0, canvas_y: 0 };
+    expect(resolveSourceConnectionUpdate(videoSource)).toEqual({ source_id: 8 });
   });
 });
 

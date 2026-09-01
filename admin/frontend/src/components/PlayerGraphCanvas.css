@@ -173,6 +173,10 @@
   cursor: pointer;
 }
 
+.player-node__chip--audio {
+  cursor: default;
+}
+
 .player-node__add-output {
   margin-top: 0.5rem;
   padding: 0.25rem 0.5rem;
