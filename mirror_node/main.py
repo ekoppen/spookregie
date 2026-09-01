@@ -551,7 +551,10 @@ def main():
     topics = Topics(prefix=topic_prefix)
     camera_source = fetch_mirror_camera_source(BACKEND_URL, fallback=MIRROR_CAMERA_SOURCE_ENV)
 
-    client = mqtt.Client(client_id="mirror-node")
+    # Per-device client id (NODE_NAME is hierboven al gezet) -- een gedeelde,
+    # vaste id zou een tweede fysiek apparaat permanent van de broker af laten
+    # vechten met het eerste (elke connect kickt de vorige sessie eraf).
+    client = mqtt.Client(client_id=f"mirror-{NODE_NAME}")
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
 
