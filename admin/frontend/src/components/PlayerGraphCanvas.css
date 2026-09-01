@@ -256,3 +256,30 @@
 .output-node__icon {
   font-size: 0.9rem;
 }
+
+.node-context-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 0.3rem;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.node-context-menu__item {
+  background: transparent;
+  border: none;
+  color: var(--bone);
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.node-context-menu__item:hover {
+  background: var(--void);
+}

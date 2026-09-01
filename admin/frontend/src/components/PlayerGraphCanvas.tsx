@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   Background,
@@ -14,12 +15,13 @@ import {
   type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { createTrigger, updateTrigger, updateTriggerPosition } from "../api/triggers";
-import { updatePlayer, updatePlayerPosition } from "../api/players";
-import { updateSource } from "../api/sources";
-import { updateOutput } from "../api/outputs";
+import { createTrigger, updateTrigger, updateTriggerPosition, deleteTrigger } from "../api/triggers";
+import { updatePlayer, updatePlayerPosition, deletePlayer } from "../api/players";
+import { updateSource, deleteSource } from "../api/sources";
+import { updateOutput, deleteOutput } from "../api/outputs";
 import { createPlayerBranch } from "../api/branches";
 import { createOutputConnection, deleteOutputConnection } from "../api/outputConnections";
+import { ApiError } from "../api/client";
 import TriggerPopover from "./TriggerPopover";
 import type { Player, Source, PlayerBranch, Trigger, Output, OutputConnection } from "../types";
 import "./PlayerGraphCanvas.css";
@@ -46,19 +48,75 @@ type PlayerNodeData = {
   onMakeRoot: (playerId: number) => void;
   onRename: (playerId: number, name: string) => void;
   onSetColor: (playerId: number, color: string) => void;
+  onDelete: (playerId: number) => void;
   [key: string]: unknown;
 };
 
-type SourceNodeData = { source: Source; [key: string]: unknown };
-type OutputNodeData = { output: Output; [key: string]: unknown };
+type SourceNodeData = { source: Source; onDelete: (sourceId: number) => void; [key: string]: unknown };
+type OutputNodeData = { output: Output; onDelete: (outputId: number) => void; [key: string]: unknown };
 
 type TriggerNodeData = {
   trigger: Trigger;
   onTriggerClick: (triggerId: number) => void;
   onRename: (triggerId: number, name: string) => void;
   onSetColor: (triggerId: number, color: string) => void;
+  onDelete: (triggerId: number) => void;
   [key: string]: unknown;
 };
+
+// Rechtsklik-menu, gedeeld door alle vier de knooptypes -- lokale open/dicht-
+// state blijft per node-component (zelfde patroon als het kleur-palet
+// hierboven), alleen de popup zelf is gemeenschappelijk. Vast gepositioneerd
+// op de muiscoordinaten (niet geankerd aan de node) zodat 'ie nooit buiten
+// een kleine node-breedte clipt.
+function NodeContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  items: { label: string; onSelect: () => void }[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function handleClickAway() {
+      onClose();
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("click", handleClickAway);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("click", handleClickAway);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="node-context-menu nodrag"
+      style={{ position: "fixed", left: x, top: y }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          className="node-context-menu__item"
+          onClick={() => {
+            item.onSelect();
+            onClose();
+          }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // @xyflow/react's Node<T> constrains T to Record<string, unknown>; the
 // index signatures above satisfy that constraint for our data payloads.
@@ -88,11 +146,17 @@ function triggerKindLabel(trigger: Trigger): string {
 }
 
 function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
-  const { player, branches, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor } = data;
+  const { player, branches, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor, onDelete } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(player.name);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const clickTimerRef = useRef<number | null>(null);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
 
   function commitRename() {
     setEditingName(false);
@@ -135,6 +199,7 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
       className="player-node"
       data-root={player.is_root}
       style={player.color ? { borderColor: player.color } : undefined}
+      onContextMenu={handleContextMenu}
     >
       <Handle type="target" position={Position.Left} />
       <div className="player-node__header">
@@ -226,42 +291,97 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
           <Handle type="source" position={Position.Right} id={`branch-${branch.id}`} />
         </div>
       ))}
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { label: "Bewerken", onSelect: () => onPlayerClick(player.id, "input") },
+            { label: "Verwijderen", onSelect: () => onDelete(player.id) },
+          ]}
+        />
+      )}
     </div>
   );
 }
 
 function SourceNodeComponent({ data }: NodeProps<SourceNode>) {
-  const { source } = data;
+  const { source, onDelete } = data;
+  const navigate = useNavigate();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
   return (
-    <div className="source-node">
+    <div className="source-node" onContextMenu={handleContextMenu}>
       <div className="source-node__header">
         <span className="source-node__icon">{source.kind === "camera_stream" ? "📷" : "🖼"}</span>
         <span className="source-node__name">{source.name}</span>
       </div>
       <Handle type="source" position={Position.Right} />
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { label: "Bewerken", onSelect: () => navigate("/sources") },
+            { label: "Verwijderen", onSelect: () => onDelete(source.id) },
+          ]}
+        />
+      )}
     </div>
   );
 }
 
 function OutputNodeComponent({ data }: NodeProps<OutputNode>) {
-  const { output } = data;
+  const { output, onDelete } = data;
+  const navigate = useNavigate();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
   return (
-    <div className="output-node">
+    <div className="output-node" onContextMenu={handleContextMenu}>
       <Handle type="target" position={Position.Left} />
       <div className="output-node__header">
         <span className="output-node__icon">🖥</span>
         <span className="output-node__name">{output.name}</span>
       </div>
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { label: "Bewerken", onSelect: () => navigate("/outputs") },
+            { label: "Verwijderen", onSelect: () => onDelete(output.id) },
+          ]}
+        />
+      )}
     </div>
   );
 }
 
 function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
-  const { trigger, onTriggerClick, onRename, onSetColor } = data;
+  const { trigger, onTriggerClick, onRename, onSetColor, onDelete } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(trigger.name ?? "");
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const clickTimerRef = useRef<number | null>(null);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
 
   function commitRename() {
     setEditingName(false);
@@ -302,6 +422,7 @@ function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
     <div
       className="trigger-node"
       style={trigger.color ? { borderColor: trigger.color } : undefined}
+      onContextMenu={handleContextMenu}
     >
       <Handle type="target" position={Position.Left} />
       <div className="trigger-node__header">
@@ -359,6 +480,17 @@ function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
       </div>
       {trigger.name && <span className="trigger-node__kind">{triggerKindLabel(trigger)}</span>}
       <Handle type="source" position={Position.Right} id="out" />
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { label: "Bewerken", onSelect: () => onTriggerClick(trigger.id) },
+            { label: "Verwijderen", onSelect: () => onDelete(trigger.id) },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -451,6 +583,58 @@ export default function PlayerGraphCanvas({
     [triggers, onGraphChanged],
   );
 
+  // Rechtsklik-verwijderen: geen apart bevestigingsscherm op het canvas
+  // (net als de bestaande Sources/Outputs-pagina's) -- de backend-guards
+  // (nog-in-gebruik) zijn de echte bescherming, hun foutmelding komt via
+  // window.alert terecht, zelfde bericht-tekst als ApiError elders al geeft.
+  const handleDeletePlayer = useCallback(
+    async (playerId: number) => {
+      try {
+        await deletePlayer(playerId);
+        onGraphChanged();
+      } catch (err) {
+        window.alert(err instanceof ApiError ? err.message : "Verwijderen is mislukt.");
+      }
+    },
+    [onGraphChanged],
+  );
+
+  const handleDeleteTrigger = useCallback(
+    async (triggerId: number) => {
+      try {
+        await deleteTrigger(triggerId);
+        onGraphChanged();
+      } catch (err) {
+        window.alert(err instanceof ApiError ? err.message : "Verwijderen is mislukt.");
+      }
+    },
+    [onGraphChanged],
+  );
+
+  const handleDeleteSource = useCallback(
+    async (sourceId: number) => {
+      try {
+        await deleteSource(sourceId);
+        onGraphChanged();
+      } catch (err) {
+        window.alert(err instanceof ApiError ? err.message : "Verwijderen is mislukt.");
+      }
+    },
+    [onGraphChanged],
+  );
+
+  const handleDeleteOutput = useCallback(
+    async (outputId: number) => {
+      try {
+        await deleteOutput(outputId);
+        onGraphChanged();
+      } catch (err) {
+        window.alert(err instanceof ApiError ? err.message : "Verwijderen is mislukt.");
+      }
+    },
+    [onGraphChanged],
+  );
+
   const flowNodes: FlowNode[] = useMemo(
     () => [
       ...players.map(
@@ -466,6 +650,7 @@ export default function PlayerGraphCanvas({
             onMakeRoot: handleMakeRoot,
             onRename: handleRenamePlayer,
             onSetColor: handleSetPlayerColor,
+            onDelete: handleDeletePlayer,
           },
         }),
       ),
@@ -474,7 +659,7 @@ export default function PlayerGraphCanvas({
           id: `source-${source.id}`,
           type: "source",
           position: { x: source.canvas_x, y: source.canvas_y },
-          data: { source },
+          data: { source, onDelete: handleDeleteSource },
         }),
       ),
       ...outputs.map(
@@ -482,7 +667,7 @@ export default function PlayerGraphCanvas({
           id: `output-${output.id}`,
           type: "output",
           position: { x: output.canvas_x, y: output.canvas_y },
-          data: { output },
+          data: { output, onDelete: handleDeleteOutput },
         }),
       ),
       ...triggers.map(
@@ -495,6 +680,7 @@ export default function PlayerGraphCanvas({
             onTriggerClick: handleTriggerClick,
             onRename: handleRenameTrigger,
             onSetColor: handleSetTriggerColor,
+            onDelete: handleDeleteTrigger,
           },
         }),
       ),
@@ -503,6 +689,7 @@ export default function PlayerGraphCanvas({
       players, sources, outputs, triggers, branches,
       onPlayerClick, handleAddBranchTrigger, handleMakeRoot, handleRenamePlayer, handleSetPlayerColor,
       handleTriggerClick, handleRenameTrigger, handleSetTriggerColor,
+      handleDeletePlayer, handleDeleteSource, handleDeleteOutput, handleDeleteTrigger,
     ],
   );
 
