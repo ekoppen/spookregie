@@ -2,7 +2,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter()
 
-_DEVICE_COLUMNS = "id, device_uuid, name, platform, git_sha, last_seen_at, output_id"
+_DEVICE_COLUMNS = (
+    "id, device_uuid, name, platform, git_sha, last_seen_at, output_id, "
+    "is_mirror, is_camera, camera_stream_url"
+)
 
 
 def _row_to_device(row):
@@ -14,6 +17,9 @@ def _row_to_device(row):
         "git_sha": row[4],
         "last_seen_at": row[5],
         "output_id": row[6],
+        "is_mirror": bool(row[7]),
+        "is_camera": bool(row[8]),
+        "camera_stream_url": row[9],
     }
 
 

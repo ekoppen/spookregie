@@ -78,6 +78,19 @@ def test_list_devices_returns_seeded_device(tmp_path):
     assert body[0]["output_id"] is None
 
 
+def test_list_devices_includes_role_flags_and_camera_stream_url(tmp_path):
+    client = _client(tmp_path)
+    db = client.app.state.db
+    _seed_device(db)
+
+    response = client.get("/api/devices")
+
+    body = response.json()
+    assert body[0]["is_mirror"] is True
+    assert body[0]["is_camera"] is False
+    assert body[0]["camera_stream_url"] is None
+
+
 def test_update_device_renames_and_assigns_output(tmp_path):
     client = _client(tmp_path)
     db = client.app.state.db
