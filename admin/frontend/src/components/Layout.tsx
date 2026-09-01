@@ -9,6 +9,7 @@ const links = [
   { to: "/logs", label: "Logs", end: false },
   { to: "/outputs", label: "Outputs", end: false },
   { to: "/sources", label: "Sources", end: false },
+  { to: "/devices", label: "Apparaten", end: false },
   { to: "/settings", label: "Instellingen", end: false },
 ];
 

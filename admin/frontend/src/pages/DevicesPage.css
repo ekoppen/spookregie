@@ -1,0 +1,104 @@
+.devices-page {
+  padding: 1.5rem 2rem;
+  color: var(--bone);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.devices-header {
+  margin-bottom: 1.5rem;
+}
+
+.devices-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ash);
+  margin: 0 0 0.3rem;
+}
+
+.devices-eyebrow__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ember);
+}
+
+.devices-heading {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.devices-error {
+  color: var(--alarm);
+  margin-bottom: 1rem;
+}
+
+.devices-notice {
+  color: var(--signal);
+  margin-bottom: 1rem;
+}
+
+.devices-empty {
+  color: var(--ash);
+  font-size: 0.85rem;
+}
+
+.devices-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.devices-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto 1fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.devices-field__input,
+.devices-field__select {
+  padding: 0.5rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--bone);
+}
+
+.devices-field__meta {
+  font-size: 0.8rem;
+  color: var(--ash);
+  font-family: monospace;
+}
+
+.devices-field__label {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--ash);
+}
+
+.devices-status-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.devices-status-badge--online {
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--signal);
+}
+
+.devices-status-badge--offline {
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--alarm);
+}
