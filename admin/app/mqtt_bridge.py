@@ -14,7 +14,7 @@ class MqttBridge:
     iets wijzigt. Alle topics lopen door een `Topics`-instance, gebouwd uit
     `settings.mqtt_topic_prefix` -- zie shared/mqtt_contract.py."""
 
-    def __init__(self, settings, tracker, ws_hub=None, loop=None, logger=None, on_connect_extra=None):
+    def __init__(self, settings, tracker, ws_hub=None, loop=None, logger=None, on_connect_extra=None, on_device_info=None):
         self._settings = settings
         self._tracker = tracker
         self._ws_hub = ws_hub
@@ -26,6 +26,10 @@ class MqttBridge:
         # dat MqttBridge zelf iets van de DB hoeft te weten. Zie
         # `_republish_retained_config` in main.py.
         self._on_connect_extra = on_connect_extra
+        # Aangeroepen met (device_uuid, info-dict) bij elk bericht op
+        # device-info/{uuid} -- laat main.py de devices-tabel bijwerken
+        # zonder dat MqttBridge iets van de DB hoeft te weten.
+        self._on_device_info = on_device_info
         self._topics = Topics(prefix=settings.mqtt_topic_prefix)
         self._client = self._build_client(settings)
 
@@ -54,6 +58,7 @@ class MqttBridge:
         client.subscribe(self._topics.log_wildcard)
         client.subscribe(self._topics.mirror_triggered)
         client.subscribe(self._topics.scare_triggered_wildcard)
+        client.subscribe(self._topics.device_info_wildcard)
         if self._on_connect_extra is not None:
             # Republiceert retained config (scenes, scare-video) bij elke
             # (her)verbinding -- zonder dit blijft een net herstarte
@@ -70,6 +75,15 @@ class MqttBridge:
     def _on_message(self, client, userdata, msg):
         try:
             topic = self._topics.strip_prefix(msg.topic)
+            if topic.startswith("control/mirror/device-info/") and self._on_device_info is not None:
+                device_uuid = topic[len("control/mirror/device-info/"):]
+                try:
+                    info = json.loads(msg.payload.decode())
+                except json.JSONDecodeError:
+                    return
+                if isinstance(info, dict):
+                    self._on_device_info(device_uuid, info)
+                return
             payload = msg.payload.decode()
             self._tracker.handle_message(topic, payload)
             self._broadcast_to_websockets(topic, payload)
@@ -149,3 +163,8 @@ class MqttBridge:
     def publish_sleep(self, is_sleeping):
         payload = SLEEP_PAYLOAD_ON if is_sleeping else SLEEP_PAYLOAD_OFF
         self._client.publish(self._topics.system_sleep, payload, retain=True)
+
+    def publish_device_assignment(self, device_uuid, output_id):
+        self._client.publish(
+            self._topics.device_assignment(device_uuid), json.dumps({"output_id": output_id}), retain=True
+        )

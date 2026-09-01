@@ -94,7 +94,8 @@ def test_start_subscribes_with_configured_prefix(monkeypatch):
     bridge._on_connect(bridge._client, None, None, 0)
 
     assert bridge._client.subscribed == [
-        "test/status/+", "test/log/+", "test/mirror/triggered", "test/scare/+/triggered"
+        "test/status/+", "test/log/+", "test/mirror/triggered", "test/scare/+/triggered",
+        "test/control/mirror/device-info/+",
     ]
 
 
@@ -249,4 +250,65 @@ def test_publish_mirror_scare_video_config_uses_configured_prefix(monkeypatch):
     topic, payload, retain = bridge._client.published[-1]
     assert topic == "test/config/mirror/scare-video"
     assert json.loads(payload) == {"enabled_hashes": ["a" * 64]}
+    assert retain is True
+
+
+def test_start_subscribes_to_device_info_wildcard(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    bridge = MqttBridge(_settings(), tracker=object())
+    bridge.start()
+    client = FakeMqttClient.instances[-1]
+    client.on_connect(client, None, None, 0)
+    assert "control/mirror/device-info/+" in client.subscribed
+
+
+def test_on_message_calls_on_device_info_for_device_info_topic(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    received = []
+    bridge = MqttBridge(
+        _settings(), tracker=object(),
+        on_device_info=lambda device_uuid, info: received.append((device_uuid, info)),
+    )
+    bridge.start()
+    client = FakeMqttClient.instances[-1]
+
+    class FakeMsg:
+        topic = "control/mirror/device-info/abc-123"
+        payload = json.dumps({"name": "Oude MacBook", "platform": "darwin", "git_sha": "deadbeef"}).encode()
+
+    client.on_message(client, None, FakeMsg())
+
+    assert received == [("abc-123", {"name": "Oude MacBook", "platform": "darwin", "git_sha": "deadbeef"})]
+
+
+def test_on_message_ignores_malformed_device_info_payload(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    received = []
+    bridge = MqttBridge(
+        _settings(), tracker=object(),
+        on_device_info=lambda device_uuid, info: received.append((device_uuid, info)),
+    )
+    bridge.start()
+    client = FakeMqttClient.instances[-1]
+
+    class FakeMsg:
+        topic = "control/mirror/device-info/abc-123"
+        payload = b"not json"
+
+    client.on_message(client, None, FakeMsg())  # mag niet crashen
+
+    assert received == []
+
+
+def test_publish_device_assignment_is_retained_with_configured_prefix(monkeypatch):
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    bridge = MqttBridge(_settings(mqtt_topic_prefix="halloween"), tracker=object())
+    bridge.start()
+    client = FakeMqttClient.instances[-1]
+
+    bridge.publish_device_assignment("abc-123", 7)
+
+    topic, payload, retain = client.published[-1]
+    assert topic == "halloween/control/mirror/device-assignment/abc-123"
+    assert json.loads(payload) == {"output_id": 7}
     assert retain is True
