@@ -20,6 +20,7 @@ python3 -m venv "$REPO_DIR/.venv"
 "$REPO_DIR/.venv/bin/pip" install -q -r "$REPO_DIR/mirror_node/requirements.txt"
 
 mkdir -p "$(dirname "$ENV_FILE")"
+chmod 700 "$(dirname "$ENV_FILE")"
 if [ ! -f "$ENV_FILE" ]; then
   read -rp "MQTT-host: " mqtt_host
   read -rp "MQTT-poort [1883]: " mqtt_port
@@ -40,6 +41,7 @@ MQTT_TOPIC_PREFIX=$mqtt_topic_prefix
 BACKEND_URL=$backend_url
 SPOOKREGIE_REPO_DIR=$REPO_DIR
 EOF
+  chmod 600 "$ENV_FILE"
   echo "Configuratie opgeslagen in $ENV_FILE"
 else
   echo "Configuratiebestand bestaat al op $ENV_FILE, sla vragen over."
@@ -123,6 +125,18 @@ EOF
 elif [ "$PLATFORM" = "Linux" ]; then
   echo "-- Linux: systemd-services installeren (vereist sudo) --"
 
+  # ponytail: these are system-level units (installed under
+  # /etc/systemd/system/ via sudo) which run as root unless told
+  # otherwise -- but EnvironmentFile points at $ENV_FILE, which lives in
+  # this unprivileged user's home dir and is writable by that user. A
+  # root service reading an unprivileged-writable env file is a local
+  # privesc primitive (e.g. LD_PRELOAD/PYTHONPATH injection). Run the
+  # service processes themselves as the user who ran this install
+  # script instead -- sudo is still needed to write the unit files and
+  # call systemctl, that part is unchanged.
+  INSTALL_USER="$(id -un)"
+  INSTALL_GROUP="$(id -gn)"
+
   sudo tee /etc/systemd/system/spookregie-mirror.service > /dev/null <<EOF
 [Unit]
 Description=Spookregie mirror-node
@@ -130,6 +144,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=$INSTALL_USER
+Group=$INSTALL_GROUP
 WorkingDirectory=$REPO_DIR
 EnvironmentFile=$ENV_FILE
 ExecStart=$REPO_DIR/.venv/bin/python -m mirror_node.main
@@ -146,6 +162,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=$INSTALL_USER
+Group=$INSTALL_GROUP
 WorkingDirectory=$REPO_DIR
 EnvironmentFile=$ENV_FILE
 Environment=MIRROR_RESTART_COMMAND=systemctl restart spookregie-mirror
