@@ -553,6 +553,35 @@ def selfcheck():
         print(f"(geen display beschikbaar: {exc})")
 
 
+def _reopen_capture_after_failures(source_state, resolved_source, cap, camera_source):
+    """Heropent de capture die MAX_FAILURES_BEFORE_REOPEN keer op rij geen
+    frame meer levert. Werkt source_state.capture in-place bij voor
+    camera_stream/video_loop, zodat _ensure_source's "ongewijzigd"-early-return
+    de nieuwe capture oppikt i.p.v. voor altijd de dode capture te blijven
+    hergebruiken. Retourneert de (mogelijk nieuwe) fallback-`cap`."""
+    if cap is not None:
+        cap.release()
+    # ponytail: guard resolved_source is not None -- source_state.kind
+    # kan nog "camera_stream" zijn van een vorige iteratie terwijl de
+    # huidige player's source dit frame (nog) niet resolvet, anders
+    # AttributeError op resolved_source.get(...) hieronder.
+    if source_state.kind == "camera_stream" and source_state.capture is not None and resolved_source is not None:
+        source_state.capture.release()
+        source_state.capture = open_camera(resolved_source.get("value", ""), CAMERA_INDEX)
+        return cap
+    if source_state.kind == "video_loop" and source_state.capture is not None:
+        # ponytail: eigen heropen-tak i.p.v. terugvallen op de losstaande
+        # startup-fallback cap -- anders blijft _ensure_source's
+        # "ongewijzigd"-early-return deze dode capture eindeloos hergebruiken
+        # bij een echte (niet-EOF) leesfout.
+        source_state.capture.release()
+        source_state.capture = cv2.VideoCapture(
+            os.path.join(MEDIA_CACHE_DIR, source_state.value), cv2.CAP_FFMPEG
+        )
+        return cap
+    return open_camera(camera_source, CAMERA_INDEX)
+
+
 def main():
     if "--selfcheck" in sys.argv:
         selfcheck()
@@ -677,17 +706,7 @@ def main():
                 consecutive_failures += 1
                 if consecutive_failures >= MAX_FAILURES_BEFORE_REOPEN:
                     logger.warning("Camera blijft falen, heropen de verbinding")
-                    if cap is not None:
-                        cap.release()
-                    # ponytail: guard resolved_source is not None -- source_state.kind
-                    # kan nog "camera_stream" zijn van een vorige iteratie terwijl de
-                    # huidige player's source dit frame (nog) niet resolvet, anders
-                    # AttributeError op resolved_source.get(...) hieronder.
-                    if source_state.kind == "camera_stream" and source_state.capture is not None and resolved_source is not None:
-                        source_state.capture.release()
-                        source_state.capture = open_camera(resolved_source.get("value", ""), CAMERA_INDEX)
-                    else:
-                        cap = open_camera(camera_source, CAMERA_INDEX)
+                    cap = _reopen_capture_after_failures(source_state, resolved_source, cap, camera_source)
                     consecutive_failures = 0
                 time.sleep(0.5)
                 continue

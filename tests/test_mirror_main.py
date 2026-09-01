@@ -21,6 +21,14 @@ class _FakeLogger:
         pass
 
 
+class _FakeReleasable:
+    def __init__(self):
+        self.released = False
+
+    def release(self):
+        self.released = True
+
+
 def _reset_cache():
     mirror_main._overlay_cache["hash"] = None
     mirror_main._overlay_cache["image"] = None
@@ -683,3 +691,59 @@ def test_sync_sources_in_background_includes_video_loop_and_audio(monkeypatch):
     ])
 
     assert synced == [["a" * 64, "b" * 64, "c" * 64]]
+
+
+def test_reopen_capture_after_failures_reopens_camera_stream_capture(monkeypatch):
+    opened = []
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: opened.append(value) or "new-cap")
+    state = mirror_main._SourceState()
+    state.kind = "camera_stream"
+    state.capture = _FakeReleasable()
+    old_cap = _FakeReleasable()
+
+    result = mirror_main._reopen_capture_after_failures(
+        state, {"id": 1, "kind": "camera_stream", "value": "rtsp://a"}, old_cap, "0",
+    )
+
+    assert result is old_cap  # startup-fallback cap ongewijzigd teruggegeven (alleen released)
+    assert old_cap.released
+    assert state.capture == "new-cap"
+    assert opened == ["rtsp://a"]
+
+
+def test_reopen_capture_after_failures_reopens_video_loop_capture_not_fallback(monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        mirror_main.cv2, "VideoCapture",
+        lambda path, backend: opened.append((path, backend)) or "new-video-cap",
+    )
+    fallback_open_calls = []
+    monkeypatch.setattr(
+        mirror_main, "open_camera",
+        lambda value, idx: fallback_open_calls.append(value) or "fallback-cap",
+    )
+    state = mirror_main._SourceState()
+    state.kind = "video_loop"
+    state.value = "d" * 64
+    state.capture = _FakeReleasable()
+    old_cap = _FakeReleasable()
+
+    # resolved_source=None -- simuleert een echte (niet-EOF) leesfout die
+    # meerdere loop-iteraties na elkaar optreedt terwijl de player-graaf
+    # config niet per se elke iteratie opnieuw resolvet.
+    result = mirror_main._reopen_capture_after_failures(state, None, old_cap, "0")
+
+    assert result is old_cap  # NIET de losstaande startup-fallback cap heropend
+    assert old_cap.released
+    assert state.capture == "new-video-cap"
+    assert opened == [(mirror_main.os.path.join(mirror_main.MEDIA_CACHE_DIR, "d" * 64), mirror_main.cv2.CAP_FFMPEG)]
+    assert fallback_open_calls == []  # regressie: viel niet terug op open_camera/fallback cap
+
+
+def test_reopen_capture_after_failures_falls_back_to_camera_when_no_source_yet(monkeypatch):
+    monkeypatch.setattr(mirror_main, "open_camera", lambda value, idx: f"fallback-{value}")
+    state = mirror_main._SourceState()  # kind is None -- nog geen source geresolved
+
+    result = mirror_main._reopen_capture_after_failures(state, None, None, "0")
+
+    assert result == "fallback-0"
