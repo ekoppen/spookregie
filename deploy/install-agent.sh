@@ -34,6 +34,19 @@ if [ ! -f "$ENV_FILE" ]; then
   read -rp "Beheerpagina-URL [http://localhost:8000]: " backend_url
   backend_url="${backend_url:-http://localhost:8000}"
 
+  read -rp "Draait hier een mirror/beamer? [J/n]: " wants_mirror
+  wants_mirror="${wants_mirror:-j}"
+  read -rp "Draait hier een camera? [j/N]: " wants_camera
+  wants_camera="${wants_camera:-n}"
+  if [[ ! "$wants_mirror" =~ ^[jJ] ]] && [[ ! "$wants_camera" =~ ^[jJ] ]]; then
+    echo "Kies minstens één rol (mirror of camera) -- geen van beide is niet geldig." >&2
+    exit 1
+  fi
+  is_mirror=0
+  [[ "$wants_mirror" =~ ^[jJ] ]] && is_mirror=1
+  is_camera=0
+  [[ "$wants_camera" =~ ^[jJ] ]] && is_camera=1
+
   cat > "$ENV_FILE" <<EOF
 MQTT_HOST=$mqtt_host
 MQTT_PORT=$mqtt_port
@@ -42,6 +55,8 @@ MQTT_PASS=$mqtt_pass
 MQTT_TOPIC_PREFIX=$mqtt_topic_prefix
 BACKEND_URL=$backend_url
 SPOOKREGIE_REPO_DIR=$REPO_DIR
+SPOOKREGIE_IS_MIRROR=$is_mirror
+SPOOKREGIE_IS_CAMERA=$is_camera
 EOF
 
   # mirror_node opent een echt GUI-venster (cv2, geen -headless build) voor
@@ -49,8 +64,9 @@ EOF
   # nodig om naartoe te tekenen. Op macOS regelt launchd dit vanzelf (native
   # Cocoa-venster, geen DISPLAY nodig); op Linux draait de service als
   # systemd system-unit, die zonder deze twee variabelen geen idee heeft
-  # welke X-sessie te gebruiken (Qt-fout "Could not load ... xcb").
-  if [ "$PLATFORM" = "Linux" ]; then
+  # welke X-sessie te gebruiken (Qt-fout "Could not load ... xcb"). Alleen
+  # relevant voor de mirror-rol -- een camera-only apparaat heeft geen GUI.
+  if [ "$is_mirror" = "1" ] && [ "$PLATFORM" = "Linux" ]; then
     read -rp "DISPLAY van de desktop-sessie met de beamer eraan [:0]: " display
     display="${display:-:0}"
     read -rp "XAUTHORITY-pad van die sessie [\$HOME/.Xauthority]: " xauthority
@@ -61,11 +77,23 @@ XAUTHORITY=$xauthority
 EOF
   fi
 
+  if [ "$is_camera" = "1" ]; then
+    read -rp "Camera-apparaat-index (leeg = standaardcamera) []: " camera_source
+    cat >> "$ENV_FILE" <<EOF
+CAMERA_SOURCE=$camera_source
+EOF
+  fi
+
   chmod 600 "$ENV_FILE"
   echo "Configuratie opgeslagen in $ENV_FILE"
 else
   echo "Configuratiebestand bestaat al op $ENV_FILE, sla vragen over."
 fi
+
+# shellcheck disable=SC1090
+source <(grep -E '^SPOOKREGIE_IS_(MIRROR|CAMERA)=' "$ENV_FILE")
+is_mirror="${SPOOKREGIE_IS_MIRROR:-1}"
+is_camera="${SPOOKREGIE_IS_CAMERA:-0}"
 
 if [ "$PLATFORM" = "Darwin" ]; then
   echo "-- macOS: LaunchAgents installeren --"
@@ -96,7 +124,8 @@ exec "$REPO_DIR/.venv/bin/python" -m "\$1"
 EOF
   chmod +x "$LAUNCHER"
 
-  cat > "$AGENTS_DIR/nl.spookregie.mirror.plist" <<EOF
+  if [ "$is_mirror" = "1" ]; then
+    cat > "$AGENTS_DIR/nl.spookregie.mirror.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -113,6 +142,29 @@ EOF
 </dict>
 </plist>
 EOF
+    launchctl load "$AGENTS_DIR/nl.spookregie.mirror.plist"
+  fi
+
+  if [ "$is_camera" = "1" ]; then
+    cat > "$AGENTS_DIR/nl.spookregie.camera.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>nl.spookregie.camera</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$LAUNCHER</string>
+    <string>mirror_node.camera_server</string>
+  </array>
+  <key>WorkingDirectory</key><string>$REPO_DIR</string>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+EOF
+    launchctl load "$AGENTS_DIR/nl.spookregie.camera.plist"
+  fi
 
   cat > "$AGENTS_DIR/nl.spookregie.agent.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -136,7 +188,6 @@ EOF
 </plist>
 EOF
 
-  launchctl load "$AGENTS_DIR/nl.spookregie.mirror.plist"
   launchctl load "$AGENTS_DIR/nl.spookregie.agent.plist"
   echo "LaunchAgents geladen. Bekijk status met: launchctl list | grep spookregie"
 
@@ -151,7 +202,7 @@ elif [ "$PLATFORM" = "Linux" ]; then
   # zonder deze regel moest dat handmatig achteraf hersteld worden.
   # `apt-get install` is zelf al idempotent (no-op als 'ie al aanwezig is),
   # dus geen aparte "is 'ie al geinstalleerd"-check nodig.
-  if command -v apt-get >/dev/null 2>&1; then
+  if [ "$is_mirror" = "1" ] && command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update -qq && sudo apt-get install -y libgl1
   fi
 
@@ -167,7 +218,8 @@ elif [ "$PLATFORM" = "Linux" ]; then
   INSTALL_USER="$(id -un)"
   INSTALL_GROUP="$(id -gn)"
 
-  sudo tee /etc/systemd/system/spookregie-mirror.service > /dev/null <<EOF
+  if [ "$is_mirror" = "1" ]; then
+    sudo tee /etc/systemd/system/spookregie-mirror.service > /dev/null <<EOF
 [Unit]
 Description=Spookregie mirror-node
 After=network.target
@@ -185,15 +237,30 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-  # ponytail: het unprivileged serviceaccount (User=$INSTALL_USER hierboven)
-  # kan zelf geen `systemctl restart` op een systemwide unit doen -- dat
-  # vereist root/polkit, wat een non-interactive Type=simple service niet
-  # kan geven. Deze sudoers-drop-in geeft alleen dat ene vaste commando,
-  # zonder argumentvrijheid, dus dit heropent niet de root-privesc die de
-  # vorige beveiligingsfix (User=/Group=) juist sloot.
-  echo "$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-mirror" \
-    | sudo tee /etc/sudoers.d/spookregie >/dev/null
-  sudo chmod 440 /etc/sudoers.d/spookregie
+    echo "$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-mirror" \
+      | sudo tee /etc/sudoers.d/spookregie >/dev/null
+    sudo chmod 440 /etc/sudoers.d/spookregie
+  fi
+
+  if [ "$is_camera" = "1" ]; then
+    sudo tee /etc/systemd/system/spookregie-camera.service > /dev/null <<EOF
+[Unit]
+Description=Spookregie camera-server
+After=network.target
+
+[Service]
+Type=simple
+User=$INSTALL_USER
+Group=$INSTALL_GROUP
+WorkingDirectory=$REPO_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$REPO_DIR/.venv/bin/python -m mirror_node.camera_server
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  fi
 
   sudo tee /etc/systemd/system/spookregie-agent.service > /dev/null <<EOF
 [Unit]
@@ -215,8 +282,12 @@ WantedBy=multi-user.target
 EOF
 
   sudo systemctl daemon-reload
-  sudo systemctl enable --now spookregie-mirror spookregie-agent
-  echo "systemd-services actief. Bekijk status met: systemctl status spookregie-mirror spookregie-agent"
+  services_to_enable="spookregie-agent"
+  [ "$is_mirror" = "1" ] && services_to_enable="$services_to_enable spookregie-mirror"
+  [ "$is_camera" = "1" ] && services_to_enable="$services_to_enable spookregie-camera"
+  # shellcheck disable=SC2086
+  sudo systemctl enable --now $services_to_enable
+  echo "systemd-services actief ($services_to_enable). Bekijk status met: systemctl status $services_to_enable"
 
 else
   echo "Onbekend platform: $PLATFORM -- alleen macOS (Darwin) en Linux worden ondersteund."
