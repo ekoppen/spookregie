@@ -359,7 +359,7 @@ def test_published_graph_has_the_full_new_shape(tmp_path):
     assert "output_id" not in graph
     assert graph["players"] == [created]
     assert graph["root_player_id"] == created["id"]
-    assert {s["kind"] for s in graph["sources"]} <= {"camera_stream", "static_image"}
+    assert {s["kind"] for s in graph["sources"]} <= {"camera_stream", "static_image", "video_loop", "audio"}
     branch = client.get(f"/api/players/{created['id']}/branches").json()[0]
     assert graph["branches"] == [branch]
     assert isinstance(graph["triggers"], list)
@@ -482,3 +482,26 @@ def test_list_all_branches_across_players(tmp_path):
     assert response.status_code == 200
     player_ids = {branch["player_id"] for branch in response.json()}
     assert player_ids == {a["id"], b["id"]}
+
+
+def test_player_without_source_id_never_falls_back_to_an_audio_source(tmp_path):
+    """Minor 8: de fallback pakte simpelweg de laagste source-id, wat nu een
+    audio-source kan zijn -- die _validate_source_kind daarna met een
+    verwarrende 400 afwijst i.p.v. de bruikbare videobron te kiezen."""
+    client, bridge = _client(tmp_path)
+    # De audio-source moet een LAGERE id krijgen dan de videobron, anders
+    # zou de ongefilterde ORDER BY id-fallback 'm sowieso niet kiezen.
+    default_source = client.get("/api/sources").json()[0]
+    assert client.delete(f"/api/sources/{default_source['id']}").status_code == 200
+    audio = client.post("/api/sources", json={
+        "name": "Geluid", "kind": "audio", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+    video = client.post("/api/sources", json={
+        "name": "Cam", "kind": "camera_stream", "value": "rtsp://cam", "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+    assert audio["id"] < video["id"]
+
+    created = client.post("/api/players", json={**_PLAYER_PAYLOAD, "source_id": None})
+
+    assert created.status_code == 200
+    assert created.json()["source_id"] == video["id"]

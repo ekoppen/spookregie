@@ -969,3 +969,19 @@ def test_audio_restarts_after_sleep_stopped_it(monkeypatch):
 
     assert state.process is not None
     assert state.value == "a" * 64
+
+
+def test_ensure_audio_ignores_a_source_that_is_not_of_kind_audio(monkeypatch):
+    """Minor 9: defensief -- de backend laat een niet-audio source al niet
+    in audio_source_id toe, maar een camera-URL mag hier nooit als
+    ALSA-invoer eindigen."""
+    started = []
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: started.append(cmd) or _FakeProcess())
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "camera_stream", "value": "rtsp://cam"}}
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert started == []
+    assert state.value is None

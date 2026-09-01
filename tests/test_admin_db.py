@@ -1075,3 +1075,20 @@ def test_existing_player_audio_source_id_defaults_to_null(tmp_path):
     audio_source_id = conn.execute("SELECT audio_source_id FROM players WHERE id = 1").fetchone()[0]
 
     assert audio_source_id is None
+
+
+def test_media_kind_migration_skips_rename_when_category_is_already_gone(tmp_path):
+    """Minor 7: een DB die de kolom al 'kind' noemt maar nog op een oudere
+    user_version staat (bv. handmatig teruggezet), mag niet crashen op een
+    ontbrekende 'category'-kolom."""
+    path = str(tmp_path / "test.db")
+    conn = init_db(path)
+    conn.execute("PRAGMA user_version = 7")  # forceer de migratie opnieuw
+    conn.commit()
+    conn.close()
+
+    conn = init_db(path)  # mag niet crashen
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
+    assert "kind" in cols
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8

@@ -91,7 +91,10 @@ def _resolve_source_id(db, source_id):
     Taak-1-migratie nooit gedraaid heeft, defensief)."""
     if source_id is not None:
         return source_id
-    default_source = db.execute("SELECT id FROM sources ORDER BY id LIMIT 1").fetchone()
+    # kind != 'audio': audio-sources horen bij audio_source_id, niet bij
+    # source_id -- zonder deze filter kan de fallback er één kiezen die
+    # _validate_source_kind meteen daarna met een verwarrende 400 afwijst.
+    default_source = db.execute("SELECT id FROM sources WHERE kind != 'audio' ORDER BY id LIMIT 1").fetchone()
     if default_source is None:
         raise HTTPException(status_code=400, detail="Geen source beschikbaar, maak er eerst één aan")
     return default_source[0]

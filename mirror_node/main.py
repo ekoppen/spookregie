@@ -406,7 +406,10 @@ def _ensure_audio(state, player, sources_by_id, logger):
     player_id = player.get("id") if player else None
     audio_source_id = player.get("audio_source_id") if player else None
     audio_source = sources_by_id.get(audio_source_id) if audio_source_id is not None else None
-    value = audio_source.get("value") if audio_source else None
+    # kind-check is defensief: de backend laat een niet-audio source al niet
+    # in audio_source_id toe, maar een verkeerd getypte value hier zou als
+    # ALSA-invoer eindigen.
+    value = audio_source.get("value") if audio_source and audio_source.get("kind") == "audio" else None
 
     if state.player_id == player_id and state.value == value:
         return

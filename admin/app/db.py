@@ -484,6 +484,13 @@ def _migrate_media_kind(conn):
     scene_edges->triggers-hernoeming op versie 2."""
     if conn.execute("PRAGMA user_version").fetchone()[0] >= 8:
         return
+    # Extra guard naast de versiepoort (zoals de spec 'm voorschrijft): een
+    # DB die de kolom al 'kind' noemt maar nog op een oudere user_version
+    # staat, mag hier niet op een ontbrekende 'category' crashen.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
+    if "category" not in cols:
+        conn.execute("PRAGMA user_version = 8")
+        return
     conn.execute("ALTER TABLE media RENAME COLUMN category TO kind")
     conn.execute(
         """UPDATE media SET kind = CASE kind
