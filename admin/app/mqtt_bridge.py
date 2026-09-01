@@ -168,3 +168,8 @@ class MqttBridge:
         self._client.publish(
             self._topics.device_assignment(device_uuid), json.dumps({"output_id": output_id}), retain=True
         )
+
+    def publish_device_update_check(self):
+        # Niet-retained: eenmalige duw om een apparaat een update-check te
+        # laten doen, geen blijvende toestand zoals device_assignment.
+        self._client.publish(self._topics.device_update_check, "{}")

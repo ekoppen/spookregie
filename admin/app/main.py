@@ -79,7 +79,7 @@ def _get_watched_ha_entities_from_db(conn):
     return get_watched
 
 
-def _handle_device_info(conn):
+def _handle_device_info(conn, app):
     def handle(device_uuid, info):
         name = info.get("name")
         platform = info.get("platform", "")
@@ -101,6 +101,15 @@ def _handle_device_info(conn):
                 (platform, git_sha, device_uuid),
             )
         conn.commit()
+        # Nudge het apparaat om meteen een update-check te doen (in plaats
+        # van te wachten op AGENT_UPDATE_CHECK_INTERVAL_SECONDS) -- spec-eis
+        # ("interval + directe MQTT-duw"), en de enige plek waar we weten
+        # dát een apparaat net iets van zich liet horen. app.state.bridge
+        # bestaat nog niet op het moment dat deze closure gebouwd wordt (zie
+        # create_app hieronder), vandaar de indirectie via `app` i.p.v. de
+        # bridge direct door te geven -- zelfde patroon als
+        # _republish_retained_config.
+        app.state.bridge.publish_device_update_check()
     return handle
 
 
@@ -127,7 +136,7 @@ def create_app(settings=None):
     app.state.bridge = MqttBridge(
         app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger,
         on_connect_extra=_republish_retained_config,
-        on_device_info=_handle_device_info(app.state.db),
+        on_device_info=_handle_device_info(app.state.db, app),
     )
     app.state.mirror_process = MirrorProcessManager(
         app.state.runtime_settings,

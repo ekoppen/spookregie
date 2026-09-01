@@ -191,6 +191,48 @@ def test_device_info_checkin_does_not_overwrite_a_user_renamed_device(tmp_path):
     assert devices[0]["git_sha"] == "cafe123"
 
 
+def test_device_info_checkin_publishes_update_check_nudge(tmp_path, monkeypatch):
+    import admin.app.mqtt_bridge as mqtt_bridge_module
+
+    class FakeMqttClient:
+        def __init__(self, client_id=None):
+            self.published = []
+            self.subscribed = []
+
+        def username_pw_set(self, *a, **k):
+            pass
+
+        def reconnect_delay_set(self, **k):
+            pass
+
+        def connect_async(self, *a, **k):
+            pass
+
+        def loop_start(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+        def subscribe(self, topic):
+            self.subscribed.append(topic)
+
+        def publish(self, topic, payload=None, retain=False):
+            self.published.append((topic, payload, retain))
+
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    client = _client(tmp_path, real_bridge=True)
+
+    client.app.state.bridge._on_device_info(
+        "new-device-uuid", {"name": "Pi Achtertuin", "platform": "linux", "git_sha": "abc1234"}
+    )
+
+    published = client.app.state.bridge._client.published
+    nudges = [p for p in published if "device-update-check" in p[0]]
+    assert len(nudges) == 1
+    assert nudges[0][2] is False  # niet-retained
+
+
 def test_devices_route_requires_login(tmp_path):
     settings = Settings(
         admin_password="testwachtwoord",
