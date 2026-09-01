@@ -73,6 +73,9 @@ export interface Device {
   git_sha: string | null;
   last_seen_at: string | null;
   output_id: number | null;
+  is_mirror: boolean;
+  is_camera: boolean;
+  camera_stream_url: string | null;
 }
 
 export interface ScareConfig {
