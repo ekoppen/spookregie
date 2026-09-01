@@ -9,7 +9,55 @@ from mirror_node.agent import build_checkin_payload, check_and_apply_update, nee
 
 def test_build_checkin_payload_shape():
     payload = build_checkin_payload(name="Oude MacBook", platform="darwin", git_sha="abc1234")
-    assert json.loads(payload) == {"name": "Oude MacBook", "platform": "darwin", "git_sha": "abc1234"}
+    assert json.loads(payload) == {
+        "name": "Oude MacBook",
+        "platform": "darwin",
+        "git_sha": "abc1234",
+        "is_mirror": True,
+        "is_camera": False,
+        "camera_stream_url": None,
+    }
+
+
+def test_build_checkin_payload_includes_camera_role():
+    payload = build_checkin_payload(
+        name="MacBook camera",
+        platform="darwin",
+        git_sha="abc1234",
+        is_mirror=False,
+        is_camera=True,
+        camera_stream_url="http://192.168.1.50:8080/stream",
+    )
+    assert json.loads(payload) == {
+        "name": "MacBook camera",
+        "platform": "darwin",
+        "git_sha": "abc1234",
+        "is_mirror": False,
+        "is_camera": True,
+        "camera_stream_url": "http://192.168.1.50:8080/stream",
+    }
+
+
+def test_detect_local_ip_uses_udp_getsockname(monkeypatch):
+    class FakeSocket:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def connect(self, addr):
+            self.connected_to = addr
+
+        def getsockname(self):
+            return ("192.168.178.80", 54321)
+
+    monkeypatch.setattr(agent_module.socket, "socket", FakeSocket)
+
+    assert agent_module._detect_local_ip("10.10.107.10") == "192.168.178.80"
 
 
 def test_needs_update_true_when_shas_differ():

@@ -27,9 +27,20 @@ UPDATE_CHECK_INTERVAL_SECONDS = float(os.environ.get("AGENT_UPDATE_CHECK_INTERVA
 # gezet zodat dit script zelf niets over macOS/Linux hoeft te weten.
 MIRROR_RESTART_COMMAND = os.environ.get("MIRROR_RESTART_COMMAND", "")
 
+IS_MIRROR = os.environ.get("SPOOKREGIE_IS_MIRROR", "1") == "1"
+IS_CAMERA = os.environ.get("SPOOKREGIE_IS_CAMERA", "0") == "1"
+CAMERA_SERVER_PORT = int(os.environ.get("CAMERA_SERVER_PORT", "8080"))
 
-def build_checkin_payload(name, platform, git_sha):
-    return json.dumps({"name": name, "platform": platform, "git_sha": git_sha})
+
+def build_checkin_payload(name, platform, git_sha, is_mirror=True, is_camera=False, camera_stream_url=None):
+    return json.dumps({
+        "name": name,
+        "platform": platform,
+        "git_sha": git_sha,
+        "is_mirror": is_mirror,
+        "is_camera": is_camera,
+        "camera_stream_url": camera_stream_url,
+    })
 
 
 def needs_update(local_sha, remote_sha):
@@ -55,6 +66,16 @@ def _git(args, cwd, logger=None):
 def _current_git_sha(cwd, logger=None):
     code, out, _err = _git(["rev-parse", "HEAD"], cwd, logger)
     return out if code == 0 else None
+
+
+def _detect_local_ip(host):
+    """Bepaalt het eigen LAN-IP door een UDP-socket te 'verbinden' naar
+    `host` -- UDP connect() verstuurt geen pakket (puur een lokale
+    routebepaling), dus dit werkt ook als host (tijdelijk) onbereikbaar is.
+    Poort is arbitrair (1), wordt nooit gebruikt."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect((host, 1))
+        return sock.getsockname()[0]
 
 
 def _pip_install(repo_dir, logger=None):
@@ -143,7 +164,17 @@ def main():
 
     def do_checkin():
         git_sha = _current_git_sha(REPO_DIR) or "onbekend"
-        payload = build_checkin_payload(name=socket.gethostname(), platform=sys.platform, git_sha=git_sha)
+        camera_stream_url = None
+        if IS_CAMERA:
+            camera_stream_url = f"http://{_detect_local_ip(MQTT_HOST)}:{CAMERA_SERVER_PORT}/stream"
+        payload = build_checkin_payload(
+            name=socket.gethostname(),
+            platform=sys.platform,
+            git_sha=git_sha,
+            is_mirror=IS_MIRROR,
+            is_camera=IS_CAMERA,
+            camera_stream_url=camera_stream_url,
+        )
         client.publish(topics.device_info(device_uuid), payload, retain=True)
 
     def on_connect(client, userdata, flags, rc):
