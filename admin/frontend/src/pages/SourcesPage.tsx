@@ -158,7 +158,7 @@ export default function SourcesPage() {
                     className="sources-field__input sources-field__input--wide"
                     type="text"
                     value={draft.value}
-                    placeholder="bijv. rtsp://gebruiker:wachtwoord@192.168.1.50:554/stream1"
+                    placeholder="rtsp://gebruiker:wachtwoord@192.168.1.50:554/stream1, of lokaal: 0"
                     onChange={(e) => updateDraft(source.id, { value: e.target.value })}
                   />
                 ) : (
@@ -220,7 +220,7 @@ export default function SourcesPage() {
               <input
                 className="sources-field__input sources-field__input--wide"
                 type="text"
-                placeholder="Camera-URL"
+                placeholder="Camera-URL, of lokaal apparaatnummer zoals 0"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
               />
