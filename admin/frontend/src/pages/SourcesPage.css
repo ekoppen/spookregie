@@ -72,6 +72,24 @@
   color: var(--bone);
 }
 
+.sources-media-button {
+  text-align: left;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  color: var(--bone);
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+}
+
+.sources-media-picker {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: var(--void);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+}
+
 .sources-field__label {
   margin-top: 1rem;
   font-size: 0.8rem;
