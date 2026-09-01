@@ -138,11 +138,15 @@ type FlowNode = PlayerNode | SourceNode | OutputNode | TriggerNode;
 // zodat de id-herkenning zelf getest kan worden zonder een volledige
 // ReactFlow-render nodig te hebben (edges/handles krijgen in jsdom nooit
 // afmetingen, dus renderen niet -- zie PlayerGraphCanvas.test.tsx).
-export function parseOutputConnectionEdgeIds(edges: Edge[]): number[] {
+export function parseEdgeIdsByPrefix(edges: Edge[], prefix: string): number[] {
   return edges
-    .filter((edge) => edge.id.startsWith("oc-"))
-    .map((edge) => parseInt(edge.id.replace("oc-", ""), 10))
+    .filter((edge) => edge.id.startsWith(prefix))
+    .map((edge) => parseInt(edge.id.slice(prefix.length), 10))
     .filter((id) => !Number.isNaN(id));
+}
+
+export function parseOutputConnectionEdgeIds(edges: Edge[]): number[] {
+  return parseEdgeIdsByPrefix(edges, "oc-");
 }
 
 // Bepaalt welk player-veld een gesleepte source->player-verbinding moet
@@ -878,17 +882,48 @@ export default function PlayerGraphCanvas({
     async (edges: Edge[]) => {
       // onEdgesChange (hieronder) update alleen React Flow's lokale state --
       // een edge verwijderd via de canvas verdwijnt dan visueel tot de
-      // volgende refreshGraph()/onGraphChanged(), waarna 'ie terugkomt
-      // omdat de backend-rij nooit verwijderd is. Alleen output-
-      // connection-edges (id-prefix "oc-") hebben een eigen delete-route;
-      // andere edge-typen (source-in-/branch-in-/out-) worden elders al
-      // via hun eigen create/update-routes beheerd.
+      // volgende refreshGraph()/onGraphChanged(), en komt terug zodra die
+      // draait, omdat de backend-rij nooit is aangepast. Elk edge-type dat
+      // hier wél op reageert clear't het bijbehorende veld; branch-in-
+      // (de aftakking waar een trigger vandaan komt) heeft geen zinnige
+      // "loskoppel"-betekenis en wordt bewust genegeerd -- verwijder de
+      // trigger zelf om die relatie op te heffen.
       const outputConnectionIds = parseOutputConnectionEdgeIds(edges);
-      if (outputConnectionIds.length === 0) return;
-      await Promise.all(outputConnectionIds.map((id) => deleteOutputConnection(id)));
+      const videoSourcePlayerIds = parseEdgeIdsByPrefix(edges, "source-in-");
+      const audioSourcePlayerIds = parseEdgeIdsByPrefix(edges, "audio-in-");
+      const triggerTargetIds = parseEdgeIdsByPrefix(edges, "out-");
+      if (
+        outputConnectionIds.length === 0 &&
+        videoSourcePlayerIds.length === 0 &&
+        audioSourcePlayerIds.length === 0 &&
+        triggerTargetIds.length === 0
+      ) {
+        return;
+      }
+      await Promise.all([
+        ...outputConnectionIds.map((id) => deleteOutputConnection(id)),
+        ...videoSourcePlayerIds.map((playerId) => {
+          const player = players.find((p) => p.id === playerId);
+          if (!player) return Promise.resolve();
+          const { id: _id, ...draft } = player;
+          return updatePlayer(playerId, { ...draft, source_id: null });
+        }),
+        ...audioSourcePlayerIds.map((playerId) => {
+          const player = players.find((p) => p.id === playerId);
+          if (!player) return Promise.resolve();
+          const { id: _id, ...draft } = player;
+          return updatePlayer(playerId, { ...draft, audio_source_id: null });
+        }),
+        ...triggerTargetIds.map((triggerId) => {
+          const trigger = triggers.find((t) => t.id === triggerId);
+          if (!trigger) return Promise.resolve();
+          const { id: _id, ...draft } = trigger;
+          return updateTrigger(triggerId, { ...draft, to_player_id: null });
+        }),
+      ]);
       onGraphChanged();
     },
-    [onGraphChanged],
+    [onGraphChanged, players, triggers],
   );
 
   const handleNodeDragStop = useCallback(
@@ -940,14 +975,8 @@ export default function PlayerGraphCanvas({
         <Controls />
       </ReactFlow>
       <div className="player-graph-canvas__toolbar">
-        <button type="button" className="player-graph-canvas__add" onClick={onAddPlayer}>
-          + Nieuwe player
-        </button>
         <button type="button" className="player-graph-canvas__add" onClick={handleAddSource}>
-          + Nieuwe source
-        </button>
-        <button type="button" className="player-graph-canvas__add" onClick={handleAddOutput}>
-          + Nieuwe output
+          + Source
         </button>
         <button
           type="button"
@@ -956,7 +985,13 @@ export default function PlayerGraphCanvas({
           title={branchOptions.length === 0 ? "Maak eerst een player aan" : undefined}
           onClick={() => setAddTriggerOpen((open) => !open)}
         >
-          + Nieuwe trigger
+          + Trigger
+        </button>
+        <button type="button" className="player-graph-canvas__add" onClick={onAddPlayer}>
+          + Player
+        </button>
+        <button type="button" className="player-graph-canvas__add" onClick={handleAddOutput}>
+          + Output
         </button>
         {addTriggerOpen && (
           <div className="player-graph-canvas__add-trigger-picker">

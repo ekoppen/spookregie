@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import PlayerGraphCanvas, { parseOutputConnectionEdgeIds, resolveSourceConnectionUpdate } from "./PlayerGraphCanvas";
+import PlayerGraphCanvas, {
+  parseEdgeIdsByPrefix,
+  parseOutputConnectionEdgeIds,
+  resolveSourceConnectionUpdate,
+} from "./PlayerGraphCanvas";
 import type { Player, Trigger, Source, Output } from "../types";
 import type { Edge } from "@xyflow/react";
 import { deletePlayer } from "../api/players";
@@ -258,7 +262,7 @@ describe("PlayerGraphCanvas -- rechtsklik-menu", () => {
 });
 
 describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te voegen", () => {
-  it("+ Nieuwe source roept createSource aan met standaardwaarden", async () => {
+  it("+ Source roept createSource aan met standaardwaarden", async () => {
     const onGraphChanged = vi.fn();
     render(
       <PlayerGraphCanvas
@@ -274,7 +278,7 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
       />,
     );
 
-    await userEvent.click(screen.getByText("+ Nieuwe source"));
+    await userEvent.click(screen.getByText("+ Source"));
 
     expect(createSource).toHaveBeenCalledWith({
       name: "Nieuwe source",
@@ -286,7 +290,7 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
     expect(onGraphChanged).toHaveBeenCalled();
   });
 
-  it("+ Nieuwe output roept createOutput aan met standaardwaarden", async () => {
+  it("+ Output roept createOutput aan met standaardwaarden", async () => {
     const onGraphChanged = vi.fn();
     render(
       <PlayerGraphCanvas
@@ -302,13 +306,13 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
       />,
     );
 
-    await userEvent.click(screen.getByText("+ Nieuwe output"));
+    await userEvent.click(screen.getByText("+ Output"));
 
     expect(createOutput).toHaveBeenCalledWith({ name: "Nieuwe output", camera_source: "", canvas_x: 0, canvas_y: 0 });
     expect(onGraphChanged).toHaveBeenCalled();
   });
 
-  it("+ Nieuwe trigger is uitgeschakeld zonder players/branches", async () => {
+  it("+ Trigger is uitgeschakeld zonder players/branches", async () => {
     render(
       <PlayerGraphCanvas
         players={[]}
@@ -323,10 +327,10 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
       />,
     );
 
-    expect(screen.getByText("+ Nieuwe trigger")).toBeDisabled();
+    expect(screen.getByText("+ Trigger")).toBeDisabled();
   });
 
-  it("+ Nieuwe trigger opent een keuzemenu en maakt de trigger aan vanaf de gekozen aftakking", async () => {
+  it("+ Trigger opent een keuzemenu en maakt de trigger aan vanaf de gekozen aftakking", async () => {
     const onGraphChanged = vi.fn();
     render(
       <PlayerGraphCanvas
@@ -342,7 +346,7 @@ describe("PlayerGraphCanvas -- toolbar-knoppen om Source/Output/Trigger toe te v
       />,
     );
 
-    await userEvent.click(screen.getByText("+ Nieuwe trigger"));
+    await userEvent.click(screen.getByText("+ Trigger"));
     await userEvent.selectOptions(await screen.findByRole("combobox"), "101");
     await userEvent.click(screen.getByText("Aanmaken"));
 
@@ -429,5 +433,27 @@ describe("parseOutputConnectionEdgeIds -- herkenning van output-connection-edges
     const edges = [{ id: "source-in-1" }, { id: "out-3" }] as Edge[];
 
     expect(parseOutputConnectionEdgeIds(edges)).toEqual([]);
+  });
+});
+
+describe("parseEdgeIdsByPrefix -- herkenning per edge-type, gebruikt door handleEdgesDelete", () => {
+  const edges = [
+    { id: "source-in-1" },
+    { id: "audio-in-2" },
+    { id: "branch-in-3" },
+    { id: "out-3" },
+    { id: "oc-9" },
+  ] as Edge[];
+
+  it("haalt video-source-edges (source-in-) eruit", () => {
+    expect(parseEdgeIdsByPrefix(edges, "source-in-")).toEqual([1]);
+  });
+
+  it("haalt audio-source-edges (audio-in-) eruit", () => {
+    expect(parseEdgeIdsByPrefix(edges, "audio-in-")).toEqual([2]);
+  });
+
+  it("haalt trigger-target-edges (out-) eruit, zonder branch-in- te matchen", () => {
+    expect(parseEdgeIdsByPrefix(edges, "out-")).toEqual([3]);
   });
 });
