@@ -113,16 +113,17 @@ def _sync_overlay_in_background(config):
 
 
 def _sync_sources_in_background(sources):
-    """Haalt static_image-sourcebestanden op de achtergrond op -- zelfde
-    patroon/reden als _sync_overlay_in_background: sync_media kan ~10s
-    blokkeren en mag de MQTT-callbackthread niet ophouden. sync_media zelf
-    slaat een hash over die al lokaal in MEDIA_CACHE_DIR staat.
-    camera_stream-sources hebben geen media om te syncen."""
+    """Haalt static_image-/video_loop-/audio-sourcebestanden op de
+    achtergrond op -- zelfde patroon/reden als _sync_overlay_in_background:
+    sync_media kan ~10s blokkeren en mag de MQTT-callbackthread niet
+    ophouden. sync_media zelf slaat een hash over die al lokaal in
+    MEDIA_CACHE_DIR staat. camera_stream-sources hebben geen media om te
+    syncen."""
     hashes = [
         source.get("value")
         for source in sources
         if isinstance(source, dict)
-        and source.get("kind") == "static_image"
+        and source.get("kind") in ("static_image", "video_loop", "audio")
         and isinstance(source.get("value"), str)
         and source.get("value")
     ]
@@ -336,11 +337,11 @@ class _SourceState:
 
 
 def _ensure_source(state, source, logger):
-    """Geeft het huidige frame-beeld (cv2 capture voor camera_stream, een
-    gedecodeerd beeld voor static_image) terug voor `source`, en heropent/
-    herdecodeert alleen als id, kind ÉN value ongewijzigd zijn sinds de
-    vorige aanroep -- een bewerkte stream-URL of een nieuwe static_image-
-    hash op dezelfde source moet wel opnieuw opgepakt worden."""
+    """Geeft het huidige frame-beeld terug voor `source`: cv2 capture voor
+    camera_stream/video_loop, een gedecodeerd beeld voor static_image. Heropent/
+    herdecodeert alleen als id, kind ÉN value ongewijzigd zijn sinds de vorige
+    aanroep -- een bewerkte stream-URL of een nieuwe hash op dezelfde source
+    moet wel opnieuw opgepakt worden."""
     if source is None:
         return None
     if (
@@ -348,7 +349,7 @@ def _ensure_source(state, source, logger):
         and state.kind == source.get("kind")
         and state.value == source.get("value")
     ):
-        return state.capture if state.kind == "camera_stream" else state.image
+        return state.image if state.kind == "static_image" else state.capture
     if state.capture is not None:
         state.capture.release()
         state.capture = None
@@ -373,6 +374,22 @@ def _ensure_source(state, source, logger):
         state.source_id, state.kind, state.value = source.get("id"), kind, value
         state.image = image
         return state.image
+    if kind == "video_loop":
+        if not _HASH_RE.match(value):
+            logger.error("Ongeldige video_loop-hash op source: %s", value)
+            return None
+        video_path = os.path.join(MEDIA_CACHE_DIR, value)
+        if not os.path.exists(video_path):
+            # Nog niet gesynct -- state NIET bijwerken, zelfde retry-gedrag
+            # als static_image hierboven.
+            return None
+        capture = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+        if not capture.isOpened():
+            logger.error("video_loop kon niet geopend worden: %s", value)
+            return None
+        state.source_id, state.kind, state.value = source.get("id"), kind, value
+        state.capture = capture
+        return state.capture
     state.source_id, state.kind, state.value = source.get("id"), kind, value
     state.capture = open_camera(value, CAMERA_INDEX)
     return state.capture
@@ -636,6 +653,14 @@ def main():
                 ok = True
             elif acquired is not None:
                 ok, frame = acquired.read()
+                if not ok and resolved_source is not None and resolved_source.get("kind") == "video_loop":
+                    # Einde van de lus bereikt -- spring terug naar het begin
+                    # en lees opnieuw, zodat een video_loop-source oneindig
+                    # blijft doorlopen i.p.v. na één keer afspelen stil te
+                    # vallen (zelfde contract als camera_stream: altijd een
+                    # geldig frame als de bron open is).
+                    acquired.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ok, frame = acquired.read()
             elif cap is not None:
                 # Geen (nog) bekende source voor de huidige player -- val
                 # terug op de startup-camera zodat het beeld nooit

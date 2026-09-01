@@ -598,3 +598,88 @@ def test_resolve_frame_source_static_image_failure_is_not_cached(monkeypatch):
     img2 = mirror_main._ensure_source(state, {"id": 8, "kind": "static_image", "value": "b" * 64}, _FakeLogger())
 
     assert img2 == "decoded-image"  # retry lukt zodra het bestand er wel is
+
+
+def test_ensure_source_opens_video_loop_via_videocapture(monkeypatch):
+    opened = []
+
+    class FakeCapture:
+        def isOpened(self):
+            return True
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(
+        mirror_main.cv2, "VideoCapture",
+        lambda path, backend: opened.append(path) or FakeCapture(),
+    )
+    state = mirror_main._SourceState()
+
+    result = mirror_main._ensure_source(
+        state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger(),
+    )
+
+    assert isinstance(result, FakeCapture)
+    assert opened == [mirror_main.os.path.join(mirror_main.MEDIA_CACHE_DIR, "c" * 64)]
+    assert state.kind == "video_loop"
+
+
+def test_ensure_source_video_loop_returns_none_when_not_yet_synced(monkeypatch):
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: False)
+    state = mirror_main._SourceState()
+
+    result = mirror_main._ensure_source(
+        state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger(),
+    )
+
+    assert result is None
+    assert state.source_id is None  # niet gecached als "al opgelost" -- zelfde als static_image
+
+
+def test_ensure_source_video_loop_rejects_malformed_hash():
+    state = mirror_main._SourceState()
+
+    result = mirror_main._ensure_source(
+        state, {"id": 9, "kind": "video_loop", "value": "niet-een-hash"}, _FakeLogger(),
+    )
+
+    assert result is None
+
+
+def test_ensure_source_video_loop_reuses_open_capture_for_unchanged_source(monkeypatch):
+    opened = []
+
+    class FakeCapture:
+        def isOpened(self):
+            return True
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(
+        mirror_main.cv2, "VideoCapture",
+        lambda path, backend: opened.append(path) or FakeCapture(),
+    )
+    state = mirror_main._SourceState()
+
+    r1 = mirror_main._ensure_source(state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger())
+    r2 = mirror_main._ensure_source(state, {"id": 9, "kind": "video_loop", "value": "c" * 64}, _FakeLogger())
+
+    assert r1 is r2
+    assert len(opened) == 1  # niet opnieuw geopend
+
+
+def test_sync_sources_in_background_includes_video_loop_and_audio(monkeypatch):
+    synced = []
+    monkeypatch.setattr(
+        mirror_main.threading, "Thread",
+        lambda target, args, daemon: type(
+            "T", (), {"start": lambda self: synced.append(args[2])},
+        )(),
+    )
+
+    mirror_main._sync_sources_in_background([
+        {"kind": "camera_stream", "value": "rtsp://x"},
+        {"kind": "static_image", "value": "a" * 64},
+        {"kind": "video_loop", "value": "b" * 64},
+        {"kind": "audio", "value": "c" * 64},
+    ])
+
+    assert synced == [["a" * 64, "b" * 64, "c" * 64]]
