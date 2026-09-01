@@ -38,7 +38,11 @@ from mirror_node.overlay import composite_overlay, place_on_canvas
 from mirror_node.players import PlayerGraph
 from mirror_node.stream import MJPEGStreamer
 
-NODE_NAME = get_or_create_device_uuid()
+# Wordt pas in main() gezet (niet hier op module-niveau): get_or_create_device_uuid()
+# schrijft een bestand naar de echte home-dir van wie dit process draait, en
+# elke import van deze module (bv. door tests) mag daar geen bijwerking van
+# hebben -- alleen het daadwerkelijk starten van de node moet dat triggeren.
+NODE_NAME = None
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "homeassistant.local")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
@@ -536,6 +540,9 @@ def main():
     if "--selfcheck" in sys.argv:
         selfcheck()
         return
+
+    global NODE_NAME
+    NODE_NAME = get_or_create_device_uuid()
 
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
