@@ -26,6 +26,10 @@ UPDATE_CHECK_INTERVAL_SECONDS = float(os.environ.get("AGENT_UPDATE_CHECK_INTERVA
 # platformafhankelijk, door het install-script (Task 9) in de omgeving
 # gezet zodat dit script zelf niets over macOS/Linux hoeft te weten.
 MIRROR_RESTART_COMMAND = os.environ.get("MIRROR_RESTART_COMMAND", "")
+# Zelfde patroon voor de camera-server -- leeg op elk apparaat zonder
+# camera-rol (de meerderheid), dus geen warning zoals bij
+# MIRROR_RESTART_COMMAND (zie _restart_camera_server hieronder).
+CAMERA_RESTART_COMMAND = os.environ.get("CAMERA_RESTART_COMMAND", "")
 
 IS_MIRROR = os.environ.get("SPOOKREGIE_IS_MIRROR", "1") == "1"
 IS_CAMERA = os.environ.get("SPOOKREGIE_IS_CAMERA", "0") == "1"
@@ -120,6 +124,20 @@ def _restart_mirror_node(logger):
         logger.error("Herstarten van mirror_node mislukt: %s", exc)
 
 
+def _restart_camera_server(logger):
+    """Herstart camera_server.py na een update, zelfde vorm als
+    _restart_mirror_node -- maar stil (geen warning) als
+    CAMERA_RESTART_COMMAND ontbreekt: dat is het normale geval voor elk
+    apparaat zonder camera-rol, niet een misconfiguratie zoals bij de
+    mirror-rol (die historisch altijd aanwezig was)."""
+    if not CAMERA_RESTART_COMMAND:
+        return
+    try:
+        subprocess.run(CAMERA_RESTART_COMMAND.split(), check=True, timeout=10)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        logger.error("Herstarten van camera_server mislukt: %s", exc)
+
+
 def check_and_apply_update(repo_dir, logger):
     """Eén update-cyclus: git fetch, vergelijk lokale met remote HEAD van
     main, pull + herstart bij verschil. Geen rollback bij een falende
@@ -145,6 +163,7 @@ def check_and_apply_update(repo_dir, logger):
         logger.error("pip install mislukt na pull, herstart overgeslagen (blijf op oude dependencies draaien)")
         return
     _restart_mirror_node(logger)
+    _restart_camera_server(logger)
 
 
 def main():

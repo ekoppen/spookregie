@@ -129,6 +129,36 @@ def test_check_and_apply_update_reinstalls_requirements_before_restart(monkeypat
     assert calls.index(pip_calls[0]) < calls.index(["restart-mirror"])
 
 
+def test_check_and_apply_update_restarts_both_mirror_and_camera(monkeypatch, tmp_path):
+    """Een dual-role apparaat (mirror + camera) moet na een update beide
+    services herstarten -- anders blijft de camera-server op oude code
+    draaien tot een handmatige herstart of reboot (Belangrijk-bevinding
+    eindreview)."""
+    logger = logging.getLogger("test-agent-restart-both")
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0] == "git":
+            return _fake_git_pull_run(cmd, **kwargs)
+        if cmd[0].endswith("/pip"):
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd == ["restart-mirror"]:
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd == ["restart-camera"]:
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        raise AssertionError(f"onverwacht commando: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(agent_module, "MIRROR_RESTART_COMMAND", "restart-mirror")
+    monkeypatch.setattr(agent_module, "CAMERA_RESTART_COMMAND", "restart-camera")
+
+    check_and_apply_update(str(tmp_path), logger)
+
+    assert ["restart-mirror"] in calls
+    assert ["restart-camera"] in calls
+
+
 def test_check_and_apply_update_skips_restart_when_pip_install_fails(monkeypatch, tmp_path):
     """Een mislukte pip install mag de mirror-service niet herstarten in een
     kapotte dependency-staat -- loggen en overslaan, volgende cyclus

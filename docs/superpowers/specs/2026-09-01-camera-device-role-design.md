@@ -173,4 +173,19 @@ vaker al correct vooringevuld in plaats van handmatig getypt.
 - **Geen authenticatie op de MJPEG-stream.**
 - **Geen wijziging aan het bestaande mirror/output-koppelmodel** —
   alleen uitgebreid met een parallelle camera/source-koppeling.
+- **Geen arbitrage tussen mirror en camera voor dezelfde fysieke
+  camera.** Een apparaat met beide vlaggen (zoals Hallo1) en maar één
+  lokaal aangesloten camera mag de mirror-source **niet** op de ruwe
+  lokale index laten wijzen — dan openen `mirror_node/main.py` (via
+  zijn lokale-camera-fallback) en `mirror_node/camera_server.py`
+  allebei hetzelfde apparaat, wat op Linux/V4L2 typisch resulteert in
+  een stille `EBUSY` voor wie als tweede opent. In plaats daarvan moet
+  de mirror-source voor zo'n apparaat wijzen naar
+  `http://127.0.0.1:<CAMERA_SERVER_PORT>/stream` (default poort 8080)
+  — de eigen camera-server, zodat alleen `camera_server.py` het
+  fysieke apparaat aanraakt en `mirror_node.main` de camera als een
+  gewone netwerkbron consumeert. Dit is een operator-/
+  deploymentstap (in te stellen op de Sources-pagina), geen door de
+  software afgedwongen check — bewuste keuze, zie de inleiding over
+  een kleine, single-maintainer-fleet.
 

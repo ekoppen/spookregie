@@ -166,6 +166,19 @@ EOF
     launchctl load "$AGENTS_DIR/nl.spookregie.camera.plist"
   fi
 
+  # Alleen de restart-commando's van de rollen die dit apparaat ook echt
+  # draait -- zie dezelfde overweging bij de Linux-tak hierboven.
+  mirror_restart_env=""
+  if [ "$is_mirror" = "1" ]; then
+    mirror_restart_env="    <key>MIRROR_RESTART_COMMAND</key><string>launchctl kickstart -k gui/$(id -u)/nl.spookregie.mirror</string>
+"
+  fi
+  camera_restart_env=""
+  if [ "$is_camera" = "1" ]; then
+    camera_restart_env="    <key>CAMERA_RESTART_COMMAND</key><string>launchctl kickstart -k gui/$(id -u)/nl.spookregie.camera</string>
+"
+  fi
+
   cat > "$AGENTS_DIR/nl.spookregie.agent.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -180,8 +193,7 @@ EOF
   <key>WorkingDirectory</key><string>$REPO_DIR</string>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>MIRROR_RESTART_COMMAND</key><string>launchctl kickstart -k gui/$(id -u)/nl.spookregie.mirror</string>
-  </dict>
+${mirror_restart_env}${camera_restart_env}  </dict>
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
 </dict>
@@ -236,16 +248,6 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    # ponytail: het unprivileged serviceaccount (User=$INSTALL_USER hierboven)
-    # kan zelf geen `systemctl restart` op een systemwide unit doen -- dat
-    # vereist root/polkit, wat een non-interactive Type=simple service niet
-    # kan geven. Deze sudoers-drop-in geeft alleen dat ene vaste commando,
-    # zonder argumentvrijheid, dus dit heropent niet de root-privesc die de
-    # vorige beveiligingsfix (User=/Group=) juist sloot.
-    echo "$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-mirror" \
-      | sudo tee /etc/sudoers.d/spookregie >/dev/null
-    sudo chmod 440 /etc/sudoers.d/spookregie
   fi
 
   if [ "$is_camera" = "1" ]; then
@@ -268,6 +270,37 @@ WantedBy=multi-user.target
 EOF
   fi
 
+  # ponytail: het unprivileged serviceaccount (User=$INSTALL_USER hierboven)
+  # kan zelf geen `systemctl restart` op een systemwide unit doen -- dat
+  # vereist root/polkit, wat een non-interactive Type=simple service niet
+  # kan geven. Deze sudoers-drop-in geeft alleen de vaste commando's die
+  # voor de gekozen rol(len) nodig zijn (één of twee regels), zonder
+  # argumentvrijheid, dus dit heropent niet de root-privesc die de vorige
+  # beveiligingsfix (User=/Group=) juist sloot.
+  if [ "$is_mirror" = "1" ] || [ "$is_camera" = "1" ]; then
+    sudoers_rules=""
+    if [ "$is_mirror" = "1" ]; then
+      sudoers_rules="${sudoers_rules}$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-mirror
+"
+    fi
+    if [ "$is_camera" = "1" ]; then
+      sudoers_rules="${sudoers_rules}$INSTALL_USER ALL=(root) NOPASSWD: /bin/systemctl restart spookregie-camera
+"
+    fi
+    printf '%s' "$sudoers_rules" | sudo tee /etc/sudoers.d/spookregie >/dev/null
+    sudo chmod 440 /etc/sudoers.d/spookregie
+  fi
+
+  # Alleen de restart-commando's van de rollen die dit apparaat ook echt
+  # draait -- een CAMERA_RESTART_COMMAND zonder bijbehorende sudoers-regel
+  # (hierboven) zou elke update-cyclus met een permission-error mislukken.
+  mirror_restart_env=""
+  [ "$is_mirror" = "1" ] && mirror_restart_env='Environment="MIRROR_RESTART_COMMAND=sudo -n /bin/systemctl restart spookregie-mirror"
+'
+  camera_restart_env=""
+  [ "$is_camera" = "1" ] && camera_restart_env='Environment="CAMERA_RESTART_COMMAND=sudo -n /bin/systemctl restart spookregie-camera"
+'
+
   sudo tee /etc/systemd/system/spookregie-agent.service > /dev/null <<EOF
 [Unit]
 Description=Spookregie device-agent
@@ -279,8 +312,7 @@ User=$INSTALL_USER
 Group=$INSTALL_GROUP
 WorkingDirectory=$REPO_DIR
 EnvironmentFile=$ENV_FILE
-Environment="MIRROR_RESTART_COMMAND=sudo -n /bin/systemctl restart spookregie-mirror"
-ExecStart=$REPO_DIR/.venv/bin/python -m mirror_node.agent
+${mirror_restart_env}${camera_restart_env}ExecStart=$REPO_DIR/.venv/bin/python -m mirror_node.agent
 Restart=always
 
 [Install]
@@ -298,6 +330,10 @@ EOF
 else
   echo "Onbekend platform: $PLATFORM -- alleen macOS (Darwin) en Linux worden ondersteund."
   exit 1
+fi
+
+if [ "$is_mirror" = "1" ] && [ "$is_camera" = "1" ]; then
+  echo "Let op: dit apparaat draait zowel mirror als camera. Als beide dezelfde fysieke camera gebruiken, koppel de mirror-source in de beheerpagina dan aan http://127.0.0.1:8080/stream (de lokale camera-server) i.p.v. de ruwe apparaat-index -- anders vechten beide processen om dezelfde camera."
 fi
 
 echo "== Installatie klaar. Ga naar de beheerpagina > Apparaten om dit apparaat aan een output te koppelen. =="
