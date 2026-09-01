@@ -747,3 +747,91 @@ def test_reopen_capture_after_failures_falls_back_to_camera_when_no_source_yet(m
     result = mirror_main._reopen_capture_after_failures(state, None, None, "0")
 
     assert result == "fallback-0"
+
+
+class _FakeProcess:
+    def __init__(self):
+        self.terminated = False
+
+    def terminate(self):
+        self.terminated = True
+
+
+def test_ensure_audio_starts_loop_for_players_audio_source(monkeypatch):
+    started = []
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(
+        mirror_main.subprocess, "Popen",
+        lambda cmd, **kw: started.append(cmd) or _FakeProcess(),
+    )
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert len(started) == 1
+    assert "a" * 64 in started[0][started[0].index("-i") + 1]
+    assert state.value == "a" * 64
+
+
+def test_ensure_audio_does_nothing_when_unchanged(monkeypatch):
+    started = []
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: started.append(1) or _FakeProcess())
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert len(started) == 1  # niet opnieuw gestart, ongewijzigd
+
+
+def test_ensure_audio_stops_when_player_has_no_audio_source(monkeypatch):
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+    running_process = state.process
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": None}, sources_by_id, _FakeLogger())
+
+    assert running_process.terminated is True
+    assert state.process is None
+    assert state.value is None
+
+
+def test_ensure_audio_switches_process_when_player_changes(monkeypatch):
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
+    state = mirror_main._AudioState()
+    sources_by_id = {
+        5: {"id": 5, "kind": "audio", "value": "a" * 64},
+        6: {"id": 6, "kind": "audio", "value": "b" * 64},
+    }
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+    first_process = state.process
+
+    mirror_main._ensure_audio(state, {"id": 2, "audio_source_id": 6}, sources_by_id, _FakeLogger())
+
+    assert first_process.terminated is True
+    assert state.value == "b" * 64
+
+
+def test_ensure_audio_failure_to_start_is_not_cached_as_resolved(monkeypatch):
+    # Zelfde 'niet-gecached-als-opgelost'-contract als static_image/video_loop:
+    # een falende start (bv. ontbrekend bestand) mag niet permanent stil blijven
+    # zodra het bestand alsnog beschikbaar komt.
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: False)
+    state = mirror_main._AudioState()
+    sources_by_id = {5: {"id": 5, "kind": "audio", "value": "a" * 64}}
+
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+    assert state.value is None
+
+    monkeypatch.setattr(mirror_main.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(mirror_main.subprocess, "Popen", lambda cmd, **kw: _FakeProcess())
+    mirror_main._ensure_audio(state, {"id": 1, "audio_source_id": 5}, sources_by_id, _FakeLogger())
+
+    assert state.value == "a" * 64

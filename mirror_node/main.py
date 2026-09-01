@@ -336,6 +336,70 @@ class _SourceState:
         self.image = None
 
 
+class _AudioState:
+    """Houdt bij welk audiobestand op dit moment loopt voor de actieve
+    player -- zelfde vorm als _SourceState, maar voor het onafhankelijke
+    audio-spoor (players.audio_source_id) i.p.v. het video-spoor
+    (players.source_id). Precies één lopend subprocess tegelijk: een
+    gewijzigde (of verdwenen) audio_source_id stopt het oude en start
+    eventueel een nieuw loopend afspeelproces."""
+
+    def __init__(self):
+        self.player_id = None
+        self.value = None
+        self.process = None
+
+
+def _stop_audio(state, logger):
+    if state.process is not None:
+        try:
+            state.process.terminate()
+        except Exception as exc:
+            logger.warning("Kon audio-proces niet stoppen: %s", exc)
+        state.process = None
+
+
+def _start_audio_loop(value, logger):
+    """Start een blijvend loopend afspeelproces voor het audiobestand bij
+    `value` (media-hash). ffmpeg -stream_loop -1 herhaalt het bestand
+    zelf oneindig en schrijft rechtstreeks naar het ALSA default-device --
+    geen los aplay-proces nodig zoals bij de one-shot scare-audio.
+    Best-effort: een ontbrekend ffmpeg-bestand of kapot audiobestand mag
+    de video-pipeline nooit blokkeren, dus alleen loggen en None
+    teruggeven bij falen."""
+    audio_path = os.path.join(MEDIA_CACHE_DIR, value)
+    try:
+        return subprocess.Popen(
+            ["ffmpeg", "-y", "-stream_loop", "-1", "-i", audio_path, "-f", "alsa", "default"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        logger.warning("Kon audio-loop niet starten: %s", exc)
+        return None
+
+
+def _ensure_audio(state, player, sources_by_id, logger):
+    """Zorgt dat het juiste audiobestand loopt voor de gegeven `player`
+    (of niets, als de player geen audio_source_id heeft), en doet niets
+    als de resolutie ongewijzigd is sinds de vorige aanroep -- zelfde
+    ongewijzigd-dan-niets-doen-contract als _ensure_source."""
+    player_id = player.get("id") if player else None
+    audio_source_id = player.get("audio_source_id") if player else None
+    audio_source = sources_by_id.get(audio_source_id) if audio_source_id is not None else None
+    value = audio_source.get("value") if audio_source else None
+
+    if state.player_id == player_id and state.value == value:
+        return
+    _stop_audio(state, logger)
+    state.player_id = player_id
+    state.value = None
+    if value and _HASH_RE.match(value) and os.path.exists(os.path.join(MEDIA_CACHE_DIR, value)):
+        process = _start_audio_loop(value, logger)
+        if process is not None:
+            state.process = process
+            state.value = value
+
+
 def _ensure_source(state, source, logger):
     """Geeft het huidige frame-beeld terug voor `source`: cv2 capture voor
     camera_stream/video_loop, een gedecodeerd beeld voor static_image. Heropent/
@@ -667,11 +731,13 @@ def main():
     logger.info("mirror-node gestart")
 
     source_state = _SourceState()
+    audio_state = _AudioState()
     try:
         while True:
             sources_by_id = {s["id"]: s for s in _current_sources}
             current_player = player_graph._players.get(player_graph._current_id)
             resolved_source = sources_by_id.get(current_player.get("source_id")) if current_player else None
+            _ensure_audio(audio_state, current_player, sources_by_id, logger)
             acquired = _ensure_source(source_state, resolved_source, logger) if resolved_source else None
 
             if resolved_source is not None and resolved_source.get("kind") == "static_image":
@@ -787,6 +853,7 @@ def main():
                 cv2.imshow("mirror", rendered)
                 cv2.waitKey(1)
     finally:
+        _stop_audio(audio_state, logger)
         if cap is not None:
             cap.release()
         if not MIRROR_HEADLESS:
