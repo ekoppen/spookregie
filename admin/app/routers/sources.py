@@ -5,7 +5,9 @@ from admin.app.graph_publish import publish_graph
 router = APIRouter()
 
 _SOURCE_COLUMNS = "id, name, kind, value, canvas_x, canvas_y"
-_VALID_KINDS = {"camera_stream", "static_image", "video_loop", "audio"}
+_VIDEO_KINDS = {"camera_stream", "static_image", "video_loop"}
+_AUDIO_KINDS = {"audio"}
+_VALID_KINDS = _VIDEO_KINDS | _AUDIO_KINDS
 
 
 def _row_to_source(row):
@@ -31,6 +33,28 @@ def _validate_source_body(body):
         "canvas_x": float(body.get("canvas_x", 0.0)),
         "canvas_y": float(body.get("canvas_y", 0.0)),
     }
+
+
+def _reject_kind_change_breaking_players(db, source_id, new_kind):
+    """400 als een kind-wijziging een bestaande koppeling ongeldig maakt.
+    players.source_id mag alleen naar een video-kind wijzen en
+    players.audio_source_id alleen naar 'audio' (zelfde regel als
+    players._validate_source_kind bij het koppelen zelf) -- zonder deze
+    guard kan de UI een gekoppelde camera-source in twee klikken naar
+    'audio' omzetten, waarna de mirror-node de media-hash als camera-URL
+    probeert te openen en permanent zwart blijft."""
+    if new_kind not in _VIDEO_KINDS:
+        if db.execute("SELECT 1 FROM players WHERE source_id = ? LIMIT 1", (source_id,)).fetchone():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source is het videospoor van een player -- kind moet {sorted(_VIDEO_KINDS)} blijven",
+            )
+    if new_kind not in _AUDIO_KINDS:
+        if db.execute("SELECT 1 FROM players WHERE audio_source_id = ? LIMIT 1", (source_id,)).fetchone():
+            raise HTTPException(
+                status_code=400,
+                detail="Source is het audiospoor van een player -- kind moet 'audio' blijven",
+            )
 
 
 @router.get("/api/sources")
@@ -65,11 +89,13 @@ async def create_source_route(request: Request):
 @router.put("/api/sources/{source_id:int}")
 async def update_source_route(source_id: int, request: Request):
     db = request.app.state.db
-    existing = db.execute("SELECT id FROM sources WHERE id = ?", (source_id,)).fetchone()
+    existing = db.execute("SELECT kind FROM sources WHERE id = ?", (source_id,)).fetchone()
     if existing is None:
         raise HTTPException(status_code=404, detail="Source niet gevonden")
     body = await request.json()
     fields = _validate_source_body(body)
+    if fields["kind"] != existing[0]:
+        _reject_kind_change_breaking_players(db, source_id, fields["kind"])
     db.execute(
         "UPDATE sources SET name = ?, kind = ?, value = ?, canvas_x = ?, canvas_y = ? WHERE id = ?",
         (fields["name"], fields["kind"], fields["value"], fields["canvas_x"], fields["canvas_y"], source_id),

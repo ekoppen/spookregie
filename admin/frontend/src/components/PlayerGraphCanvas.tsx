@@ -219,7 +219,7 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
       style={player.color ? { borderColor: player.color } : undefined}
       onContextMenu={handleContextMenu}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} id="video-in" />
       <Handle type="target" position={Position.Top} id="audio-in" />
       <div className="player-node__header">
         <button
@@ -770,6 +770,7 @@ export default function PlayerGraphCanvas({
           id: `source-in-${player.id}`,
           source: `source-${player.source_id}`,
           target: `player-${player.id}`,
+          targetHandle: "video-in",
         });
       }
       if (player.audio_source_id !== null) {

@@ -191,3 +191,74 @@ def test_create_source_accepts_audio_kind(tmp_path):
 
     assert response.status_code == 200
     assert response.json()["kind"] == "audio"
+
+
+def _create_player(client, source_id, audio_source_id=None):
+    return client.post("/api/players", json={
+        "name": "X", "enabled": True, "source_mode": "camera", "effect": "xray",
+        "params": {}, "overlay_hash": None, "scale": 1.0, "position": [0.5, 0.5],
+        "canvas_size": None, "source_scale": 1.0, "source_position": [0.5, 0.5],
+        "is_root": False, "canvas_x": 0.0, "canvas_y": 0.0, "color": None,
+        "source_id": source_id, "audio_source_id": audio_source_id,
+        "playback_mode": "once", "repeat_while_ha_entity_id": None,
+    }).json()
+
+
+def test_update_source_kind_to_audio_rejected_when_a_player_uses_it_as_video(tmp_path):
+    # Belangrijk 5: zonder deze guard kan de UI een gekoppelde videobron in
+    # twee klikken naar 'audio' omzetten, waarna de mirror-node de
+    # media-hash als camera-URL probeert te openen en zwart blijft.
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+    _create_player(client, default_source["id"])
+
+    response = client.put(f"/api/sources/{default_source['id']}", json={
+        "name": default_source["name"], "kind": "audio", "value": "a" * 64,
+        "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 400
+    assert client.get(f"/api/sources/{default_source['id']}").json()["kind"] == default_source["kind"]
+
+
+def test_update_source_kind_away_from_audio_rejected_when_a_player_uses_it_as_audio(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+    audio_source = client.post("/api/sources", json={
+        "name": "Kraken", "kind": "audio", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+    _create_player(client, default_source["id"], audio_source_id=audio_source["id"])
+
+    response = client.put(f"/api/sources/{audio_source['id']}", json={
+        "name": "Kraken", "kind": "video_loop", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 400
+
+
+def test_update_source_kind_allowed_when_no_player_references_it(tmp_path):
+    client, bridge = _client(tmp_path)
+    loose = client.post("/api/sources", json={
+        "name": "Los", "kind": "video_loop", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    }).json()
+
+    response = client.put(f"/api/sources/{loose['id']}", json={
+        "name": "Los", "kind": "audio", "value": "a" * 64, "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "audio"
+
+
+def test_update_source_with_unchanged_kind_is_never_blocked(tmp_path):
+    client, bridge = _client(tmp_path)
+    default_source = client.get("/api/sources").json()[0]
+    _create_player(client, default_source["id"])
+
+    response = client.put(f"/api/sources/{default_source['id']}", json={
+        "name": "Hernoemd", "kind": default_source["kind"], "value": default_source["value"],
+        "canvas_x": 0.0, "canvas_y": 0.0,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Hernoemd"
