@@ -1,5 +1,16 @@
+import os
 from unittest.mock import patch, MagicMock
 from mirror_node.camera import open_camera
+
+
+def test_ffmpeg_capture_options_include_a_read_write_timeout():
+    # Zonder rw_timeout kan een haperende netwerkstream (RTSP of, sinds de
+    # HA-camera-proxy, ook http/mjpeg) cv2.VideoCapture()/cap.read() voor
+    # altijd laten hangen en zo de hele render-loop bevriezen -- empirisch
+    # bevestigd (5.2s met deze optie vs. >12s hang zonder, tegen een echte
+    # stallende HTTP-server). Deze test bewaakt alleen dat de optie blijft
+    # staan, niet het timinggedrag zelf (dat vereist een echte server).
+    assert "rw_timeout;5000000" in os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]
 
 
 def test_empty_source_opens_local_index():
