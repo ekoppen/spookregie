@@ -5,6 +5,10 @@ export function getHaStates(): Promise<HaState[]> {
   return apiFetch<HaState[]>("/api/ha/states");
 }
 
+export function getHaCameraStreamUrl(entityId: string): Promise<{ url: string }> {
+  return apiFetch<{ url: string }>(`/api/ha/camera-stream-url/${entityId}`);
+}
+
 export function callHaService(
   domain: string,
   service: string,

@@ -72,6 +72,21 @@
   color: var(--bone);
 }
 
+.sources-value-group {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sources-value-group .sources-field__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sources-value-group .sources-media-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .sources-media-button {
   text-align: left;
   background: var(--void);

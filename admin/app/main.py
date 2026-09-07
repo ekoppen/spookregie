@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from shared.logging_setup import setup_logging
 from shared.media_sync import is_content_hash
+from admin.app.ha_client import CAMERA_ENTITY_RE
 from admin.app.config import get_settings
 from admin.app.auth import SessionStore
 from admin.app.db import init_db
@@ -57,6 +58,21 @@ def _is_public_media_download(path, method):
     if remainder.endswith("/audio"):
         return is_content_hash(remainder[: -len("/audio")])
     return "/" not in remainder and is_content_hash(remainder)
+
+
+def _is_public_ha_camera_stream(path, method):
+    """GET /api/ha/camera-stream/<entity_id> is publiek qua sessie-eis:
+    mirror-node opent 'm rechtstreeks als camera-URL (net als
+    /api/media/<hash>), niet via een ingelogde beheersessie. Dit ontgrendelt
+    alleen de sessie-check -- de route zelf eist nog een geldige ?sig=
+    (HMAC, zie ha_client.verify_camera_entity_signature) zodat een
+    entity_id-naam raden zonder die signature niets oplevert."""
+    if method != "GET":
+        return False
+    prefix = "/api/ha/camera-stream/"
+    if not path.startswith(prefix):
+        return False
+    return bool(CAMERA_ENTITY_RE.match(path[len(prefix):]))
 
 
 def _get_schedule_from_db(conn):
@@ -170,7 +186,11 @@ def create_app(settings=None):
     @app.middleware("http")
     async def require_session(request: Request, call_next):
         path = request.url.path
-        if path in _PUBLIC_EXACT_PATHS or _is_public_media_download(path, request.method):
+        if (
+            path in _PUBLIC_EXACT_PATHS
+            or _is_public_media_download(path, request.method)
+            or _is_public_ha_camera_stream(path, request.method)
+        ):
             return await call_next(request)
         if not path.startswith("/api/"):
             return await call_next(request)
