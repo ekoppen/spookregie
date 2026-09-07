@@ -8,7 +8,11 @@ class PlayerGraph:
     volgende player (from_branch_id -> to_player_id), met een kind
     (always/motion/schedule/ha_sensor). De branch-naar-player-indirectie
     wordt eenmalig opgelost in set_graph() (branch_id -> player_id), dus
-    resolve() zelf blijft simpelweg per-player kijken, zoals voorheen."""
+    resolve() zelf blijft simpelweg per-player kijken, zoals voorheen.
+    last_trigger_id onthoudt welke trigger de laatste overgang veroorzaakte
+    (voor de live activiteits-highlight in de graaf-editor) -- puur voor de
+    aanroeper om na een transitioned=True-resolve() uit te lezen, geen
+    invloed op resolve()'s eigen gedrag."""
 
     def __init__(self, preview_timeout=30, clock=time.monotonic):
         self._players = {}
@@ -19,6 +23,7 @@ class PlayerGraph:
         self._preview_set_at = None
         self._preview_timeout = preview_timeout
         self._clock = clock
+        self.last_trigger_id = None
 
     def set_graph(self, players, branches, triggers, root_player_id):
         # Disabled players tellen niet mee -- ze mogen nooit als winnaar
@@ -69,6 +74,7 @@ class PlayerGraph:
             if _trigger_matches(trigger, motion_active, now_hhmm, fired_ha_entities):
                 if trigger["to_player_id"] != self._current_id:
                     self._current_id = trigger["to_player_id"]
+                    self.last_trigger_id = trigger["id"]
                     return self._players.get(self._current_id), True
                 break
         return self._players.get(self._current_id), False

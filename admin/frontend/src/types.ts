@@ -113,7 +113,7 @@ export interface HaState {
 }
 
 export interface WsMessage {
-  type: "status" | "log";
+  type: "status" | "log" | "scene_active";
   topic: string;
   payload: string;
 }

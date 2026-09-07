@@ -39,12 +39,17 @@ interface Props {
   onPlayerClick: (playerId: number, step: "input" | "animation" | "output") => void;
   onGraphChanged: () => void;
   onAddPlayer: (initialPosition: { canvas_x: number; canvas_y: number }) => void;
+  // Live activiteit voor inrichten/troubleshooten (optioneel: canvas werkt
+  // ook zonder, bijv. in tests, gewoon zonder highlight).
+  activePlayerId?: number | null;
+  lastFiredTrigger?: { id: number; at: number } | null;
 }
 
 type PlayerNodeData = {
   player: Player;
   branches: PlayerBranch[];
   audioSourceName: string | null;
+  isActive: boolean;
   onPlayerClick: Props["onPlayerClick"];
   onAddBranchTrigger: (branchId: number) => void;
   onMakeRoot: (playerId: number) => void;
@@ -59,6 +64,7 @@ type OutputNodeData = { output: Output; onDelete: (outputId: number) => void; [k
 
 type TriggerNodeData = {
   trigger: Trigger;
+  isFiring: boolean;
   onTriggerClick: (triggerId: number) => void;
   onRename: (triggerId: number, name: string) => void;
   onSetColor: (triggerId: number, color: string) => void;
@@ -168,7 +174,7 @@ function triggerKindLabel(trigger: Trigger): string {
 }
 
 function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
-  const { player, branches, audioSourceName, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor, onDelete } = data;
+  const { player, branches, audioSourceName, isActive, onPlayerClick, onAddBranchTrigger, onMakeRoot, onRename, onSetColor, onDelete } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(player.name);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -220,6 +226,7 @@ function PlayerNodeComponent({ data }: NodeProps<PlayerNode>) {
     <div
       className="player-node"
       data-root={player.is_root}
+      data-active={isActive}
       style={player.color ? { borderColor: player.color } : undefined}
       onContextMenu={handleContextMenu}
     >
@@ -406,7 +413,7 @@ function OutputNodeComponent({ data }: NodeProps<OutputNode>) {
 }
 
 function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
-  const { trigger, onTriggerClick, onRename, onSetColor, onDelete } = data;
+  const { trigger, isFiring, onTriggerClick, onRename, onSetColor, onDelete } = data;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(trigger.name ?? "");
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -456,6 +463,7 @@ function TriggerNodeComponent({ data }: NodeProps<TriggerNode>) {
   return (
     <div
       className="trigger-node"
+      data-firing={isFiring}
       style={trigger.color ? { borderColor: trigger.color } : undefined}
       onContextMenu={handleContextMenu}
     >
@@ -544,10 +552,23 @@ const NEW_NODE_SPACING_X = 280;
 
 export default function PlayerGraphCanvas({
   players, sources, branches, triggers, outputs, outputConnections, onPlayerClick, onGraphChanged, onAddPlayer,
+  activePlayerId = null, lastFiredTrigger = null,
 }: Props) {
   const [popoverTrigger, setPopoverTrigger] = useState<Trigger | null>(null);
   const [addTriggerOpen, setAddTriggerOpen] = useState(false);
   const [addTriggerBranchId, setAddTriggerBranchId] = useState<number | "">("");
+
+  // Kort oplichten van de trigger die zojuist vuurde -- op zichzelf staande
+  // timeout i.p.v. animation-css-only, want de puls moet herstarten als
+  // dezelfde trigger vlak na elkaar twee keer vuurt (anders blijft een CSS-
+  // animatie die al aan het einde staat gewoon stil staan).
+  const [flashingTriggerId, setFlashingTriggerId] = useState<number | null>(null);
+  useEffect(() => {
+    if (lastFiredTrigger === null) return;
+    setFlashingTriggerId(lastFiredTrigger.id);
+    const timer = window.setTimeout(() => setFlashingTriggerId(null), 1200);
+    return () => window.clearTimeout(timer);
+  }, [lastFiredTrigger]);
 
   const branchToPlayer = useMemo(
     () => Object.fromEntries(branches.map((b) => [b.id, b.player_id])),
@@ -754,6 +775,7 @@ export default function PlayerGraphCanvas({
             player,
             branches: branches.filter((b) => b.player_id === player.id),
             audioSourceName: player.audio_source_id !== null ? audioSourceNameById[player.audio_source_id] ?? null : null,
+            isActive: player.id === activePlayerId,
             onPlayerClick,
             onAddBranchTrigger: handleAddBranchTrigger,
             onMakeRoot: handleMakeRoot,
@@ -786,6 +808,7 @@ export default function PlayerGraphCanvas({
           position: { x: trigger.canvas_x, y: trigger.canvas_y },
           data: {
             trigger,
+            isFiring: trigger.id === flashingTriggerId,
             onTriggerClick: handleTriggerClick,
             onRename: handleRenameTrigger,
             onSetColor: handleSetTriggerColor,
@@ -795,7 +818,7 @@ export default function PlayerGraphCanvas({
       ),
     ],
     [
-      players, sources, outputs, triggers, branches, audioSourceNameById,
+      players, sources, outputs, triggers, branches, audioSourceNameById, activePlayerId, flashingTriggerId,
       onPlayerClick, handleAddBranchTrigger, handleMakeRoot, handleRenamePlayer, handleSetPlayerColor,
       handleTriggerClick, handleRenameTrigger, handleSetTriggerColor,
       handleDeletePlayer, handleDeleteSource, handleDeleteOutput, handleDeleteTrigger,
@@ -824,6 +847,14 @@ export default function PlayerGraphCanvas({
       }
     }
     for (const trigger of triggers) {
+      // Kleur volgt de trigger zelf (zelfde kleur als op de trigger-node),
+      // zodat je in één oogopslag ziet welke lijnen bij welke trigger horen.
+      // Tijdens de kort-oplicht-puls (flashingTriggerId) dikker + geanimeerd
+      // (React Flow's ingebouwde "marching ants") als directe visuele
+      // bevestiging dat déze trigger zojuist vuurde.
+      const isFiring = trigger.id === flashingTriggerId;
+      const color = trigger.color ?? undefined;
+      const edgeStyle = { stroke: color, strokeWidth: isFiring ? 4 : undefined };
       const fromPlayerId = branchToPlayer[trigger.from_branch_id];
       if (fromPlayerId !== undefined) {
         result.push({
@@ -831,6 +862,9 @@ export default function PlayerGraphCanvas({
           source: `player-${fromPlayerId}`,
           sourceHandle: `branch-${trigger.from_branch_id}`,
           target: `trigger-${trigger.id}`,
+          animated: isFiring,
+          style: edgeStyle,
+          markerEnd: { type: MarkerType.ArrowClosed, color },
         });
       }
       if (trigger.to_player_id !== null) {
@@ -839,7 +873,9 @@ export default function PlayerGraphCanvas({
           source: `trigger-${trigger.id}`,
           sourceHandle: "out",
           target: `player-${trigger.to_player_id}`,
-          markerEnd: { type: MarkerType.ArrowClosed },
+          animated: isFiring,
+          style: edgeStyle,
+          markerEnd: { type: MarkerType.ArrowClosed, color },
         });
       }
     }
@@ -856,7 +892,7 @@ export default function PlayerGraphCanvas({
       }
     }
     return result;
-  }, [players, triggers, outputConnections, branchToPlayer]);
+  }, [players, triggers, outputConnections, branchToPlayer, flashingTriggerId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flowNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(flowEdges);

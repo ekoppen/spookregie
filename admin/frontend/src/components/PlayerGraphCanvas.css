@@ -89,6 +89,12 @@
   border-color: var(--signal);
 }
 
+/* box-shadow i.p.v. border-color: player.color staat als inline style op
+   dezelfde node en zou een CSS border-color-regel altijd overstemmen. */
+.player-node[data-active="true"] {
+  box-shadow: 0 0 0 2px var(--signal), 0 0 14px 2px var(--signal);
+}
+
 .player-node__header {
   position: relative;
   display: flex;
@@ -198,6 +204,15 @@
   color: var(--bone);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 0.75rem;
+}
+
+.trigger-node[data-firing="true"] {
+  animation: trigger-node-fire 1.2s ease-out;
+}
+
+@keyframes trigger-node-fire {
+  0% { box-shadow: 0 0 0 2px var(--ember), 0 0 18px 4px var(--ember); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 0 transparent; }
 }
 
 .trigger-node__header {

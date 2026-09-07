@@ -25,6 +25,14 @@ class Topics:
         return self._p("mirror/output")
 
     @property
+    def mirror_scene_active(self) -> str:
+        """Live scene-overgangen voor de graaf-editor (welke player nu
+        actief is, en welke trigger 'm veroorzaakte) -- puur voor de
+        beheerpagina om te live-highlighten tijdens inrichten/troubleshooten,
+        geen consumer die op deze payload stuurt."""
+        return self._p("mirror/scene-active")
+
+    @property
     def system_sleep(self) -> str:
         return self._p("system/sleep")
 

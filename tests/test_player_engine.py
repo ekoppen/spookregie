@@ -27,7 +27,7 @@ def test_transitions_on_matching_motion_trigger():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     branches = [_BASIC_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "motion",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(players, branches, triggers, root_id=1)
@@ -36,6 +36,7 @@ def test_transitions_on_matching_motion_trigger():
 
     assert player == {"id": 2, "name": "Scare"}
     assert transitioned is True
+    assert g.last_trigger_id == 501
 
 
 def test_no_transition_without_motion():
@@ -57,7 +58,7 @@ def test_only_current_players_own_triggers_are_checked():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     branches = [_BASIC_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "motion",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0}
     ]
     g = _graph(players, branches, triggers, root_id=1)
@@ -73,9 +74,9 @@ def test_return_trigger_brings_state_back_on_next_resolve():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     branches = [_BASIC_BRANCH, _SCARE_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "motion",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
-        {"from_branch_id": 102, "to_player_id": 1, "kind": "always",
+        {"id": 502, "from_branch_id": 102, "to_player_id": 1, "kind": "always",
          "schedule_from": None, "schedule_until": None, "priority": 0},
     ]
     g = _graph(players, branches, triggers, root_id=1)
@@ -85,6 +86,7 @@ def test_return_trigger_brings_state_back_on_next_resolve():
 
     assert player == {"id": 1, "name": "Basis"}
     assert transitioned is True
+    assert g.last_trigger_id == 502
 
 
 def test_non_live_triggers_are_ignored():
@@ -108,9 +110,9 @@ def test_priority_order_first_matching_trigger_wins():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "A"}, {"id": 3, "name": "B"}]
     branches = [_BASIC_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 3, "kind": "motion",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 3, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 1},
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "motion",
+        {"id": 502, "from_branch_id": 101, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
     ]
     g = _graph(players, branches, triggers, root_id=1)
@@ -118,6 +120,7 @@ def test_priority_order_first_matching_trigger_wins():
     player, transitioned = g.resolve(motion_active=True, now_hhmm="12:00")
 
     assert player == {"id": 2, "name": "A"}
+    assert g.last_trigger_id == 502
 
 
 def test_unknown_current_player_resets_to_root():
@@ -158,9 +161,9 @@ def test_trigger_to_unknown_player_is_skipped_not_followed():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "A"}]
     branches = [_BASIC_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 999, "kind": "motion",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 999, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 0},
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "motion",
+        {"id": 502, "from_branch_id": 101, "to_player_id": 2, "kind": "motion",
          "schedule_from": None, "schedule_until": None, "priority": 1},
     ]
     g = _graph(players, branches, triggers, root_id=1)
@@ -169,6 +172,7 @@ def test_trigger_to_unknown_player_is_skipped_not_followed():
 
     assert player == {"id": 2, "name": "A"}
     assert transitioned is True
+    assert g.last_trigger_id == 502
 
 
 def test_trigger_from_an_orphaned_branch_id_is_ignored():
@@ -218,7 +222,7 @@ def test_ha_sensor_trigger_matches_only_its_own_fired_entity():
     players = [{"id": 1, "name": "Basis"}, {"id": 2, "name": "Scare"}]
     branches = [_BASIC_BRANCH]
     triggers = [
-        {"from_branch_id": 101, "to_player_id": 2, "kind": "ha_sensor",
+        {"id": 501, "from_branch_id": 101, "to_player_id": 2, "kind": "ha_sensor",
          "schedule_from": None, "schedule_until": None, "ha_entity_id": "binary_sensor.tuin",
          "priority": 0}
     ]
@@ -237,6 +241,7 @@ def test_ha_sensor_trigger_matches_only_its_own_fired_entity():
     )
     assert player == {"id": 2, "name": "Scare"}
     assert transitioned is True
+    assert g.last_trigger_id == 501
 
 
 def test_ha_sensor_trigger_without_ha_entity_id_never_matches():

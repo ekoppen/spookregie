@@ -857,6 +857,16 @@ def main():
 
             winning, transitioned = player_graph.resolve(fired, now_hhmm, fired_ha_entities)
 
+            if winning is not None and transitioned:
+                # Puur voor de graaf-editor's live activiteits-highlight
+                # (inrichten/troubleshooten) -- geen consumer die hierop
+                # stuurt, dus geen output-toewijzing/dedup nodig zoals bij
+                # mirror_output hieronder.
+                client.publish(
+                    topics.mirror_scene_active,
+                    json.dumps({"player_id": winning["id"], "trigger_id": player_graph.last_trigger_id}),
+                )
+
             global _last_published_output_player_id
             if (
                 winning is not None

@@ -50,6 +50,12 @@ export default function DashboardPage() {
   const [processBusy, setProcessBusy] = useState(false);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [testing, setTesting] = useState(false);
+  // Live graaf-activiteit (voor de PlayerGraphCanvas-highlight tijdens
+  // inrichten/troubleshooten) -- begint leeg en vult zich pas zodra de
+  // eerste scene-overgang binnenkomt, geen replay van de laatste bekende
+  // staat bij page-load (bewuste keuze, zelfde als het logpaneel hierboven).
+  const [activePlayerId, setActivePlayerId] = useState<number | null>(null);
+  const [lastFiredTrigger, setLastFiredTrigger] = useState<{ id: number; at: number } | null>(null);
 
   function refreshGraph() {
     listPlayers()
@@ -97,6 +103,18 @@ export default function DashboardPage() {
     }
     if (msg.type === "log" && msg.topic === "process/mirror-node") {
       setLogLines((prev) => [...prev, msg.payload].slice(-200));
+      return;
+    }
+    if (msg.type === "scene_active" && msg.topic === "mirror/scene-active") {
+      try {
+        const data = JSON.parse(msg.payload) as { player_id: number; trigger_id: number | null };
+        setActivePlayerId(data.player_id);
+        if (data.trigger_id !== null) {
+          setLastFiredTrigger({ id: data.trigger_id, at: Date.now() });
+        }
+      } catch {
+        /* malformed payload -- negeer, de highlight blijft gewoon op de vorige staat */
+      }
     }
   }, []);
 
@@ -236,6 +254,8 @@ export default function DashboardPage() {
           onPlayerClick={(id, step) => openWizard(id, step)}
           onGraphChanged={refreshGraph}
           onAddPlayer={(pos) => openWizard(null, "input", pos)}
+          activePlayerId={activePlayerId}
+          lastFiredTrigger={lastFiredTrigger}
         />
       </section>
 
