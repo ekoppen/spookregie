@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { updateTrigger, deleteTrigger } from "../api/triggers";
 import { getHaStates } from "../api/ha";
 import type { Trigger, HaState } from "../types";
@@ -20,6 +20,7 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
   const [haStates, setHaStates] = useState<HaState[]>([]);
   const [haLoadError, setHaLoadError] = useState(false);
   const [showAllDomains, setShowAllDomains] = useState(false);
+  const haEntityListId = useId();
 
   useEffect(() => {
     if (kind !== "ha_sensor") return;
@@ -121,8 +122,14 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
               {haLoadError && <p className="trigger-popover__error">HA-entiteiten konden niet geladen worden.</p>}
               <label>
                 <span>Entiteit</span>
-                <select value={haEntityId} onChange={(e) => setHaEntityId(e.target.value)}>
-                  <option value="">— kies een entiteit —</option>
+                <input
+                  type="text"
+                  list={haEntityListId}
+                  value={haEntityId}
+                  onChange={(e) => setHaEntityId(e.target.value)}
+                  placeholder="Typ om te zoeken…"
+                />
+                <datalist id={haEntityListId}>
                   {haStates
                     .filter((s) => showAllDomains || s.entity_id.startsWith("binary_sensor."))
                     .map((s) => (
@@ -130,7 +137,12 @@ export default function TriggerPopover({ trigger, onClose, onSaved }: Props) {
                         {s.entity_id} ({s.state})
                       </option>
                     ))}
-                </select>
+                </datalist>
+                {/* datalist beperkt de invoer niet tot z'n opties -- een getypte
+                    naam die niet bestaat zou anders stil nooit afgaan */}
+                {haEntityId && haStates.length > 0 && !haStates.some((s) => s.entity_id === haEntityId) && (
+                  <p className="trigger-popover__ha-warning">Onbekend in Home Assistant.</p>
+                )}
               </label>
               <label className="trigger-popover__checkbox">
                 <input

@@ -75,13 +75,19 @@
   gap: 0.5rem;
 }
 
-.trigger-popover__ha select {
+.trigger-popover__ha input[type="text"] {
   width: 100%;
   padding: 0.4rem;
   background: var(--void);
   border: 1px solid var(--panel-edge);
   border-radius: 6px;
   color: var(--bone);
+}
+
+.trigger-popover__ha-warning {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--alarm);
 }
 
 .trigger-popover__checkbox {
