@@ -209,3 +209,34 @@
     opacity: 1;
   }
 }
+
+.media-card__intensity {
+  display: flex;
+  border-top: 1px solid var(--panel-edge);
+}
+
+.media-card__intensity-option {
+  flex: 1;
+  padding: 0.3rem 0.2rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--panel-edge);
+  color: var(--ash);
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.media-card__intensity-option:last-child {
+  border-right: none;
+}
+
+.media-card__intensity-option:hover {
+  color: var(--bone);
+}
+
+.media-card__intensity-option[aria-pressed="true"] {
+  background: rgba(255, 106, 31, 0.12);
+  color: var(--signal);
+}

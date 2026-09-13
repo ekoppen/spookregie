@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listMedia, uploadMedia, deleteMedia } from "../api/media";
+import { listMedia, uploadMedia, deleteMedia, setMediaIntensity } from "../api/media";
 import type { MediaItem } from "../types";
 import "./MediaLibrary.css";
 
@@ -8,7 +8,17 @@ interface Props {
   selected: string[];
   onSelectionChange: (hashes: string[]) => void;
   selectionMode: "single" | "multiple";
+  // Toont per item een subtiel/vol-keuze voor de avondopbouw. Alleen zinvol
+  // op de scare-pagina's (audio-zone, mirror-scare-video) -- de algemene
+  // media-picker in SourcesPage/PlayerWizardModal heeft hier niets aan.
+  showIntensity?: boolean;
 }
+
+const INTENSITY_OPTIONS: { value: MediaItem["intensity"]; label: string }[] = [
+  { value: null, label: "Beide" },
+  { value: "subtle", label: "Subtiel" },
+  { value: "full", label: "Vol" },
+];
 
 const KIND_COPY: Record<Props["kind"], { empty: string; upload: string }> = {
   image: {
@@ -52,7 +62,7 @@ function KindIcon({ kind }: { kind: Props["kind"] }) {
   );
 }
 
-export default function MediaLibrary({ kind, selected, onSelectionChange, selectionMode }: Props) {
+export default function MediaLibrary({ kind, selected, onSelectionChange, selectionMode, showIntensity }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +92,18 @@ export default function MediaLibrary({ kind, selected, onSelectionChange, select
     } finally {
       setUploading(false);
       e.target.value = "";
+    }
+  }
+
+  async function handleIntensityChange(hash: string, intensity: MediaItem["intensity"]) {
+    // Optimistisch: de knop moet direct reageren, en een mislukte PATCH is
+    // geen ramp -- de volgende refresh (of paginaherlaad) trekt het recht.
+    setItems((prev) => prev.map((item) => (item.hash === hash ? { ...item, intensity } : item)));
+    try {
+      await setMediaIntensity(hash, intensity);
+    } catch {
+      setError("Niveau kon niet worden opgeslagen.");
+      refresh();
     }
   }
 
@@ -162,6 +184,21 @@ export default function MediaLibrary({ kind, selected, onSelectionChange, select
                 >
                   ×
                 </button>
+                {showIntensity && (
+                  <div className="media-card__intensity" role="group" aria-label="Avondopbouw-niveau">
+                    {INTENSITY_OPTIONS.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        className="media-card__intensity-option"
+                        aria-pressed={item.intensity === option.value}
+                        onClick={() => handleIntensityChange(item.hash, option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </li>
             );
           })}

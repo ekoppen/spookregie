@@ -1,5 +1,6 @@
 import os
 import shutil
+import sqlite3
 import subprocess
 
 import pytest
@@ -14,6 +15,7 @@ from admin.app.media import (
     validate_upload,
     extract_audio_if_video,
     get_media_audio_path,
+    set_media_intensity,
 )
 from shared.media_sync import content_hash
 
@@ -196,6 +198,56 @@ def test_delete_media_orphan_file_not_deleted(tmp_path):
     assert result is False  # No DB row, so delete returns False
     assert orphan_file.exists()  # File should still exist
     assert orphan_file.read_bytes() == b"orphan-data"  # Unchanged
+
+
+def test_set_media_intensity_updates_row(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    media_dir = str(tmp_path / "media")
+    h = save_media(conn, media_dir, b"data", "gil.wav", "audio")
+
+    assert set_media_intensity(conn, h, "full") is True
+    assert list_media(conn)[0]["intensity"] == "full"
+
+
+def test_set_media_intensity_returns_false_for_unknown_hash(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    assert set_media_intensity(conn, "a" * 64, "full") is False
+
+
+def test_list_media_includes_intensity_field_defaulting_to_none(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+    media_dir = str(tmp_path / "media")
+    save_media(conn, media_dir, b"data", "gil.wav", "audio")
+
+    assert list_media(conn)[0]["intensity"] is None
+
+
+def test_init_db_adds_intensity_column_to_existing_media_table(tmp_path):
+    """Regressie, zelfde reden als de app_settings-kolomtests: media kan al
+    bestaan zonder deze kolom -- init_db moet 'm alsnog toevoegen."""
+    db_path = str(tmp_path / "old-schema-media.db")
+    old_conn = sqlite3.connect(db_path)
+    old_conn.execute(
+        """CREATE TABLE media (
+            hash TEXT PRIMARY KEY,
+            filename TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            uploaded_at TEXT NOT NULL
+        )"""
+    )
+    old_conn.execute(
+        "INSERT INTO media (hash, filename, kind, uploaded_at) VALUES (?, 'gil.wav', 'audio', '0')",
+        ("a" * 64,),
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    conn = init_db(db_path)
+
+    assert list_media(conn) == [
+        {"hash": "a" * 64, "filename": "gil.wav", "kind": "audio", "uploaded_at": "0", "intensity": None}
+    ]
 
 
 def _mp4_bytes():

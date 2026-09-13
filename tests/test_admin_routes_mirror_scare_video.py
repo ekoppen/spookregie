@@ -56,6 +56,35 @@ def test_put_mirror_scare_video_config_saves_and_publishes(tmp_path):
     }
 
 
+class _FixedClock:
+    def __init__(self, hhmm):
+        self.hhmm = hhmm
+
+    def now(self):
+        return self
+
+    def strftime(self, _fmt):
+        return self.hhmm
+
+
+def test_put_mirror_scare_video_config_filters_by_tier_at_fixed_time(tmp_path, monkeypatch):
+    from admin.app.runtime_settings import write_runtime_settings
+
+    client, bridge = _client(tmp_path)
+    app = client.app
+    write_runtime_settings(app.state.db, scare_escalation_time="21:00")
+    app.state.db.execute(
+        "INSERT INTO media (hash, filename, kind, uploaded_at, intensity) VALUES (?, 'a.mp4', 'video', '0', 'subtle')",
+        ("a" * 64,),
+    )
+    app.state.db.commit()
+    monkeypatch.setattr("admin.app.routers.mirror_scare_video.datetime", _FixedClock("22:00"))
+
+    client.put("/api/mirror/scare-video-config", json={"enabled_hashes": ["a" * 64, "b" * 64]})
+
+    assert ("mirror_scare_video_config", ["b" * 64]) in bridge.calls
+
+
 def test_mirror_scare_video_config_requires_auth(tmp_path):
     app = create_app(settings=_settings(tmp_path))
     app.state.bridge = FakeBridge()

@@ -163,3 +163,49 @@ def test_upload_rejects_video_without_mp4_header(tmp_path):
     response = _upload(client, "zombie.mp4", b"GIF89a-niet-een-mp4", "video")
 
     assert response.status_code == 400
+
+
+def test_uploaded_media_defaults_to_no_intensity(tmp_path):
+    client = _client(tmp_path)
+
+    _upload(client, "gil.wav", WAV, "audio")
+
+    assert client.get("/api/media").json()[0]["intensity"] is None
+
+
+def test_patch_media_sets_intensity(tmp_path):
+    client = _client(tmp_path)
+    h = _upload(client, "gil.wav", WAV, "audio").json()["hash"]
+
+    response = client.patch(f"/api/media/{h}", json={"intensity": "full"})
+
+    assert response.status_code == 200
+    assert client.get("/api/media").json()[0]["intensity"] == "full"
+
+
+def test_patch_media_clears_intensity(tmp_path):
+    client = _client(tmp_path)
+    h = _upload(client, "gil.wav", WAV, "audio").json()["hash"]
+    client.patch(f"/api/media/{h}", json={"intensity": "full"})
+
+    response = client.patch(f"/api/media/{h}", json={"intensity": None})
+
+    assert response.status_code == 200
+    assert client.get("/api/media").json()[0]["intensity"] is None
+
+
+def test_patch_media_rejects_unknown_intensity(tmp_path):
+    client = _client(tmp_path)
+    h = _upload(client, "gil.wav", WAV, "audio").json()["hash"]
+
+    response = client.patch(f"/api/media/{h}", json={"intensity": "extreem"})
+
+    assert response.status_code == 400
+
+
+def test_patch_media_returns_404_for_unknown_hash(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.patch(f"/api/media/{'a' * 64}", json={"intensity": "full"})
+
+    assert response.status_code == 404

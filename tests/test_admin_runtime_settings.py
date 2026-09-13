@@ -128,6 +128,56 @@ def test_write_then_read_roundtrip_camera_source(tmp_path):
     assert settings.mirror_camera_source == "rtsp://cam.local/stream1"
 
 
+def test_read_without_row_defaults_escalation_time_to_empty(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    settings = read_runtime_settings(conn)
+
+    assert settings.scare_escalation_time == ""
+
+
+def test_write_then_read_roundtrip_escalation_time(tmp_path):
+    conn = init_db(str(tmp_path / "test.db"))
+
+    write_runtime_settings(conn, scare_escalation_time="21:00")
+    settings = read_runtime_settings(conn)
+
+    assert settings.scare_escalation_time == "21:00"
+
+
+def test_init_db_adds_escalation_time_column_to_existing_table_without_it(tmp_path):
+    """Regressie, zelfde reden als bij mqtt_topic_prefix/mirror_camera_source
+    hierboven: app_settings kan al bestaan zonder deze kolom -- init_db moet
+    'm alsnog toevoegen aan een bestaande tabel."""
+    db_path = str(tmp_path / "old-schema-3.db")
+    old_conn = sqlite3.connect(db_path)
+    old_conn.execute(
+        """CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            mqtt_host TEXT NOT NULL,
+            mqtt_port INTEGER NOT NULL,
+            mqtt_user TEXT NOT NULL DEFAULT '',
+            mqtt_pass TEXT NOT NULL DEFAULT '',
+            ha_url TEXT NOT NULL,
+            ha_token TEXT NOT NULL DEFAULT '',
+            mirror_stream_url TEXT NOT NULL DEFAULT '',
+            mqtt_topic_prefix TEXT NOT NULL DEFAULT '',
+            mirror_camera_source TEXT NOT NULL DEFAULT ''
+        )"""
+    )
+    old_conn.execute(
+        "INSERT INTO app_settings (id, mqtt_host, mqtt_port, ha_url) VALUES (1, 'oude-broker', 1883, 'http://ha.local:8123')"
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    conn = init_db(db_path)
+    settings = read_runtime_settings(conn)
+
+    assert settings.mqtt_host == "oude-broker"
+    assert settings.scare_escalation_time == ""
+
+
 def test_init_db_adds_camera_source_column_to_existing_table_without_it(tmp_path):
     """Regressie, zelfde reden als bij mqtt_topic_prefix hierboven:
     app_settings kan al bestaan (uit een eerdere feature) zonder deze

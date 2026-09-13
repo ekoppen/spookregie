@@ -128,6 +128,8 @@ def init_db(path):
     )
     _ensure_column(conn, "app_settings", "mqtt_topic_prefix", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "app_settings", "mirror_camera_source", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "app_settings", "scare_escalation_time", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "media", "intensity", "TEXT")
     _ensure_column(conn, "mirror_config", "canvas_width", "INTEGER")
     _ensure_column(conn, "mirror_config", "canvas_height", "INTEGER")
     _ensure_column(conn, "mirror_config", "source_scale", "REAL NOT NULL DEFAULT 1.0")

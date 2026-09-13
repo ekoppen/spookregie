@@ -80,17 +80,25 @@ def get_media_audio_path(media_dir, hash_):
 def list_media(conn, kind=None):
     if kind is not None:
         rows = conn.execute(
-            "SELECT hash, filename, kind, uploaded_at FROM media WHERE kind = ? ORDER BY uploaded_at DESC",
+            "SELECT hash, filename, kind, uploaded_at, intensity FROM media WHERE kind = ? ORDER BY uploaded_at DESC",
             (kind,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT hash, filename, kind, uploaded_at FROM media ORDER BY uploaded_at DESC"
+            "SELECT hash, filename, kind, uploaded_at, intensity FROM media ORDER BY uploaded_at DESC"
         ).fetchall()
     return [
-        {"hash": r[0], "filename": r[1], "kind": r[2], "uploaded_at": r[3]}
+        {"hash": r[0], "filename": r[1], "kind": r[2], "uploaded_at": r[3], "intensity": r[4]}
         for r in rows
     ]
+
+
+def set_media_intensity(conn, hash_, intensity):
+    """Zet het avondopbouw-niveau (subtle/full/None=beide) van een
+    mediabestand. Geeft False als de hash niet bestaat."""
+    cursor = conn.execute("UPDATE media SET intensity = ? WHERE hash = ?", (intensity, hash_))
+    conn.commit()
+    return cursor.rowcount > 0
 
 
 def delete_media(conn, media_dir, hash_):

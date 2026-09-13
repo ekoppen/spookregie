@@ -3,6 +3,20 @@ from admin.app.config import Settings
 from admin.app.main import create_app
 
 
+class _FixedClock:
+    """Vervangt datetime in routers/scare.py zodat de test niet van de echte
+    klok afhangt (zelfde patroon als test_admin_scheduler.py)."""
+
+    def __init__(self, hhmm):
+        self.hhmm = hhmm
+
+    def now(self):
+        return self
+
+    def strftime(self, _fmt):
+        return self.hhmm
+
+
 class FakeBridge:
     def __init__(self):
         self.calls = []
@@ -77,6 +91,24 @@ def test_scare_routes_reject_zone_with_mqtt_wildcards(tmp_path):
 
     # de bridge is nooit aangeroepen met een ongeldige zone
     assert bridge.calls == []
+
+
+def test_put_scare_config_filters_by_tier_at_fixed_time(tmp_path, monkeypatch):
+    from admin.app.runtime_settings import write_runtime_settings
+
+    client, bridge = _client(tmp_path)
+    app = client.app
+    write_runtime_settings(app.state.db, scare_escalation_time="21:00")
+    app.state.db.execute(
+        "INSERT INTO media (hash, filename, kind, uploaded_at, intensity) VALUES (?, 'a.wav', 'audio', '0', 'full')",
+        ("a" * 64,),
+    )
+    app.state.db.commit()
+    monkeypatch.setattr("admin.app.routers.scare.datetime", _FixedClock("19:00"))
+
+    client.put("/api/scare/zone-a/config", json={"enabled_hashes": ["a" * 64, "b" * 64]})
+
+    assert ("scare_config", "zone-a", ["b" * 64]) in bridge.calls
 
 
 def test_post_scare_test_publishes(tmp_path):

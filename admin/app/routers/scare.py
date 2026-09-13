@@ -1,7 +1,10 @@
 import json
 import re
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
+
+from admin.app.escalation import current_tier, filter_by_tier, read_escalation_time, read_intensity_by_hash
 
 router = APIRouter()
 
@@ -40,7 +43,9 @@ async def put_scare_config(zone: str, request: Request):
         (zone, json.dumps(enabled_hashes)),
     )
     db.commit()
-    request.app.state.bridge.publish_scare_config(zone, enabled_hashes)
+    tier = current_tier(datetime.now().strftime("%H:%M"), read_escalation_time(db))
+    effective_hashes = filter_by_tier(enabled_hashes, read_intensity_by_hash(db), tier)
+    request.app.state.bridge.publish_scare_config(zone, effective_hashes)
     return {"ok": True}
 
 

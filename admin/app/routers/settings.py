@@ -15,6 +15,17 @@ def _validate_topic_prefix(value):
         raise HTTPException(status_code=400, detail="mqtt_topic_prefix mag geen # of + bevatten")
 
 
+def _validate_escalation_time(value):
+    if not value:
+        return
+    parts = value.split(":")
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        raise HTTPException(status_code=400, detail="scare_escalation_time moet leeg zijn of HH:MM zijn")
+    hour, minute = int(parts[0]), int(parts[1])
+    if not (0 <= hour < 24 and 0 <= minute < 60):
+        raise HTTPException(status_code=400, detail="scare_escalation_time moet leeg zijn of HH:MM zijn")
+
+
 @router.get("/api/settings")
 def get_settings_route(request: Request):
     settings = read_runtime_settings(request.app.state.db)
@@ -25,6 +36,7 @@ def get_settings_route(request: Request):
         "ha_url": settings.ha_url,
         "mirror_stream_url": settings.mirror_stream_url,
         "mqtt_topic_prefix": settings.mqtt_topic_prefix,
+        "scare_escalation_time": settings.scare_escalation_time,
         "mqtt_pass_set": bool(settings.mqtt_pass),
         "ha_token_set": bool(settings.ha_token),
     }
@@ -53,6 +65,9 @@ async def put_settings_route(request: Request):
     mqtt_topic_prefix = str(body.get("mqtt_topic_prefix", "")).strip()
     _validate_topic_prefix(mqtt_topic_prefix)
 
+    scare_escalation_time = str(body.get("scare_escalation_time", "")).strip()
+    _validate_escalation_time(scare_escalation_time)
+
     updates = {
         "mqtt_host": mqtt_host,
         "mqtt_port": mqtt_port,
@@ -60,6 +75,7 @@ async def put_settings_route(request: Request):
         "ha_url": ha_url,
         "mirror_stream_url": mirror_stream_url,
         "mqtt_topic_prefix": mqtt_topic_prefix,
+        "scare_escalation_time": scare_escalation_time,
     }
     mqtt_pass = body.get("mqtt_pass")
     if mqtt_pass:

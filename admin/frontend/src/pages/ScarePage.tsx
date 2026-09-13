@@ -108,6 +108,7 @@ export default function ScarePage() {
           selectionMode="multiple"
           selected={enabledHashes}
           onSelectionChange={setEnabledHashes}
+          showIntensity
         />
       </section>
 

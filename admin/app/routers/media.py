@@ -8,9 +8,12 @@ from admin.app.media import (
     delete_media,
     validate_upload,
     extract_audio_if_video,
+    set_media_intensity,
 )
 
 router = APIRouter()
+
+_VALID_INTENSITIES = (None, "subtle", "full")
 
 
 @router.post("/api/media")
@@ -47,6 +50,18 @@ def download_media_audio(hash_: str, request: Request):
     with open(path, "rb") as f:
         data = f.read()
     return Response(content=data, media_type="application/octet-stream")
+
+
+@router.patch("/api/media/{hash_}")
+async def patch_media_route(hash_: str, request: Request):
+    body = await request.json()
+    intensity = body.get("intensity")
+    if intensity not in _VALID_INTENSITIES:
+        raise HTTPException(status_code=400, detail="intensity moet leeg, 'subtle' of 'full' zijn")
+    updated = set_media_intensity(request.app.state.db, hash_, intensity)
+    if not updated:
+        raise HTTPException(status_code=404, detail="niet gevonden")
+    return {"ok": True}
 
 
 @router.delete("/api/media/{hash_}")

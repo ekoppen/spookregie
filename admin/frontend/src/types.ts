@@ -87,6 +87,7 @@ export interface MediaItem {
   filename: string;
   kind: "image" | "audio" | "video";
   uploaded_at: string;
+  intensity: "subtle" | "full" | null;
 }
 
 export interface NodeStatusMap {
@@ -125,6 +126,7 @@ export interface AppSettings {
   ha_url: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
+  scare_escalation_time: string;
   mqtt_pass_set: boolean;
   ha_token_set: boolean;
 }
@@ -138,4 +140,5 @@ export interface AppSettingsUpdate {
   ha_token?: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
+  scare_escalation_time: string;
 }

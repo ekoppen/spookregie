@@ -1,5 +1,7 @@
 import asyncio
+import json
 import os
+from datetime import datetime
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
@@ -15,6 +17,7 @@ from admin.app.mqtt_state import NodeStatusTracker
 from admin.app.mqtt_bridge import MqttBridge
 from admin.app.mirror_process import MirrorProcessManager
 from admin.app.runtime_settings import read_runtime_settings
+from admin.app.escalation import current_tier, filter_by_tier, read_escalation_time, read_intensity_by_hash
 from admin.app.scheduler import Scheduler
 from admin.app.ha_trigger_poller import HaTriggerPoller
 from admin.app.websocket_hub import WebSocketHub
@@ -80,6 +83,17 @@ def _get_schedule_from_db(conn):
         s = read_schedule(conn)
         return (s["on_time"], s["off_time"], s["enabled"])
     return get_schedule
+
+
+def _get_escalation_config_from_db(conn):
+    def get_config():
+        escalation_time = read_escalation_time(conn)
+        intensity_by_hash = read_intensity_by_hash(conn)
+        mirror_hashes = read_enabled_hashes(conn)
+        zone_rows = conn.execute("SELECT zone, enabled_hashes FROM scare_zone_config").fetchall()
+        zone_hashes = {zone: json.loads(raw) for zone, raw in zone_rows}
+        return escalation_time, intensity_by_hash, mirror_hashes, zone_hashes
+    return get_config
 
 
 def _get_watched_ha_entities_from_db(conn):
@@ -163,7 +177,11 @@ def create_app(settings=None):
         # zijn retained topics die alleen bij een CRUD-actie op de
         # beheerpagina gepubliceerd worden, nooit uit zichzelf.
         publish_graph(app.state.db, app.state.bridge)
-        app.state.bridge.publish_mirror_scare_video_config(read_enabled_hashes(app.state.db))
+        tier = current_tier(datetime.now().strftime("%H:%M"), read_escalation_time(app.state.db))
+        effective_hashes = filter_by_tier(
+            read_enabled_hashes(app.state.db), read_intensity_by_hash(app.state.db), tier
+        )
+        app.state.bridge.publish_mirror_scare_video_config(effective_hashes)
 
     app.state.bridge = MqttBridge(
         app.state.runtime_settings, app.state.tracker, ws_hub=app.state.ws_hub, logger=app.state.logger,
@@ -176,7 +194,8 @@ def create_app(settings=None):
         log_dir=os.path.join(settings.log_dir, "mirror-node"),
     )
     app.state.scheduler = Scheduler(
-        app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger
+        app.state.bridge, _get_schedule_from_db(app.state.db), logger=app.state.logger,
+        get_escalation_config=_get_escalation_config_from_db(app.state.db),
     )
     app.state.ha_trigger_poller = HaTriggerPoller(
         app.state.bridge, lambda: app.state.runtime_settings,

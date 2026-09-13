@@ -12,6 +12,7 @@ interface FormState {
   ha_token: string;
   mirror_stream_url: string;
   mqtt_topic_prefix: string;
+  scare_escalation_time: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -23,6 +24,7 @@ const EMPTY_FORM: FormState = {
   ha_token: "",
   mirror_stream_url: "",
   mqtt_topic_prefix: "",
+  scare_escalation_time: "",
 };
 
 export default function SettingsPage() {
@@ -45,6 +47,7 @@ export default function SettingsPage() {
           ha_token: "",
           mirror_stream_url: result.mirror_stream_url,
           mqtt_topic_prefix: result.mqtt_topic_prefix,
+          scare_escalation_time: result.scare_escalation_time,
         });
         setError(null);
       })
@@ -67,6 +70,7 @@ export default function SettingsPage() {
         ...(form.ha_token ? { ha_token: form.ha_token } : {}),
         mirror_stream_url: form.mirror_stream_url,
         mqtt_topic_prefix: form.mqtt_topic_prefix,
+        scare_escalation_time: form.scare_escalation_time,
       });
       const refreshed = await getSettings();
       setSettings(refreshed);
@@ -212,6 +216,27 @@ export default function SettingsPage() {
             <p className="settings-field__label" style={{ marginTop: "0.75rem" }}>
               De camera-bron stel je per output in op de nieuwe
               Outputs-pagina, niet hier.
+            </p>
+          </section>
+
+          <section className="settings-panel">
+            <p className="settings-panel__eyebrow">Avondopbouw</p>
+            <div className="settings-grid">
+              <label className="settings-field">
+                <span className="settings-field__label">Omslagtijd naar 'vol'</span>
+                <input
+                  className="settings-field__input"
+                  type="time"
+                  value={form.scare_escalation_time}
+                  onChange={(e) => update({ scare_escalation_time: e.target.value })}
+                />
+              </label>
+            </div>
+            <p className="settings-field__label" style={{ marginTop: "0.75rem" }}>
+              Voor deze tijd spelen alleen als 'subtiel' gemarkeerde
+              geluiden/video's uit de scare-audio- en scare-video-bibliotheek;
+              erna alleen de als 'vol' gemarkeerde. Ongetagde media speelt
+              altijd mee. Leeg laten schakelt de opbouw uit.
             </p>
           </section>
 

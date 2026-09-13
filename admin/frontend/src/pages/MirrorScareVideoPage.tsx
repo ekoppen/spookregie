@@ -56,6 +56,7 @@ export default function MirrorScareVideoPage() {
           selectionMode="multiple"
           selected={enabledHashes}
           onSelectionChange={setEnabledHashes}
+          showIntensity
         />
       </section>
 

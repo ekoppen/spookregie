@@ -171,3 +171,42 @@ def test_put_settings_rejects_plus_in_topic_prefix(tmp_path):
     assert response.status_code == 400
 
 
+def test_get_settings_includes_escalation_time_defaulting_to_empty(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.get("/api/settings")
+
+    assert response.json()["scare_escalation_time"] == ""
+
+
+def test_put_settings_persists_escalation_time(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "scare_escalation_time": "21:00",
+    })
+
+    assert response.status_code == 200
+    assert client.get("/api/settings").json()["scare_escalation_time"] == "21:00"
+
+
+def test_put_settings_rejects_malformed_escalation_time(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "scare_escalation_time": "9pm",
+    })
+
+    assert response.status_code == 400
+
+
+def test_put_settings_accepts_empty_escalation_time(tmp_path):
+    client, app, _ = _client(tmp_path)
+
+    response = client.put("/api/settings", json={
+        "mqtt_host": "pi-broker", "mqtt_port": 1883, "scare_escalation_time": "",
+    })
+
+    assert response.status_code == 200
+
+

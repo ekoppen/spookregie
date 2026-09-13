@@ -34,3 +34,10 @@ export async function uploadMedia(file: File, kind: string): Promise<MediaItem> 
 export function deleteMedia(hash: string): Promise<void> {
   return apiFetch(`/api/media/${hash}`, { method: "DELETE" });
 }
+
+export function setMediaIntensity(hash: string, intensity: "subtle" | "full" | null): Promise<void> {
+  return apiFetch(`/api/media/${hash}`, {
+    method: "PATCH",
+    body: JSON.stringify({ intensity }),
+  });
+}
