@@ -7,7 +7,7 @@ os.environ.setdefault(
     # hele (single-threaded) render-loop muisstil bevriezen. Onbekende
     # optie voor een protocol -> FFmpeg negeert 'm met een warning, geen
     # crash (zelfde bewezen-veilig patroon als stimeout nu al gebruikt).
-    "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;5000000|rw_timeout;5000000"
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;15000000|rw_timeout;15000000"
 )
 
 import cv2

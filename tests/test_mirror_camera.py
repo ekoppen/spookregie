@@ -8,9 +8,17 @@ def test_ffmpeg_capture_options_include_a_read_write_timeout():
     # HA-camera-proxy, ook http/mjpeg) cv2.VideoCapture()/cap.read() voor
     # altijd laten hangen en zo de hele render-loop bevriezen -- empirisch
     # bevestigd (5.2s met deze optie vs. >12s hang zonder, tegen een echte
-    # stallende HTTP-server). Deze test bewaakt alleen dat de optie blijft
-    # staan, niet het timinggedrag zelf (dat vereist een echte server).
-    assert "rw_timeout;5000000" in os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]
+    # stallende HTTP-server).
+    #
+    # 5s bleek echter zelf te krap: tegen een echte HA-camera-proxy-stream
+    # (lan01, camera.lsc_smart_connect_1080p_ip_indoor_mini) kwam om de
+    # paar frames een leesinterval van >5s voor (tot 5.7s gemeten), wat de
+    # ffmpeg-mjpeg-demuxer op een timeout liet stukgaan ("overread") --
+    # daarna faalden ALLE volgende reads meteen, blijvend, tot een reopen.
+    # 15s gaf in dezelfde herhaalde test ruim marge (max ~5.7s per frame),
+    # geen enkele mislukte read meer. Deze test bewaakt alleen dat de optie
+    # blijft staan, niet het timinggedrag zelf (dat vereist een echte server).
+    assert "rw_timeout;15000000" in os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]
 
 
 def test_empty_source_opens_local_index():
