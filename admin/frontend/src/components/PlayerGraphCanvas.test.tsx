@@ -33,6 +33,17 @@ vi.mock("../api/outputConnections", () => ({
   createOutputConnection: vi.fn(),
   deleteOutputConnection: vi.fn(),
 }));
+vi.mock("../api/settings", () => ({
+  getSettings: vi.fn().mockResolvedValue({
+    mqtt_host: "", mqtt_port: 1883, mqtt_user: "", ha_url: "", mirror_stream_url: "",
+    mqtt_topic_prefix: "", scare_escalation_time: "", mqtt_pass_set: false, ha_token_set: false,
+  }),
+}));
+vi.mock("../api/mirrorProcess", () => ({
+  startMirrorProcess: vi.fn(),
+  stopMirrorProcess: vi.fn(),
+  getMirrorProcessStatus: vi.fn().mockResolvedValue({ running: false, pid: null }),
+}));
 
 const PLAYER: Player = {
   id: 1,
@@ -258,6 +269,30 @@ describe("PlayerGraphCanvas -- rechtsklik-menu", () => {
 
     expect(deleteOutput).toHaveBeenCalledWith(3);
     expect(onGraphChanged).toHaveBeenCalled();
+  });
+
+  it("Voorbeeld op een output opent het live-voorbeeldpaneel", async () => {
+    const OUTPUT: Output = { id: 3, name: "Spiegel", camera_source: "", canvas_x: 0, canvas_y: 0 };
+    render(
+      <MemoryRouter>
+        <PlayerGraphCanvas
+          players={[]}
+          sources={[]}
+          branches={[]}
+          triggers={[]}
+          outputs={[OUTPUT]}
+          outputConnections={[]}
+          onPlayerClick={vi.fn()}
+          onGraphChanged={vi.fn()}
+          onAddPlayer={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.contextMenu(await screen.findByText("Spiegel"));
+    await userEvent.click(await screen.findByText("Voorbeeld"));
+
+    expect(await screen.findByText("Live voorbeeld")).toBeInTheDocument();
   });
 });
 

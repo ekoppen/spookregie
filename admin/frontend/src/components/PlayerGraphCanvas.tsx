@@ -24,6 +24,7 @@ import { createPlayerBranch } from "../api/branches";
 import { createOutputConnection, deleteOutputConnection } from "../api/outputConnections";
 import { ApiError } from "../api/client";
 import TriggerPopover from "./TriggerPopover";
+import OutputPreviewPanel from "./OutputPreviewPanel";
 import type { Player, Source, PlayerBranch, Trigger, Output, OutputConnection } from "../types";
 import "./PlayerGraphCanvas.css";
 
@@ -384,6 +385,7 @@ function OutputNodeComponent({ data }: NodeProps<OutputNode>) {
   const { output, onDelete } = data;
   const navigate = useNavigate();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
@@ -403,11 +405,13 @@ function OutputNodeComponent({ data }: NodeProps<OutputNode>) {
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           items={[
+            { label: "Voorbeeld", onSelect: () => setPreviewOpen(true) },
             { label: "Bewerken", onSelect: () => navigate("/outputs") },
             { label: "Verwijderen", onSelect: () => onDelete(output.id) },
           ]}
         />
       )}
+      {previewOpen && <OutputPreviewPanel onClose={() => setPreviewOpen(false)} />}
     </div>
   );
 }
