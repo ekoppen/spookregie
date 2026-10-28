@@ -76,6 +76,9 @@ sleeping = threading.Event()
 test_trigger_requested = threading.Event()
 player_graph = PlayerGraph()
 synced_scare_videos = {}
+# Gezet in main(): publiceert de hash van de scare-video die nu start, zodat
+# de /beamer-pagina het geluid in de browser kan afspelen.
+publish_scare_playing = None
 _fired_ha_entities_lock = threading.Lock()
 _fired_ha_entities = set()
 _ha_entity_states_lock = threading.Lock()
@@ -556,7 +559,9 @@ def _handle_trigger(streamer, logger):
     beweegt de trigger niet meteen laat herhalen (de trigger zelf heeft
     geen eigen cooldown; dit is wat er normaal voor zorgt)."""
     if synced_scare_videos:
-        chosen = random.choice(list(synced_scare_videos.values()))
+        chosen_hash, chosen = random.choice(list(synced_scare_videos.items()))
+        if publish_scare_playing is not None:
+            publish_scare_playing(chosen_hash)
         _play_scare_video(chosen["video"], chosen["audio"], streamer, logger)
     return ACTIVE_SECONDS
 
@@ -690,6 +695,8 @@ def main():
     # vaste id zou een tweede fysiek apparaat permanent van de broker af laten
     # vechten met het eerste (elke connect kickt de vorige sessie eraf).
     client = mqtt.Client(client_id=f"mirror-{NODE_NAME}")
+    global publish_scare_playing
+    publish_scare_playing = lambda h: client.publish(topics.mirror_scare_playing, json.dumps({"hash": h}))
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
 
@@ -839,7 +846,11 @@ def main():
             # de bronscene opnieuw matchen, en ping-pongt de graaf
             # oneindig door zolang de cooldown loopt (Kritiek 1).
             fired = False
-            if trigger.detect(gray) and now > active_until:
+            # Alleen bewegingsdetectie op echt camerabeeld: op een video_loop/
+            # static_image zou de frame-diff de video-inhoud zelf als
+            # "beweging" zien en continu mirror/triggered afvuren.
+            is_camera_frame = resolved_source is None or resolved_source.get("kind") == "camera_stream"
+            if is_camera_frame and trigger.detect(gray) and now > active_until:
                 client.publish(topics.mirror_triggered, trigger_payload())
                 logger.info("mirror triggered")
                 active_until = time.time() + ACTIVE_SECONDS

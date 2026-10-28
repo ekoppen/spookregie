@@ -94,7 +94,7 @@ def test_start_subscribes_with_configured_prefix(monkeypatch):
     bridge._on_connect(bridge._client, None, None, 0)
 
     assert bridge._client.subscribed == [
-        "test/status/+", "test/log/+", "test/mirror/triggered", "test/mirror/scene-active",
+        "test/status/+", "test/log/+", "test/mirror/triggered", "test/mirror/scene-active", "test/mirror/scare-playing",
         "test/scare/+/triggered", "test/control/mirror/device-info/+",
     ]
 
@@ -192,6 +192,39 @@ def test_on_message_broadcasts_scene_active_as_its_own_kind(monkeypatch):
     message, _loop = scheduled[0]
     assert message == {"type": "scene_active", "topic": "mirror/scene-active", "payload": '{"player_id": 5, "trigger_id": 11}'}
 
+
+
+def test_on_message_broadcasts_scare_playing_for_beamer_page(monkeypatch):
+    """De /beamer-pagina speelt geluid af op het type 'scare_playing'."""
+    monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)
+    scheduled = []
+    monkeypatch.setattr(
+        mqtt_bridge_module.asyncio, "run_coroutine_threadsafe",
+        lambda coro, loop: scheduled.append((coro, loop)),
+    )
+
+    class FakeWsHub:
+        def broadcast(self, message):
+            return message  # geen echte coroutine nodig, run_coroutine_threadsafe is gemocked
+
+    class NoopTracker:
+        def handle_message(self, topic, payload):
+            pass
+
+    bridge = MqttBridge(
+        _settings(mqtt_topic_prefix="test"), tracker=NoopTracker(),
+        ws_hub=FakeWsHub(), loop=object(),
+    )
+
+    class FakeMsg:
+        topic = "test/mirror/scare-playing"
+        payload = b'{"hash": "abc"}'
+
+    bridge._on_message(bridge._client, None, FakeMsg())
+
+    assert len(scheduled) == 1
+    message, _loop = scheduled[0]
+    assert message == {"type": "scare_playing", "topic": "mirror/scare-playing", "payload": '{"hash": "abc"}'}
 
 def test_on_connect_calls_on_connect_extra_hook(monkeypatch):
     monkeypatch.setattr(mqtt_bridge_module.mqtt, "Client", FakeMqttClient)

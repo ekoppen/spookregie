@@ -33,6 +33,12 @@ class Topics:
         return self._p("mirror/scene-active")
 
     @property
+    def mirror_scare_playing(self) -> str:
+        """Welke scare-video de mirror-node nu start (hash) -- de /beamer-
+        pagina speelt hierop het bijbehorende geluid af in de browser."""
+        return self._p("mirror/scare-playing")
+
+    @property
     def system_sleep(self) -> str:
         return self._p("system/sleep")
 

@@ -362,6 +362,19 @@ def test_handle_trigger_plays_scare_video_when_available(monkeypatch):
         mirror_main.synced_scare_videos = {}
 
 
+def test_handle_trigger_announces_chosen_scare_video_hash(monkeypatch):
+    mirror_main.synced_scare_videos = {"h1": {"video": "v.mp4", "audio": "a.wav"}}
+    announced = []
+    monkeypatch.setattr(mirror_main, "_play_scare_video", lambda v, a, s, l: None)
+    monkeypatch.setattr(mirror_main, "publish_scare_playing", announced.append)
+
+    try:
+        mirror_main._handle_trigger("streamer", _FakeLogger())
+        assert announced == ["h1"]
+    finally:
+        mirror_main.synced_scare_videos = {}
+
+
 def test_handle_trigger_returns_active_seconds_when_no_scare_videos():
     mirror_main.synced_scare_videos = {}
 

@@ -18,11 +18,22 @@ class MirrorProcessManager:
         self._log_dir = log_dir
         self._proc = None
         self._reader_thread = None
+        # _wanted: is de node bewust gestart (en niet bewust gestopt)? Dan
+        # herstart de watchdog 'm als hij onverwacht wegvalt -- op de avond
+        # zelf staat er niemand naast om op Start te drukken.
+        self._wanted = False
+        self._lock = threading.Lock()
+        self._watchdog_stop = threading.Event()
 
     def _running(self):
         return self._proc is not None and self._proc.poll() is None
 
     def start(self):
+        with self._lock:
+            self._wanted = True
+            return self._start_locked()
+
+    def _start_locked(self):
         if self._running():
             return self.status()
         env = {
@@ -48,6 +59,11 @@ class MirrorProcessManager:
         return self.status()
 
     def stop(self):
+        with self._lock:
+            self._wanted = False
+            return self._stop_locked()
+
+    def _stop_locked(self):
         if not self._running():
             return self.status()
         self._proc.terminate()
@@ -57,6 +73,22 @@ class MirrorProcessManager:
             self._proc.kill()
             self._proc.wait()
         return self.status()
+
+    def ensure_running(self):
+        """Herstart de node als hij gewenst is maar niet (meer) draait."""
+        with self._lock:
+            if self._wanted and not self._running():
+                self._start_locked()
+
+    def start_watchdog(self, interval=10):
+        def _loop():
+            while not self._watchdog_stop.wait(interval):
+                self.ensure_running()
+
+        threading.Thread(target=_loop, daemon=True).start()
+
+    def stop_watchdog(self):
+        self._watchdog_stop.set()
 
     def status(self):
         running = self._running()

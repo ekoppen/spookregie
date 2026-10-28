@@ -58,6 +58,7 @@ class MqttBridge:
         client.subscribe(self._topics.log_wildcard)
         client.subscribe(self._topics.mirror_triggered)
         client.subscribe(self._topics.mirror_scene_active)
+        client.subscribe(self._topics.mirror_scare_playing)
         client.subscribe(self._topics.scare_triggered_wildcard)
         client.subscribe(self._topics.device_info_wildcard)
         if self._on_connect_extra is not None:
@@ -100,6 +101,8 @@ class MqttBridge:
             kind = "log"
         elif topic == "mirror/scene-active":
             kind = "scene_active"
+        elif topic == "mirror/scare-playing":
+            kind = "scare_playing"
         else:
             return
         asyncio.run_coroutine_threadsafe(

@@ -8,8 +8,8 @@ def _sample_frame():
     return frame
 
 
-def test_registry_contains_all_four_effects():
-    assert set(EFFECTS.keys()) == {"xray", "thermal", "contour", "posterize"}
+def test_registry_contains_all_effects():
+    assert set(EFFECTS.keys()) == {"xray", "thermal", "contour", "posterize", "none"}
 
 
 def test_get_effect_returns_callable_for_known_name():

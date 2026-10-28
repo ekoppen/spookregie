@@ -8,6 +8,7 @@ EFFECTS = {
     "thermal": thermal,
     "contour": contour,
     "posterize": posterize,
+    "none": lambda frame, params: frame,
 }
 
 

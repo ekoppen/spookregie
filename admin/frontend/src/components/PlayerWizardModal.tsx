@@ -9,7 +9,7 @@ import PreviewPanel from "./PreviewPanel";
 import type { Player, Source, PlayerBranch, HaState } from "../types";
 import "./PlayerWizardModal.css";
 
-const EFFECTS = ["xray", "thermal", "contour", "posterize"] as const;
+const EFFECTS = ["xray", "thermal", "contour", "posterize", "none"] as const;
 const FIELD_LABELS: Record<string, string> = {
   intensity: "Intensiteit",
   threshold1: "Drempel 1",
@@ -26,6 +26,8 @@ function paramFieldsFor(effect: Player["effect"]): string[] {
       return ["threshold1", "threshold2"];
     case "posterize":
       return ["levels"];
+    case "none":
+      return [];
   }
 }
 
@@ -301,7 +303,7 @@ export default function PlayerWizardModal({ playerId, initialStep, initialPositi
                   >
                     {EFFECTS.map((effect) => (
                       <option key={effect} value={effect}>
-                        {effect}
+                        {effect === "none" ? "geen" : effect}
                       </option>
                     ))}
                   </select>

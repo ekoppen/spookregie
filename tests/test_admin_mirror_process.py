@@ -114,3 +114,35 @@ def test_broadcast_is_noop_without_ws_hub():
     manager = MirrorProcessManager(FakeSettings())
 
     manager._broadcast("een regel")  # mag niet crashen zonder ws_hub/loop
+
+
+def test_ensure_running_restarts_a_wanted_process_that_died(monkeypatch):
+    procs = []
+    monkeypatch.setattr(
+        "admin.app.mirror_process.subprocess.Popen",
+        lambda *a, **k: procs.append(FakeProc()) or procs[-1],
+    )
+    manager = MirrorProcessManager(FakeSettings())
+    manager.start()
+    procs[0]._returncode = 1  # crasht vanzelf
+
+    manager.ensure_running()
+
+    assert len(procs) == 2
+    assert manager.status()["running"] is True
+
+
+def test_ensure_running_leaves_a_deliberately_stopped_process_alone(monkeypatch):
+    procs = []
+    monkeypatch.setattr(
+        "admin.app.mirror_process.subprocess.Popen",
+        lambda *a, **k: procs.append(FakeProc()) or procs[-1],
+    )
+    manager = MirrorProcessManager(FakeSettings())
+    manager.start()
+    manager.stop()
+
+    manager.ensure_running()
+
+    assert len(procs) == 1
+    assert manager.status()["running"] is False

@@ -12,6 +12,7 @@ import OutputsPage from "./pages/OutputsPage";
 import SourcesPage from "./pages/SourcesPage";
 import DevicesPage from "./pages/DevicesPage";
 import MediaPage from "./pages/MediaPage";
+import BeamerPage from "./pages/BeamerPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, checking } = useAuth();
@@ -25,6 +26,14 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/beamer"
+          element={
+            <ProtectedRoute>
+              <BeamerPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           element={
             <ProtectedRoute>

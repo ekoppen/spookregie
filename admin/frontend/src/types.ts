@@ -3,7 +3,7 @@ export interface Player {
   name: string;
   enabled: boolean;
   source_mode: "camera" | "scare_video";
-  effect: "xray" | "thermal" | "contour" | "posterize";
+  effect: "xray" | "thermal" | "contour" | "posterize" | "none";
   params: Record<string, number>;
   overlay_hash: string | null;
   scale: number;
@@ -114,7 +114,7 @@ export interface HaState {
 }
 
 export interface WsMessage {
-  type: "status" | "log" | "scene_active";
+  type: "status" | "log" | "scene_active" | "scare_playing";
   topic: string;
   payload: string;
 }

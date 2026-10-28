@@ -263,9 +263,13 @@ def create_app(settings=None):
         app.state.bridge.start()
         app.state.scheduler.start()
         app.state.ha_trigger_poller.start()
+        if os.environ.get("MIRROR_AUTOSTART") == "1":
+            app.state.mirror_process.start()
+            app.state.mirror_process.start_watchdog()
 
     @app.on_event("shutdown")
     def _shutdown():
+        app.state.mirror_process.stop_watchdog()
         app.state.ha_trigger_poller.stop()
         app.state.scheduler.stop()
         app.state.bridge.stop()

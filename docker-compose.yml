@@ -19,5 +19,6 @@ services:
       ADMIN_DB_PATH: /data/admin.db
       ADMIN_MEDIA_DIR: /data/media_store
       LOG_DIR: /data/logs
+      MIRROR_AUTOSTART: ${MIRROR_AUTOSTART:-1}
     volumes:
       - ./data:/data
