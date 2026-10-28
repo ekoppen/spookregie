@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSettings } from "../api/settings";
+import { getPlayer } from "../api/players";
+import { getSource } from "../api/sources";
 import { useWebSocket } from "../hooks/useWebSocket";
 import "./BeamerPage.css";
 
@@ -12,6 +14,7 @@ export default function BeamerPage() {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [streamAttempt, setStreamAttempt] = useState(0);
   const [started, setStarted] = useState(false);
+  const playerAudio = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -20,14 +23,33 @@ export default function BeamerPage() {
   }, []);
 
   useWebSocket((msg) => {
-    if (!started || msg.type !== "scare_playing") return;
+    if (!started) return;
     try {
-      const { hash } = JSON.parse(msg.payload) as { hash?: string };
-      if (hash) new Audio(`/api/media/${hash}/audio`).play().catch(() => {});
+      if (msg.type === "scare_playing") {
+        const { hash } = JSON.parse(msg.payload) as { hash?: string };
+        if (hash) new Audio(`/api/media/${hash}/audio`).play().catch(() => {});
+      } else if (msg.type === "scene_active") {
+        const { player_id } = JSON.parse(msg.payload) as { player_id?: number };
+        if (player_id) playPlayerAudio(player_id).catch(() => {});
+      }
     } catch {
       // ongeldige payload, negeren
     }
   });
+
+  // Speelt het audio-source-geluid van de player waar de graaf net heen ging
+  // (bv. de lokstem) één keer af; een volgende overgang kapt het af.
+  async function playPlayerAudio(playerId: number) {
+    playerAudio.current?.pause();
+    playerAudio.current = null;
+    const player = await getPlayer(playerId);
+    if (player.audio_source_id == null) return;
+    const source = await getSource(player.audio_source_id);
+    if (source.kind !== "audio" || !source.value) return;
+    const audio = new Audio(`/api/media/${source.value}`);
+    playerAudio.current = audio;
+    audio.play().catch(() => {});
+  }
 
   function handleStart() {
     // Browsers staan geluid pas toe na een klik -- daarom deze startknop.
